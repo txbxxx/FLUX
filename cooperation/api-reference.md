@@ -1,0 +1,659 @@
+# 后端接口文档
+
+> 前后端对接文档 | 版本：1.0.0-alpha | 创建日期：2025-03-19
+
+本文档描述后端提供给前端的接口。后端使用 Wails 框架，前端通过 Wails 生成的绑定调用后端方法。
+
+---
+
+## 目录
+
+1. [基础接口](#1-基础接口)
+2. [工具检测接口](#2-工具检测接口)
+3. [预留业务接口](#3-预留业务接口)
+4. [Git 操作接口](#4-git-操作接口)
+5. [数据类型定义](#5-数据类型定义)
+6. [错误处理](#6-错误处理)
+7. [调用示例](#7-调用示例)
+
+---
+
+## 1. 基础接口
+
+这些接口在 Phase 0 已实现，用于测试前后端通信是否正常。
+
+### 1.1 Hello
+
+返回问候语。
+
+**方法签名：**
+```go
+func (a *App) Hello(name string) string
+```
+
+**参数：**
+- `name` (string) - 名称
+
+**返回：**
+- (string) - 问候语
+
+**示例：**
+```
+输入: "World"
+输出: "Hello, World!"
+```
+
+---
+
+### 1.2 GetVersion
+
+获取应用版本号。
+
+**方法签名：**
+```go
+func (a *App) GetVersion() string
+```
+
+**参数：**
+- 无
+
+**返回：**
+- (string) - 版本号，如 "1.0.0-alpha"
+
+---
+
+### 1.3 GetSystemInfo
+
+获取系统信息。
+
+**方法签名：**
+```go
+func (a *App) GetSystemInfo() map[string]string
+```
+
+**参数：**
+- 无
+
+**返回：**
+```json
+{
+  "os": "windows",
+  "arch": "amd64",
+  "go_version": "go1.25.5",
+  "app_version": "1.0.0-alpha"
+}
+```
+
+---
+
+### 1.4 HealthCheck
+
+健康检查接口。
+
+**方法签名：**
+```go
+func (a *App) HealthCheck() map[string]interface{}
+```
+
+**参数：**
+- 无
+
+**返回：**
+```json
+{
+  "status": "ok",
+  "version": "1.0.0-alpha",
+  "os": "windows",
+  "arch": "amd64"
+}
+```
+
+---
+
+## 2. 工具检测接口
+
+以下接口在 Phase 1 已实现。
+
+### 2.1 ScanTools
+
+扫描本地已安装的 AI 工具（仅全局配置）。
+
+**方法签名：**
+```go
+func (a *App) ScanTools() ([]ToolInstallation, error)
+```
+
+**参数：**
+- 无
+
+**返回：**
+- `[]ToolInstallation` - 检测到的工具列表（仅包含已安装的工具）
+- `error` - 错误信息
+
+**说明：**
+- 仅扫描用户主目录下的全局配置（`~/.codex/`, `~/.claude/`）
+- 不包含项目级配置
+- 返回的工具状态为 `installed` 或 `partial`
+
+**返回示例：**
+```json
+[
+  {
+    "tool_type": "codex",
+    "status": "installed",
+    "global_path": "C:\\Users\\alice\\.codex",
+    "config_files": [
+      {
+        "name": "config.toml",
+        "path": "C:\\Users\\alice\\.codex\\config.toml",
+        "category": "config",
+        "scope": "global",
+        "size": 1024,
+        "modified_at": "2025-03-19T10:00:00Z",
+        "is_dir": false
+      },
+      {
+        "name": "skills",
+        "path": "C:\\Users\\alice\\.codex\\skills",
+        "category": "skills",
+        "scope": "global",
+        "size": 0,
+        "modified_at": "2025-03-19T10:00:00Z",
+        "is_dir": true
+      }
+    ],
+    "detected_at": "2025-03-19T10:00:00Z"
+  }
+]
+```
+
+---
+
+### 2.2 ScanToolsWithProjects
+
+扫描本地 AI 工具（包含项目配置）。
+
+**方法签名：**
+```go
+func (a *App) ScanToolsWithProjects(projectPaths []string) ([]ToolInstallation, error)
+```
+
+**参数：**
+- `projectPaths` ([]string) - 需要扫描的项目路径列表
+
+**返回：**
+- `[]ToolInstallation` - 检测到的工具列表（包含全局和项目配置）
+- `error` - 错误信息
+
+**说明：**
+- 扫描全局配置和指定的项目配置
+- 项目配置会合并到对应工具的 `config_files` 中
+- `project_paths` 字段包含检测到的项目路径
+
+---
+
+### 2.3 GetToolConfigPath
+
+获取工具的默认配置路径。
+
+**方法签名：**
+```go
+func (a *App) GetToolConfigPath(toolTypeStr string) (string, error)
+```
+
+**参数：**
+- `toolTypeStr` (string) - 工具类型（"codex" 或 "claude"）
+
+**返回：**
+- (string) - 配置路径
+- error - 路径不存在时返回错误
+
+---
+
+## 3. 预留业务接口
+
+扫描本地已安装的 AI 工具。
+
+**方法签名：**
+```go
+func (a *App) ScanTools() ([]ToolInstallation, error)
+```
+
+**参数：**
+- 无
+
+**返回：**
+- `[]ToolInstallation` - 检测到的工具列表
+- `error` - 错误信息
+
+---
+
+### 3.2 CreateSnapshot
+
+创建配置快照并推送到远端。
+
+**方法签名：**
+```go
+func (a *App) CreateSnapshot(options CreateSnapshotOptions) (*SnapshotPackage, error)
+```
+
+**参数：**
+```go
+type CreateSnapshotOptions struct {
+    Message string   // 快照描述
+    Tools   []string // 包含的工具，如 ["codex", "claude"]
+}
+```
+
+**返回：**
+- `*SnapshotPackage` - 创建的快照信息
+- `error` - 错误信息
+
+---
+
+### 3.3 ListRemoteSnapshots
+
+列出远端仓库中的快照列表。
+
+**方法签名：**
+```go
+func (a *App) ListRemoteSnapshots() ([]SnapshotInfo, error)
+```
+
+**返回：**
+- `[]SnapshotInfo` - 快照列表
+- `error` - 错误信息
+
+---
+
+### 3.4 PullAndApply
+
+拉取远端快照并应用到本地。
+
+**方法签名：**
+```go
+func (a *App) PullAndApply(snapshotID string, options ApplyOptions) (*ApplyResult, error)
+```
+
+**参数：**
+```go
+type ApplyOptions struct {
+    CreateBackup bool   // 是否创建备份
+    Force        bool   // 是否强制覆盖
+}
+```
+
+**返回：**
+- `*ApplyResult` - 应用结果
+- `error` - 错误信息
+
+---
+
+### 3.5 CompareWithRemote
+
+比较本地与远端快照的差异。
+
+**方法签名：**
+```go
+func (a *App) CompareWithRemote(snapshotID string) (*ChangeSummary, error)
+```
+
+**返回：**
+- `*ChangeSummary` - 变更摘要
+- `error` - 错误信息
+
+---
+
+### 3.6 ConfigureGitRemote
+
+配置 Git 远端仓库。
+
+**方法签名：**
+```go
+func (a *App) ConfigureGitRemote(config GitRemoteConfigInput) error
+```
+
+**参数：**
+```go
+type GitRemoteConfigInput struct {
+    URL       string // Git 仓库 URL
+    AuthType  string // "ssh" | "token" | "basic"
+    Token     string // Token 或密码（加密存储）
+    Branch    string // 分支名，默认 "main"
+}
+```
+
+---
+
+## 4. Git 操作接口
+
+以下接口在 Phase 2 已实现。
+
+### 4.1 GitClone
+
+克隆 Git 仓库到本地。
+
+**方法签名：**
+```go
+func (a *App) GitClone(url string, path string, branch string) (*git.RepositoryInfo, error)
+```
+
+**参数：**
+- `url` (string) - Git 仓库 URL
+- `path` (string) - 本地目标路径
+- `branch` (string) - 要克隆的分支（可选，默认为 main）
+
+**返回：**
+- `*git.RepositoryInfo` - 仓库信息
+- `error` - 错误信息
+
+**返回示例：**
+```json
+{
+  "path": "D:\\repos\\my-config",
+  "remote_url": "https://github.com/user/my-config.git",
+  "branch": "main",
+  "commit_hash": "abc123...",
+  "is_bare": false,
+  "head": "refs/heads/main"
+}
+```
+
+---
+
+### 4.2 GitPull
+
+拉取 Git 仓库的远程更新。
+
+**方法签名：**
+```go
+func (a *App) GitPull(path string) (*git.OperationResult, error)
+```
+
+**参数：**
+- `path` (string) - 仓库本地路径
+
+**返回：**
+- `*git.OperationResult` - 操作结果
+- `error` - 错误信息
+
+**返回示例：**
+```json
+{
+  "success": true,
+  "message": "拉取成功"
+}
+```
+
+---
+
+### 4.3 GitPush
+
+推送本地提交到远程仓库。
+
+**方法签名：**
+```go
+func (a *App) GitPush(path string, branch string, force bool) (*git.OperationResult, error)
+```
+
+**参数：**
+- `path` (string) - 仓库本地路径
+- `branch` (string) - 要推送的分支
+- `force` (bool) - 是否强制推送
+
+**返回：**
+- `*git.OperationResult` - 操作结果
+- `error` - 错误信息
+
+---
+
+### 4.4 GitGetStatus
+
+获取 Git 仓库的当前状态。
+
+**方法签名：**
+```go
+func (a *App) GitGetStatus(path string) (*git.RepositoryStatus, error)
+```
+
+**参数：**
+- `path` (string) - 仓库本地路径
+
+**返回：**
+- `*git.RepositoryStatus` - 仓库状态
+- `error` - 错误信息
+
+**返回示例：**
+```json
+{
+  "is_clean": false,
+  "branch": "main",
+  "files": [
+    {
+      "path": "config.toml",
+      "worktree": "Modified",
+      "staging": "Unmodified"
+    }
+  ],
+  "ahead": 0,
+  "behind": 1
+}
+```
+
+---
+
+### 4.5 GitCommit
+
+提交工作区的更改。
+
+**方法签名：**
+```go
+func (a *App) GitCommit(path string, message string) (*git.CommitResult, error)
+```
+
+**参数：**
+- `path` (string) - 仓库本地路径
+- `message` (string) - 提交消息
+
+**返回：**
+- `*git.CommitResult` - 提交结果
+- `error` - 错误信息
+
+---
+
+### 4.6 GitGetRepositoryInfo
+
+获取 Git 仓库的详细信息。
+
+**方法签名：**
+```go
+func (a *App) GitGetRepositoryInfo(path string) (*git.RepositoryInfo, error)
+```
+
+**参数：**
+- `path` (string) - 仓库本地路径
+
+**返回：**
+- `*git.RepositoryInfo` - 仓库信息
+- `error` - 错误信息
+
+---
+
+### 4.7 GitListBranches
+
+列出仓库的所有分支。
+
+**方法签名：**
+```go
+func (a *App) GitListBranches(path string) ([]git.BranchInfo, error)
+```
+
+**参数：**
+- `path` (string) - 仓库本地路径
+
+**返回：**
+- `[]git.BranchInfo` - 分支列表
+- `error` - 错误信息
+
+---
+
+### 4.8 GitIsRepository
+
+检查路径是否为 Git 仓库。
+
+**方法签名：**
+```go
+func (a *App) GitIsRepository(path string) bool
+```
+
+**参数：**
+- `path` (string) - 要检查的路径
+
+**返回：**
+- (bool) - 是否为 Git 仓库
+
+---
+
+### 4.9 GitValidateAuth
+
+验证 Git 认证配置是否有效。
+
+**方法签名：**
+```go
+func (a *App) GitValidateAuth(authType string, username string, password string) error
+```
+
+**参数：**
+- `authType` (string) - 认证类型（"ssh"、"token"、"basic"）
+- `username` (string) - 用户名（Basic Auth 必需）
+- `password` (string) - 密码或 Token
+
+**返回：**
+- error - 验证失败时返回错误
+
+---
+
+## 5. 数据类型定义
+
+### 3.1 ToolInstallation
+
+工具安装信息。
+
+```go
+type ToolInstallation struct {
+    ToolType        ToolType        `json:"tool_type"`        // 工具类型
+    Status          InstallationStatus `json:"status"`          // 安装状态
+    ConfigPath      string          `json:"config_path"`      // 配置路径
+    Version         string          `json:"version,omitempty"` // 版本号
+}
+```
+
+### 3.2 ToolType
+
+工具类型枚举。
+
+```go
+type ToolType string
+
+const (
+    ToolTypeCodex   ToolType = "codex"
+    ToolTypeClaude  ToolType = "claude"
+)
+```
+
+### 3.3 InstallationStatus
+
+安装状态枚举。
+
+```go
+type InstallationStatus string
+
+const (
+    StatusInstalled    InstallationStatus = "installed"
+    StatusNotInstalled InstallationStatus = "not_installed"
+    StatusUnknown      InstallationStatus = "unknown"
+)
+```
+
+---
+
+## 5. 错误处理
+
+所有接口返回的 `error` 类型为 `*AppError`，包含以下字段：
+
+```json
+{
+  "code": "1000",
+  "message": "错误描述",
+  "details": "详细信息（可选）"
+}
+```
+
+### 4.1 错误码定义
+
+| 错误码 | 说明 |
+|--------|------|
+| 1xxx | 通用错误 |
+| 2xxx | 工具相关错误 |
+| 3xxx | Git 相关错误 |
+| 4xxx | 快照相关错误 |
+| 5xxx | 同步相关错误 |
+| 6xxx | 敏感信息相关错误 |
+
+---
+
+## 6. 调用示例
+
+### 6.1 前端调用后端方法
+
+Wails 会自动生成绑定代码，前端可以这样调用：
+
+```typescript
+import { GetVersion, Hello, GetSystemInfo, ScanTools } from './wailsjs/go/main/App'
+
+// 获取版本号
+const version = await GetVersion()
+console.log('版本:', version)
+
+// 调用 Hello
+const greeting = await Hello('World')
+console.log(greeting) // "Hello, World!"
+
+// 获取系统信息
+const sysInfo = await GetSystemInfo()
+console.log('系统:', sysInfo.os, sysInfo.arch)
+
+// 扫描工具
+const tools = await ScanTools()
+console.log('检测到的工具:', tools)
+tools.forEach(tool => {
+  console.log(`${tool.tool_type}: ${tool.status}`)
+  tool.config_files.forEach(file => {
+    console.log(`  [${file.scope}] ${file.name}: ${file.path}`)
+  })
+})
+```
+
+### 6.2 错误处理
+
+```typescript
+try {
+  const result = await SomeMethod()
+} catch (error) {
+  // error 包含 { code, message, details }
+  console.error(`[${error.code}] ${error.message}`)
+  if (error.details) {
+    console.error('详情:', error.details)
+  }
+}
+```
+
+---
+
+## 附录
+
+### 更新日志
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.0.0-alpha | 2025-03-19 | 初始版本，Phase 0 基础接口 |

@@ -1,0 +1,60 @@
+# 构建产物
+build/
+frontend/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 依赖
+node_modules/
+vendor/
+
+# 前端构建缓存
+frontend/node_modules/.vite/
+frontend/node_modules/.cache/
+
+# Go 相关
+*.test
+*.out
+go.work
+go.work.sum
+
+# IDE 相关
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 日志文件
+*.log
+logs/
+
+# 本地配置（可选）
+.env
+.env.local
+
+# 操作系统
+Thumbs.db
+Desktop.ini
+
+# 测试覆盖率
+coverage.txt
+coverage.html
+*.coverprofile
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 用户数据
+# 如果需要在本地存储用户数据
+.data/
+*.db
+*.sqlite
+
+# Wails 生成的文件
+wails_build.log

@@ -1,0 +1,122 @@
+# golangci-lint 配置文件
+run:
+  # 运行超时时间
+  timeout: 5m
+  # 包含的测试
+  tests: true
+  # 并行数量
+  concurrency: 4
+
+linters:
+  # 启用的 linters
+  enable:
+    - errcheck       # 检查未处理的错误
+    - gosimple       # 简化代码
+    - govet          # go vet 检查
+    - ineffassign    # 检查无效的赋值
+    - staticcheck    # 静态分析
+    - typecheck      # 类型检查
+    - unused         # 检查未使用的变量、函数等
+    - varcheck       # 检查未使用的全局变量和常量
+    - structcheck    # 检查未使用的结构体字段
+    - misspell       # 检查拼写错误
+    - gocritic       # 代码质量检查
+    - gofmt          # 代码格式检查
+    - goimports      # import 排序
+    - revive         # 代码风格检查
+    - exportloopref  # 检查循环变量引用
+
+  # 禁用的 linters
+  disable:
+    - exhaustive     # 过于严格
+    - exhaustivestruct # 过于严格
+    - funlen         # 函数长度限制
+    - wsl            # 空行限制
+
+linters-settings:
+  errcheck:
+    # 检查类型断言
+    check-type-assertions: true
+    # 检查空白的标识符
+    check-blank: true
+
+  govet:
+    # 启用的检查器
+    enable-all: true
+    disable:
+      - shadow      # 容易误报
+
+  gocritic:
+    # 启用所有检查器
+    enable-all: true
+    disabled-tags:
+      - diagnostic  # 诊断类检查器较慢
+      - experimental
+      - opinionated
+      - performance
+
+  revive:
+    # 默认严重程度
+    severity: warning
+    # 启用的规则
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines
+
+  misspell:
+    # 检查的 locale
+    locale: US
+
+issues:
+  # 显示所有问题
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  # 排除规则
+  exclude-rules:
+    # 排除测试文件中的某些问题
+    - path: _test\.go
+      linters:
+        - gocritic
+        - errcheck
+
+    # 排除 main 包中的某些问题
+    - path: cmd/
+      linters:
+        - gocritic
+
+  # 独立的默认设置
+  exclude-use-default: false
+  # 按原始内容显示
+  show-original: true
+
+output:
+  # 输出格式
+  formats:
+    - format: colored-line-number
+  # 打印检查的 linters
+  print-linter-name: true
+  # 排序
+  sort-results: true
