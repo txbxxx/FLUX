@@ -58,3 +58,6 @@ temp/
 
 # Wails 生成的文件
 wails_build.log
+
+# Git worktrees
+.worktrees/
