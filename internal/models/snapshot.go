@@ -1,7 +1,12 @@
 package models
 
 import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"time"
+
+	"ai-sync-manager/pkg/database"
 )
 
 // Snapshot 配置快照
@@ -136,10 +141,229 @@ type ChangeSummary struct {
 
 // CreateSnapshotOptions 创建快照选项
 type CreateSnapshotOptions struct {
-	Message    string   `json:"message"`     // 快照描述/提交消息
-	Tools      []string `json:"tools"`       // 包含的工具 [codex, claude]
-	Name       string   `json:"name"`        // 快照名称（可选）
-	Tags       []string `json:"tags"`        // 标签（可选）
-	ProjectPath string  `json:"project_path,omitempty"` // 项目路径（可选）
-	Scope      SnapshotScope `json:"scope"` // 快照范围
+	Message    string        `json:"message"`     // 快照描述/提交消息
+	Tools      []string      `json:"tools"`       // 包含的工具 [codex, claude]
+	Name       string        `json:"name"`        // 快照名称（可选）
+	Tags       []string      `json:"tags"`        // 标签（可选）
+	ProjectPath string        `json:"project_path,omitempty"` // 项目路径（可选）
+	Scope      SnapshotScope `json:"scope"`       // 快照范围
+}
+
+// SnapshotDAO 快照数据访问对象
+type SnapshotDAO struct {
+	db *database.DB
+}
+
+// NewSnapshotDAO 创建快照 DAO
+func NewSnapshotDAO(db *database.DB) *SnapshotDAO {
+	return &SnapshotDAO{db: db}
+}
+
+// Create 创建快照
+func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
+	conn := dao.db.GetConn()
+
+	// 序列化工具列表
+	toolsJSON, err := json.Marshal(snapshot.Tools)
+	if err != nil {
+		return fmt.Errorf("序列化工具列表失败: %w", err)
+	}
+
+	// 序列化标签
+	tagsJSON, err := json.Marshal(snapshot.Tags)
+	if err != nil {
+		return fmt.Errorf("序列化标签失败: %w", err)
+	}
+
+	// 序列化元数据
+	metadataJSON, err := json.Marshal(snapshot.Metadata)
+	if err != nil {
+		return fmt.Errorf("序列化元数据失败: %w", err)
+	}
+
+	query := `
+		INSERT INTO snapshots (id, name, description, message, created_at, tools, metadata, tags, commit_hash, file_count, total_size)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err = conn.Exec(query,
+		snapshot.ID,
+		snapshot.Name,
+		snapshot.Description,
+		snapshot.Message,
+		snapshot.CreatedAt.Unix(),
+		string(toolsJSON),
+		string(metadataJSON),
+		string(tagsJSON),
+		snapshot.CommitHash,
+		len(snapshot.Files),
+		calculateTotalSize(snapshot.Files),
+	)
+
+	return err
+}
+
+// GetByID 根据 ID 获取快照
+func (dao *SnapshotDAO) GetByID(id string) (*Snapshot, error) {
+	conn := dao.db.GetConn()
+
+	query := `
+		SELECT id, name, description, message, created_at, tools, metadata, tags, commit_hash, file_count, total_size
+		FROM snapshots
+		WHERE id = ?
+	`
+
+	row := conn.QueryRow(query, id)
+
+	var (
+		name, description, message, toolsJSON, metadataJSON, tagsJSON, commitHash string
+		createdAt  int64
+		fileCount, totalSize int
+	)
+
+	err := row.Scan(
+		&id, &name, &description, &message, &createdAt, &toolsJSON, &metadataJSON, &tagsJSON, &commitHash, &fileCount, &totalSize,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("快照不存在")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot := &Snapshot{
+		ID:          id,
+		Name:        name,
+		Description: description,
+		Message:     message,
+		CreatedAt:   time.Unix(createdAt, 0),
+		CommitHash:  commitHash,
+	}
+
+	// 反序列化工具列表
+	if err := json.Unmarshal([]byte(toolsJSON), &snapshot.Tools); err != nil {
+		return nil, fmt.Errorf("反序列化工具列表失败: %w", err)
+	}
+
+	// 反序列化标签
+	if err := json.Unmarshal([]byte(tagsJSON), &snapshot.Tags); err != nil {
+		return nil, fmt.Errorf("反序列化标签失败: %w", err)
+	}
+
+	// 反序列化元数据
+	if err := json.Unmarshal([]byte(metadataJSON), &snapshot.Metadata); err != nil {
+		return nil, fmt.Errorf("反序列化元数据失败: %w", err)
+	}
+
+	return snapshot, nil
+}
+
+// List 列出所有快照
+func (dao *SnapshotDAO) List(limit, offset int) ([]*Snapshot, error) {
+	conn := dao.db.GetConn()
+
+	query := `
+		SELECT id, name, description, message, created_at, tools, metadata, tags, commit_hash, file_count, total_size
+		FROM snapshots
+		ORDER BY created_at DESC
+	`
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(" OFFSET %d", offset)
+	}
+
+	rows, err := conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var snapshots []*Snapshot
+	for rows.Next() {
+		var (
+			id, name, description, message, toolsJSON, metadataJSON, tagsJSON, commitHash string
+			createdAt int64
+			fileCount, totalSize int
+		)
+
+		if err := rows.Scan(
+			&id, &name, &description, &message, &createdAt, &toolsJSON, &metadataJSON, &tagsJSON, &commitHash, &fileCount, &totalSize,
+		); err != nil {
+			return nil, err
+		}
+
+		snapshot := &Snapshot{
+			ID:          id,
+			Name:        name,
+			Description: description,
+			Message:     message,
+			CreatedAt:   time.Unix(createdAt, 0),
+			CommitHash:  commitHash,
+		}
+
+		_ = json.Unmarshal([]byte(toolsJSON), &snapshot.Tools)
+		_ = json.Unmarshal([]byte(tagsJSON), &snapshot.Tags)
+		_ = json.Unmarshal([]byte(metadataJSON), &snapshot.Metadata)
+
+		snapshots = append(snapshots, snapshot)
+	}
+
+	return snapshots, nil
+}
+
+// Update 更新快照
+func (dao *SnapshotDAO) Update(snapshot *Snapshot) error {
+	conn := dao.db.GetConn()
+
+	toolsJSON, _ := json.Marshal(snapshot.Tools)
+	tagsJSON, _ := json.Marshal(snapshot.Tags)
+	metadataJSON, _ := json.Marshal(snapshot.Metadata)
+
+	query := `
+		UPDATE snapshots
+		SET name = ?, description = ?, message = ?, tools = ?, metadata = ?, tags = ?, commit_hash = ?
+		WHERE id = ?
+	`
+
+	_, err := conn.Exec(query,
+		snapshot.Name,
+		snapshot.Description,
+		snapshot.Message,
+		string(toolsJSON),
+		string(metadataJSON),
+		string(tagsJSON),
+		snapshot.CommitHash,
+		snapshot.ID,
+	)
+
+	return err
+}
+
+// Delete 删除快照
+func (dao *SnapshotDAO) Delete(id string) error {
+	conn := dao.db.GetConn()
+
+	_, err := conn.Exec("DELETE FROM snapshots WHERE id = ?", id)
+	return err
+}
+
+// Count 统计快照数量
+func (dao *SnapshotDAO) Count() (int, error) {
+	conn := dao.db.GetConn()
+
+	var count int
+	err := conn.QueryRow("SELECT COUNT(*) FROM snapshots").Scan(&count)
+	return count, err
+}
+
+// calculateTotalSize 计算文件总大小
+func calculateTotalSize(files []SnapshotFile) int64 {
+	var total int64
+	for _, file := range files {
+		total += file.Size
+	}
+	return total
 }

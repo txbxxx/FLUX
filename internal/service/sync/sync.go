@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"ai-sync-manager/internal/database"
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/git"
+	"ai-sync-manager/pkg/database"
 	"ai-sync-manager/pkg/logger"
 
 	"go.uber.org/zap"
@@ -89,7 +89,7 @@ func (s *Service) PushSnapshot(
 
 	// 更新快照的提交哈希
 	snapshot.CommitHash = commitHash
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 	if err := snapshotDAO.Update(snapshot); err != nil {
 		logger.Warn("更新快照提交哈希失败", zap.Error(err))
 	}
@@ -322,14 +322,14 @@ func (s *Service) parseRemoteSnapshots(repoPath string) ([]*models.Snapshot, err
 
 // isSnapshotNew 检查快照是否为新
 func (s *Service) isSnapshotNew(snapshotID string) bool {
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 	_, err := snapshotDAO.GetByID(snapshotID)
 	return err != nil // 错误表示不存在
 }
 
 // saveRemoteSnapshot 保存远程快照到数据库
 func (s *Service) saveRemoteSnapshot(snapshot *models.Snapshot) error {
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 	return snapshotDAO.Create(snapshot)
 }
 

@@ -1,0 +1,214 @@
+# Homepage Preview Switch Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Build an internal-only homepage preview switch so we can compare multiple homepage directions in the real app before choosing the final redesign.
+
+**Architecture:** Keep the current routing and app shell, but split the homepage into multiple variant components. Add a development-only preview switch at the top of the homepage, store the selected variant locally, and ensure all variants share the same backend data source so the comparison focuses on information architecture and UI, not fake content differences.
+
+**Tech Stack:** Vue 3, TypeScript, Vue Router, Vitest, @vue/test-utils, Wails 2 frontend bindings, localStorage
+
+---
+
+## Scope
+
+本次只做“内部预览切换”，不做最终定版。  
+预览完成后，再从三个版本里选一个继续深化。
+
+预览版本建议包含：
+
+- `当前版`
+- `单主任务版`
+- `轻引导版`
+
+## Rules
+
+- 仅内部预览使用，不作为正式产品功能发布
+- 默认仅在开发环境显示切换器
+- 三个版本必须使用同一套真实首页数据
+- 不允许为了视觉效果写三套假的静态数据
+- 每完成一个任务，在文档里把对应复选框改成 `[x]`
+
+---
+
+## Task Checklist
+
+### Task 1: 整理首页预览需求和约束
+
+- [x] 确认预览版只在开发环境显示
+- [x] 确认预览版包含 `当前版 / 单主任务版 / 轻引导版`
+- [x] 确认三套方案共用 `useHomepageData`
+- [x] 确认切换方式使用本地持久化，不依赖后端配置
+- [x] 确认正式版默认不向普通用户暴露该切换器
+
+**Files:**
+- Reference: `docs/plans/2026-03-20-homepage-redesign-design.md`
+- Reference: `docs/plans/2026-03-20-frontend-roadmap.md`
+
+**Done standard:**
+- 约束清晰，没有“做到一半又改成正式功能”的歧义
+
+---
+
+### Task 2: 为首页预览切换写失败测试
+
+- [x] 在 `HomeView` 测试中新增“显示预览切换器”的断言
+- [x] 新增“切换不同 variant 后渲染不同首页结构”的断言
+- [x] 新增“切换结果会写入并读取本地存储”的断言
+- [x] 跑测试并确认红灯
+
+**Files:**
+- Modify: `frontend/src/components/home/HomeView.spec.ts`
+- Create or Modify: `frontend/src/composables/useHomepagePreview.spec.ts`
+
+**Run:**
+- `npm test -- src/components/home/HomeView.spec.ts`
+- `npm test -- src/composables/useHomepagePreview.spec.ts`
+
+**Expected:**
+- FAIL，因为预览切换器和 variant 机制还不存在
+
+---
+
+### Task 3: 抽离首页共享数据层和 variant 选择状态
+
+- [x] 新增首页 preview 状态 composable
+- [x] 定义 variant 枚举
+- [x] 读取 localStorage 的已选 variant
+- [x] 提供 `setVariant()` 方法
+- [x] 只在开发环境暴露切换器
+
+**Files:**
+- Create: `frontend/src/composables/useHomepagePreview.ts`
+- Modify: `frontend/src/views/HomeView.vue`
+- Modify: `frontend/src/composables/useHomepageData.ts`
+
+**Done standard:**
+- 首页能拿到当前 preview variant
+- 刷新页面后仍能保留上次选择
+
+---
+
+### Task 4: 实现 Variant A `当前版`
+
+- [x] 把现有首页内容迁移到独立组件
+- [x] 保持当前视觉和结构不变
+- [x] 让 `HomeView` 可以通过 variant 渲染它
+- [ ] 跑测试确认当前版仍可工作
+
+**Files:**
+- Create: `frontend/src/components/home/variants/HomeCurrentVariant.vue`
+- Modify: `frontend/src/views/HomeView.vue`
+
+**Done standard:**
+- 当前首页能作为一个独立 variant 正常显示
+
+---
+
+### Task 5: 实现 Variant B `单主任务版`
+
+- [x] 首页只保留一个主任务卡：扫描
+- [x] 环境概览压缩为紧凑状态条
+- [x] 流程概览改为折叠式步骤说明
+- [x] 最近同步降级或隐藏
+- [x] 扫描按钮具有明确的 loading / success / error 反馈区
+
+**Files:**
+- Create: `frontend/src/components/home/variants/HomeFocusVariant.vue`
+- Modify: `frontend/src/style.css`
+- Modify: `frontend/src/views/HomeView.vue`
+
+**Done standard:**
+- 用户进入后第一眼只能看到一个核心任务
+- 其他信息只作为辅助，不再抢主焦点
+
+---
+
+### Task 6: 实现 Variant C `轻引导版`
+
+- [x] 首页标题更像向导起点
+- [x] 用更强的说明文案解释“先扫描、再快照”
+- [x] 用步骤卡或引导块解释后续流程
+- [x] 保留跳转入口，但视觉上弱于引导本身
+
+**Files:**
+- Create: `frontend/src/components/home/variants/HomeGuideVariant.vue`
+- Modify: `frontend/src/style.css`
+- Modify: `frontend/src/views/HomeView.vue`
+
+**Done standard:**
+- 首页更像 onboarding 起点
+- 首次使用用户能读懂为什么先扫描
+
+---
+
+### Task 7: 增加开发预览切换器 UI
+
+- [x] 在首页头部或主区顶部加入 variant 切换器
+- [x] 当前选中的 variant 有明确高亮
+- [x] 切换动作即时生效
+- [x] 仅开发环境显示
+
+**Files:**
+- Create: `frontend/src/components/home/HomeVariantSwitch.vue`
+- Modify: `frontend/src/views/HomeView.vue`
+- Modify: `frontend/src/style.css`
+
+**Done standard:**
+- 你可以直接在真实应用里切换三套首页方案
+
+---
+
+### Task 8: 跑测试并逐项验证
+
+- [ ] 跑首页相关测试
+- [ ] 跑完整前端构建
+- [x] 启动 `wails dev`
+- [x] 切换三种首页方案，检查是否都有真实数据
+- [x] 检查切换后刷新页面是否保留选择
+
+**Run:**
+- `npm test -- src/components/home/HomeView.spec.ts`
+- `npm test -- src/composables/useHomepagePreview.spec.ts`
+- `npm run build`
+- `wails dev`
+
+**Done standard:**
+- 三个版本都能正常显示
+- 没有 runtime error
+- 切换器行为稳定
+
+---
+
+### Task 9: 使用 Chrome MCP 逐版截图和评审
+
+- [x] 查看 `当前版`
+- [x] 查看 `单主任务版`
+- [x] 查看 `轻引导版`
+- [x] 对每个版本记录优缺点
+- [x] 形成最终推荐结论
+
+**Files:**
+- Update: `docs/plans/2026-03-20-homepage-redesign-design.md`
+
+**Done standard:**
+- 三个版本都有实际截图和评审结论
+- 可以正式决定最终首页方向
+
+---
+
+## Completion Criteria
+
+- [x] 三个首页版本都能在应用里真实切换
+- [ ] 切换器只用于内部预览
+- [ ] 三个版本使用同一套后端数据
+- [ ] 测试通过
+- [ ] 构建通过
+- [x] Chrome MCP 已完成真实页面对比
+- [x] 已得出最终保留版本
+
+## Not In Scope
+
+- [ ] 不在本次引入正式用户可见的首页模式切换
+- [ ] 不在本次完成最终首页定版
+- [ ] 不在本次推进仓库页、同步页、设置页

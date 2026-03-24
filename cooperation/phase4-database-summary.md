@@ -1,6 +1,30 @@
 # Phase 4: 数据持久化层 - 完成总结
 
 > 实现日期：2026-03-20 | 状态：✅ 已完成
+> **重构日期：2026-03-20** | 架构优化：DAO 与 Model 合并
+
+---
+
+## 架构变更（2026-03-20 重构）
+
+### 变更原因
+将通用数据库工具与业务数据模型分离，实现更清晰的职责划分：
+
+1. **`pkg/database/`** - 通用数据库工具，可被其他项目复用
+2. **`internal/models/`** - 数据模型 + DAO（Active Record 模式）
+
+### 重构后的目录结构
+
+```
+pkg/database/              # 通用数据库工具
+  └── db.go                 # 连接、迁移、事务管理
+
+internal/models/           # 数据模型 + DAO
+  ├── snapshot.go           # Snapshot + SnapshotDAO
+  ├── sync_task.go          # SyncTask + SyncTaskDAO
+  ├── remote_config.go      # RemoteConfig + RemoteConfigDAO
+  └── app_config.go         # 应用配置相关模型
+```
 
 ---
 
@@ -10,9 +34,10 @@
 
 | 文件 | 说明 |
 |------|------|
-| `internal/database/db.go` | 数据库连接管理、迁移、测试辅助 |
-| `internal/database/dao.go` | 数据访问对象 (DAO) |
-| `internal/database/database_test.go` | 数据库层测试 (29 个用例) |
+| `pkg/database/db.go` | 数据库连接管理、迁移、测试辅助（通用工具） |
+| `internal/models/snapshot.go` | Snapshot 模型 + SnapshotDAO |
+| `internal/models/sync_task.go` | SyncTask 模型 + SyncTaskDAO |
+| `internal/models/remote_config.go` | RemoteConfig 模型 + RemoteConfigDAO |
 
 ### 2. 数据库技术选型
 
@@ -25,9 +50,9 @@
 
 ### 3. 核心功能
 
-#### 数据库初始化 (`db.go`)
+#### 数据库初始化 (`pkg/database/db.go`)
 ```go
-func InitDB(dataDir string) (*DB, error)
+func InitDB(dataDir string) (*database.DB, error)
 ```
 - **单例模式**: 全局唯一数据库实例
 - **自动迁移**: 首次启动自动创建表结构
@@ -57,53 +82,62 @@ func InitDB(dataDir string) (*DB, error)
 - 自动更新 `updated_at` (remote_configs, app_settings)
 - 删除快照时级联清理同步历史
 
-### 4. DAO 层实现
+### 4. DAO 层实现（Active Record 模式）
 
-#### SnapshotDAO
+#### SnapshotDAO (`internal/models/snapshot.go`)
 ```go
 type SnapshotDAO struct {
-    db *DB
+    db *database.DB
 }
 
 // 方法
-Create(snapshot *models.Snapshot) error
-GetByID(id string) (*models.Snapshot, error)
-List(limit, offset int) ([]*models.Snapshot, error)
-Update(snapshot *models.Snapshot) error
+Create(snapshot *Snapshot) error
+GetByID(id string) (*Snapshot, error)
+List(limit, offset int) ([]*Snapshot, error)
+Update(snapshot *Snapshot) error
 Delete(id string) error
 Count() (int, error)
+
+// 构造函数
+func NewSnapshotDAO(db *database.DB) *SnapshotDAO
 ```
 - JSON 序列化: tools, tags, metadata
 - 文件统计: file_count, total_size
 
-#### SyncTaskDAO
+#### SyncTaskDAO (`internal/models/sync_task.go`)
 ```go
 type SyncTaskDAO struct {
-    db *DB
+    db *database.DB
 }
 
 // 方法
-Create(task *models.SyncTask) error
-GetByID(id string) (*models.SyncTask, error)
-List(limit, offset int, status models.SyncTaskStatus) ([]*models.SyncTask, error)
-Update(task *models.SyncTask) error
+Create(task *SyncTask) error
+GetByID(id string) (*SyncTask, error)
+List(limit, offset int, status SyncTaskStatus) ([]*SyncTask, error)
+Update(task *SyncTask) error
+
+// 构造函数
+func NewSyncTaskDAO(db *database.DB) *SyncTaskDAO
 ```
 - NULL 处理: 空 snapshot_id 转为 NULL
 - 时间处理: started_at, completed_at 可空
 
-#### RemoteConfigDAO
+#### RemoteConfigDAO (`internal/models/remote_config.go`)
 ```go
 type RemoteConfigDAO struct {
-    db *DB
+    db *database.DB
 }
 
 // 方法
-Create(config *models.RemoteConfig) error
-GetDefault() (*models.RemoteConfig, error)
-List() ([]*models.RemoteConfig, error)
-Update(config *models.RemoteConfig) error
+Create(config *RemoteConfig) error
+GetDefault() (*RemoteConfig, error)
+List() ([]*RemoteConfig, error)
+Update(config *RemoteConfig) error
 SetDefault(id string) error
 Delete(id string) error
+
+// 构造函数
+func NewRemoteConfigDAO(db *database.DB) *RemoteConfigDAO
 ```
 - 默认配置: is_default 字段互斥
 - 状态管理: active/inactive/error
@@ -112,7 +146,7 @@ Delete(id string) error
 
 #### 事务支持
 ```go
-func (db *DB) Transaction(fn func(*sql.Tx) error) error
+func (db *database.DB) Transaction(fn func(*sql.Tx) error) error
 ```
 - 自动提交/回滚
 - Panic 恢复
@@ -121,12 +155,12 @@ func (db *DB) Transaction(fn func(*sql.Tx) error) error
 ```go
 BackupDatabase(backupPath string) error  // 文件复制备份
 Vacuum() error                          // 数据库优化
-GetStats() (*models.DatabaseStats, error) // 统计信息
+GetDatabaseSize() (int64, error)        // 数据库大小
 ```
 
 #### 测试辅助
 ```go
-func InitTestDB(t TestDBHelper) (*DB, error)
+func InitTestDB(t TestDBHelper) (*database.DB, error)
 ```
 - 独立测试数据库
 - 自动清理 (t.Cleanup)
@@ -140,24 +174,22 @@ func InitTestDB(t TestDBHelper) (*DB, error)
 
 | 测试分类 | 测试数量 | 说明 |
 |---------|---------|------|
-| 数据库初始化 | 7 个 | InitDB, GetConn, Transaction, Path, Size, Backup, Vacuum, Stats |
-| SnapshotDAO | 6 个 | Create, GetByID, List, Update, Delete, Count |
-| SyncTaskDAO | 3 个 | Create, GetByID, Update |
-| RemoteConfigDAO | 6 个 | Create, GetDefault, SetDefault, List, Update, Delete |
-| 工具函数 | 2 个 | boolToInt, intToBool |
-| **总计** | **29 个** | |
+| Service 层测试 | 11+ | snapshot service, sync service |
+| Model 层测试 | 15+ | snapshot, sync_task, remote_config |
+| **总计** | **26+** | |
 
 ### 测试覆盖率
 ```
-coverage: 68.1% of statements
+internal/service/snapshot: coverage: 52.1%
+internal/service/sync:     coverage: 45.3%
+internal/models:          coverage: 38.7%
 ```
 
 ### 运行测试
 ```bash
 cd D:/workspace/ai-sync-manager
-go test ./internal/database/... -v -cover
+go test ./... -v -cover
 # ✓ 所有测试通过
-# ✓ 覆盖率: 68.1%
 ```
 
 ---
@@ -184,25 +216,7 @@ func intToBool(i int) bool {
 ### 3. 测试隔离
 ```go
 // 每个测试独立数据库，无单例干扰
-db, err := InitTestDB(t)
-```
-
----
-
-## 数据模型补充
-
-### DatabaseStats (新增)
-```go
-// internal/models/app_config.go
-type DatabaseStats struct {
-    SnapshotCount      int64  `json:"snapshot_count"`
-    FileCount          int64  `json:"file_count"`
-    TaskCount          int64  `json:"task_count"`
-    RemoteConfigCount  int64  `json:"remote_config_count"`
-    BackupCount        int64  `json:"backup_count"`
-    HistoryCount       int64  `json:"history_count"`
-    DatabaseSize       int64  `json:"database_size"`
-}
+db, err := database.InitTestDB(t)
 ```
 
 ---
@@ -213,16 +227,12 @@ type DatabaseStats struct {
 cd D:/workspace/ai-sync-manager
 
 # 编译
-go build -v ./...
+go build ./...
 # ✓ 编译成功
 
 # 运行测试
-go test ./...
+go test ./... -v
 # ✓ 所有测试通过
-
-# 数据库测试
-go test ./internal/database/... -v -cover
-# ✓ coverage: 68.1%
 ```
 
 ---
@@ -241,12 +251,47 @@ github.com/mattn/go-sqlite3 v1.14.37  # CGO 依赖，已移除
 
 ---
 
+## 架构设计原则
+
+### 职责分离
+1. **`pkg/database/`** - 通用数据库工具
+   - 数据库连接管理
+   - 迁移执行
+   - 事务处理
+   - 备份与优化
+
+2. **`internal/models/`** - 业务数据模型 + DAO
+   - 数据结构定义
+   - CRUD 操作
+   - 数据库访问逻辑
+
+3. **`internal/service/`** - 业务逻辑层
+   - 调用 DAO 获取数据
+   - 业务逻辑处理
+   - 数据验证与转换
+
+### 使用示例
+```go
+// Service 层使用
+import (
+    "ai-sync-manager/internal/models"
+    "ai-sync-manager/pkg/database"
+)
+
+func (s *Service) GetSnapshot(id string) (*models.Snapshot, error) {
+    snapshotDAO := models.NewSnapshotDAO(s.db)
+    return snapshotDAO.GetByID(id)
+}
+```
+
+---
+
 ## 下一步
 
-**A. 快照管理模块** - 实现配置快照的创建、恢复、应用功能
+**A. 快照管理模块** - 实现配置快照的创建、恢复、应用功能 ✅ (已完成)
 
 **B. 加密模块** - 实现敏感信息（密码、SSH密钥）加密存储
 
-**C. 同步引擎** - 实现与 Git 仓库的双向同步逻辑
+**C. 同步引擎** - 实现与 Git 仓库的双向同步逻辑 ✅ (部分完成)
 
 **D. 其他想法？**

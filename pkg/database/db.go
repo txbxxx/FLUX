@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/internal/models"
 	"ai-sync-manager/pkg/logger"
 
 	_ "modernc.org/sqlite"
@@ -404,47 +403,6 @@ func (db *DB) Vacuum() error {
 
 	logger.Info("数据库优化完成")
 	return nil
-}
-
-// GetStats 获取数据库统计信息
-func (db *DB) GetStats() (*models.DatabaseStats, error) {
-	conn := db.GetConn()
-
-	stats := &models.DatabaseStats{}
-
-	// 获取各表的行数
-	if err := conn.QueryRow("SELECT COUNT(*) FROM snapshots").Scan(&stats.SnapshotCount); err != nil {
-		return nil, fmt.Errorf("查询快照数失败: %w", err)
-	}
-
-	if err := conn.QueryRow("SELECT COUNT(*) FROM snapshot_files").Scan(&stats.FileCount); err != nil {
-		return nil, fmt.Errorf("查询文件数失败: %w", err)
-	}
-
-	if err := conn.QueryRow("SELECT COUNT(*) FROM sync_tasks").Scan(&stats.TaskCount); err != nil {
-		return nil, fmt.Errorf("查询任务数失败: %w", err)
-	}
-
-	if err := conn.QueryRow("SELECT COUNT(*) FROM remote_configs").Scan(&stats.RemoteConfigCount); err != nil {
-		return nil, fmt.Errorf("查询远端配置数失败: %w", err)
-	}
-
-	if err := conn.QueryRow("SELECT COUNT(*) FROM backups").Scan(&stats.BackupCount); err != nil {
-		return nil, fmt.Errorf("查询备份数失败: %w", err)
-	}
-
-	if err := conn.QueryRow("SELECT COUNT(*) FROM sync_history").Scan(&stats.HistoryCount); err != nil {
-		return nil, fmt.Errorf("查询历史数失败: %w", err)
-	}
-
-	// 获取数据库大小
-	size, err := db.GetDatabaseSize()
-	if err != nil {
-		return nil, err
-	}
-	stats.DatabaseSize = size
-
-	return stats, nil
 }
 
 // InitTestDB 初始化测试数据库

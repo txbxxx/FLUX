@@ -1,0 +1,598 @@
+# CLI/TUI MVP Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Build the first usable terminal workflow for AI Sync Manager so users can scan local tools, create a local snapshot, list saved snapshots, and access the same flow from a thin terminal UI.
+
+**Architecture:** Extract shared runtime bootstrapping from the current Wails binding layer, add a small application usecase layer for the local snapshot workflow, and build one terminal binary on top of it. Keep the first TUI menu-driven and state-based so the product gets a real terminal entrypoint without introducing unnecessary dependencies.
+
+**Tech Stack:** Go 1.25, standard library flag parsing, existing tool detection service, existing snapshot service, existing SQLite database layer, Wails backend kept compatible
+
+---
+
+## Implementation Notes
+
+- Read the approved design first: `docs/plans/2026-03-23-cli-tui-mvp-design.md`
+- Keep scope fixed to `scan -> create-snapshot -> list`
+- Do not add remote sync commands in this pass
+- Do not introduce a third-party CLI or TUI framework in this pass
+- Preserve existing Wails startup behavior while extracting shared bootstrapping
+
+### Task 1: Introduce a shared local workflow usecase
+
+**Files:**
+- Create: `internal/app/usecase/local_workflow.go`
+- Create: `internal/app/usecase/local_workflow_test.go`
+
+**Step 1: Write the failing usecase test**
+
+Create `internal/app/usecase/local_workflow_test.go`.
+
+```go
+func TestLocalWorkflow_CreateSnapshotReturnsSummary(t *testing.T) {
+    scanner := &stubScanner{}
+    snapshots := &stubSnapshots{
+        createResult: &SnapshotSummary{ID: "snap-1", Name: "first", FileCount: 3},
+    }
+
+    workflow := NewLocalWorkflow(scanner, snapshots)
+
+    result, err := workflow.CreateSnapshot(CreateSnapshotParams{
+        Tools:   []string{"codex"},
+        Message: "initial snapshot",
+    })
+
+    require.NoError(t, err)
+    require.Equal(t, "snap-1", result.ID)
+    require.Equal(t, 3, result.FileCount)
+}
+```
+
+**Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/app/usecase -run TestLocalWorkflow_CreateSnapshotReturnsSummary -count=1`
+
+Expected: FAIL because the package and constructor do not exist yet
+
+**Step 3: Implement the minimal usecase**
+
+Create `internal/app/usecase/local_workflow.go`.
+
+```go
+type Scanner interface {
+    ScanGlobal(ctx context.Context) ([]ToolSummary, error)
+}
+
+type SnapshotStore interface {
+    Create(ctx context.Context, params CreateSnapshotParams) (*SnapshotSummary, error)
+    List(ctx context.Context, limit int, offset int) ([]SnapshotSummary, error)
+}
+
+type LocalWorkflow struct {
+    scanner   Scanner
+    snapshots SnapshotStore
+}
+
+func NewLocalWorkflow(scanner Scanner, snapshots SnapshotStore) *LocalWorkflow {
+    return &LocalWorkflow{scanner: scanner, snapshots: snapshots}
+}
+```
+
+Add `Scan`, `CreateSnapshot`, and `ListSnapshots` methods with minimal validation.
+
+**Step 4: Run the usecase test**
+
+Run: `go test ./internal/app/usecase -run TestLocalWorkflow_CreateSnapshotReturnsSummary -count=1`
+
+Expected: PASS
+
+**Step 5: Extend the test file with two more cases**
+
+Add:
+
+- `TestLocalWorkflow_ScanDelegatesToScanner`
+- `TestLocalWorkflow_CreateSnapshotRequiresTools`
+
+**Step 6: Run the package tests**
+
+Run: `go test ./internal/app/usecase/... -count=1`
+
+Expected: PASS
+
+**Step 7: Commit**
+
+```bash
+git add internal/app/usecase/local_workflow.go internal/app/usecase/local_workflow_test.go
+git commit -m "feat: add local workflow usecase"
+```
+
+### Task 2: Extract shared runtime bootstrapping from the Wails app
+
+**Files:**
+- Create: `internal/app/runtime/runtime.go`
+- Modify: `app.go`
+
+**Step 1: Write the failing runtime wiring test**
+
+Extend `internal/app/usecase/local_workflow_test.go` with a small adapter test that asserts the workflow can be built from concrete dependencies.
+
+```go
+func TestNewAdaptersExposeWorkflowDependencies(t *testing.T) {
+    detector := tool.NewToolDetector()
+    db, err := database.InitTestDB(t)
+    require.NoError(t, err)
+
+    snapshotSvc := snapshot.NewService(db, detector)
+    scanner := NewToolScannerAdapter(detector)
+    store := NewSnapshotStoreAdapter(snapshotSvc)
+
+    workflow := usecase.NewLocalWorkflow(scanner, store)
+    require.NotNil(t, workflow)
+}
+```
+
+**Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/app/usecase -run TestNewAdaptersExposeWorkflowDependencies -count=1`
+
+Expected: FAIL because the adapters do not exist yet
+
+**Step 3: Create the shared runtime container**
+
+Create `internal/app/runtime/runtime.go`.
+
+```go
+type Runtime struct {
+    DB           *database.DB
+    Detector     *tool.ToolDetector
+    SnapshotSvc  *snapshot.Service
+    Workflow     *usecase.LocalWorkflow
+}
+
+func New(dataDir string) (*Runtime, error) {
+    db, err := database.InitDB(dataDir)
+    if err != nil {
+        return nil, err
+    }
+
+    detector := tool.NewToolDetector()
+    snapshotSvc := snapshot.NewService(db, detector)
+    workflow := usecase.NewLocalWorkflow(
+        NewToolScannerAdapter(detector),
+        NewSnapshotStoreAdapter(snapshotSvc),
+    )
+
+    return &Runtime{DB: db, Detector: detector, SnapshotSvc: snapshotSvc, Workflow: workflow}, nil
+}
+```
+
+Also add the concrete adapters in the same package.
+
+**Step 4: Refactor `app.go` to use the runtime**
+
+Replace direct initialization in `startup` with:
+
+```go
+rt, err := runtime.New(getDataDir())
+if err != nil {
+    // log and return
+}
+
+a.db = rt.DB
+a.toolDetector = rt.Detector
+a.snapshotSvc = rt.SnapshotSvc
+```
+
+Keep existing Wails API behavior unchanged.
+
+**Step 5: Run the adapter test**
+
+Run: `go test ./internal/app/usecase -run TestNewAdaptersExposeWorkflowDependencies -count=1`
+
+Expected: PASS
+
+**Step 6: Run repository tests**
+
+Run: `go test ./...`
+
+Expected: PASS
+
+**Step 7: Commit**
+
+```bash
+git add internal/app/runtime/runtime.go app.go internal/app/usecase/local_workflow_test.go
+git commit -m "refactor: extract shared runtime bootstrapping"
+```
+
+### Task 3: Build the CLI entrypoint and the `scan` command
+
+**Files:**
+- Create: `cmd/ai-sync/main.go`
+- Create: `internal/cli/root.go`
+- Create: `internal/cli/output.go`
+- Create: `internal/cli/scan_cmd.go`
+- Create: `internal/cli/root_test.go`
+
+**Step 1: Write the failing CLI scan test**
+
+Create `internal/cli/root_test.go`.
+
+```go
+func TestRunScanCommandPrintsToolSummary(t *testing.T) {
+    var out bytes.Buffer
+
+    workflow := &stubWorkflow{
+        scanResult: []usecase.ToolSummary{
+            {Tool: "codex", Status: "installed", ConfigCount: 4},
+        },
+    }
+
+    err := Run(context.Background(), workflow, &out, []string{"scan"})
+
+    require.NoError(t, err)
+    require.Contains(t, out.String(), "codex")
+    require.Contains(t, out.String(), "installed")
+}
+```
+
+**Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/cli -run TestRunScanCommandPrintsToolSummary -count=1`
+
+Expected: FAIL because the CLI package does not exist yet
+
+**Step 3: Implement the CLI root and scan command**
+
+Create `internal/cli/root.go` and `internal/cli/scan_cmd.go`.
+
+```go
+func Run(ctx context.Context, workflow Workflow, out io.Writer, args []string) error {
+    if len(args) == 0 {
+        return renderHelp(out)
+    }
+
+    switch args[0] {
+    case "scan":
+        return runScan(ctx, workflow, out, args[1:])
+    default:
+        return fmt.Errorf("unknown command: %s", args[0])
+    }
+}
+```
+
+`runScan` should call `workflow.Scan` and print a small table.
+
+**Step 4: Add the binary entrypoint**
+
+Create `cmd/ai-sync/main.go`.
+
+```go
+func main() {
+    rt, err := runtime.New(getDataDir())
+    if err != nil {
+        fmt.Fprintln(os.Stderr, "failed to initialize runtime:", err)
+        os.Exit(1)
+    }
+    defer rt.DB.Close()
+
+    if err := cli.Run(context.Background(), rt.Workflow, os.Stdout, os.Args[1:]); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
+}
+```
+
+**Step 5: Run the scan test**
+
+Run: `go test ./internal/cli -run TestRunScanCommandPrintsToolSummary -count=1`
+
+Expected: PASS
+
+**Step 6: Run the binary against help**
+
+Run: `go run ./cmd/ai-sync --help`
+
+Expected: help text includes `scan`, `snapshot`, and `tui`
+
+**Step 7: Commit**
+
+```bash
+git add cmd/ai-sync/main.go internal/cli/root.go internal/cli/output.go internal/cli/scan_cmd.go internal/cli/root_test.go
+git commit -m "feat: add cli scan command"
+```
+
+### Task 4: Add `snapshot create` and `snapshot list` CLI commands
+
+**Files:**
+- Modify: `internal/cli/root.go`
+- Create: `internal/cli/snapshot_cmd.go`
+- Modify: `internal/cli/root_test.go`
+
+**Step 1: Write the failing snapshot command test**
+
+Extend `internal/cli/root_test.go`.
+
+```go
+func TestRunSnapshotCreatePrintsCreatedSummary(t *testing.T) {
+    var out bytes.Buffer
+
+    workflow := &stubWorkflow{
+        createResult: &usecase.SnapshotSummary{
+            ID: "snap-1", Name: "Snapshot-1", FileCount: 3,
+        },
+    }
+
+    err := Run(context.Background(), workflow, &out, []string{
+        "snapshot", "create", "--tools", "codex,claude", "--message", "first",
+    })
+
+    require.NoError(t, err)
+    require.Contains(t, out.String(), "snap-1")
+    require.Contains(t, out.String(), "Snapshot-1")
+}
+```
+
+**Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/cli -run TestRunSnapshotCreatePrintsCreatedSummary -count=1`
+
+Expected: FAIL because snapshot subcommands do not exist yet
+
+**Step 3: Implement the snapshot subcommands**
+
+Create `internal/cli/snapshot_cmd.go`.
+
+```go
+func runSnapshot(ctx context.Context, workflow Workflow, out io.Writer, args []string) error {
+    switch args[0] {
+    case "create":
+        return runSnapshotCreate(ctx, workflow, out, args[1:])
+    case "list":
+        return runSnapshotList(ctx, workflow, out, args[1:])
+    default:
+        return fmt.Errorf("unknown snapshot command: %s", args[0])
+    }
+}
+```
+
+Use `flag.FlagSet` to parse:
+
+- `--tools`
+- `--message`
+- `--name`
+- `--limit`
+- `--offset`
+
+**Step 4: Run the snapshot create test**
+
+Run: `go test ./internal/cli -run TestRunSnapshotCreatePrintsCreatedSummary -count=1`
+
+Expected: PASS
+
+**Step 5: Add and pass a list command test**
+
+Add:
+
+```go
+func TestRunSnapshotListPrintsRows(t *testing.T) {
+    var out bytes.Buffer
+    workflow := &stubWorkflow{
+        listResult: []usecase.SnapshotSummary{
+            {ID: "snap-1", Name: "first", FileCount: 3},
+        },
+    }
+
+    err := Run(context.Background(), workflow, &out, []string{"snapshot", "list"})
+
+    require.NoError(t, err)
+    require.Contains(t, out.String(), "snap-1")
+}
+```
+
+Run: `go test ./internal/cli/... -count=1`
+
+Expected: PASS
+
+**Step 6: Verify the binary commands**
+
+Run:
+
+- `go run ./cmd/ai-sync scan`
+- `go run ./cmd/ai-sync snapshot list`
+
+Expected: commands run without panic and print readable output
+
+**Step 7: Commit**
+
+```bash
+git add internal/cli/root.go internal/cli/snapshot_cmd.go internal/cli/root_test.go
+git commit -m "feat: add cli snapshot commands"
+```
+
+### Task 5: Build the thin menu-driven TUI
+
+**Files:**
+- Create: `internal/tui/model.go`
+- Create: `internal/tui/handlers.go`
+- Create: `internal/tui/render.go`
+- Create: `internal/tui/model_test.go`
+- Create: `internal/cli/tui_cmd.go`
+- Modify: `internal/cli/root.go`
+
+**Step 1: Write the failing TUI state test**
+
+Create `internal/tui/model_test.go`.
+
+```go
+func TestModelCreateSnapshotRefreshesList(t *testing.T) {
+    workflow := &stubWorkflow{
+        createResult: &usecase.SnapshotSummary{ID: "snap-1", Name: "first"},
+        listResult: []usecase.SnapshotSummary{
+            {ID: "snap-1", Name: "first"},
+        },
+    }
+
+    model := NewModel(workflow)
+    err := model.Handle(ActionCreateSnapshot{
+        Tools: []string{"codex"},
+        Message: "first",
+    })
+
+    require.NoError(t, err)
+    require.Len(t, model.Snapshots, 1)
+    require.Equal(t, ScreenSnapshots, model.Screen)
+}
+```
+
+**Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/tui -run TestModelCreateSnapshotRefreshesList -count=1`
+
+Expected: FAIL because the model does not exist yet
+
+**Step 3: Implement the TUI state model**
+
+Create `internal/tui/model.go`.
+
+```go
+type Screen string
+
+const (
+    ScreenHome      Screen = "home"
+    ScreenScan      Screen = "scan"
+    ScreenCreate    Screen = "create"
+    ScreenSnapshots Screen = "snapshots"
+)
+
+type Model struct {
+    Workflow   Workflow
+    Screen     Screen
+    Tools      []usecase.ToolSummary
+    Snapshots  []usecase.SnapshotSummary
+    StatusText string
+    ErrorText  string
+}
+```
+
+Add `Handle` methods for:
+
+- `ActionScan`
+- `ActionNavigate`
+- `ActionCreateSnapshot`
+- `ActionLoadSnapshots`
+
+**Step 4: Implement terminal rendering and input loop**
+
+Create `internal/tui/render.go` and `internal/tui/handlers.go` with a simple numbered-menu loop:
+
+```go
+1. Scan tools
+2. Create snapshot
+3. List snapshots
+4. Exit
+```
+
+The render layer should clear and redraw sections using plain stdout only.
+
+**Step 5: Add the CLI `tui` command**
+
+Create `internal/cli/tui_cmd.go` and dispatch it from `root.go`.
+
+```go
+func runTUI(ctx context.Context, workflow Workflow, in io.Reader, out io.Writer) error {
+    return tui.NewApp(workflow, in, out).Run(ctx)
+}
+```
+
+**Step 6: Run the TUI test**
+
+Run: `go test ./internal/tui/... -count=1`
+
+Expected: PASS
+
+**Step 7: Manually verify the TUI**
+
+Run: `go run ./cmd/ai-sync tui`
+
+Expected:
+
+- main menu appears
+- scan action shows results and returns
+- create action accepts input and returns success summary
+- snapshot list shows the newly created snapshot
+
+**Step 8: Commit**
+
+```bash
+git add internal/tui/model.go internal/tui/handlers.go internal/tui/render.go internal/tui/model_test.go internal/cli/tui_cmd.go internal/cli/root.go
+git commit -m "feat: add thin terminal ui workflow"
+```
+
+### Task 6: Document usage and verify repository-wide behavior
+
+**Files:**
+- Modify: `README.md`
+- Create: `docs/plans/2026-03-23-cli-tui-mvp-design.md`
+- Create: `docs/plans/2026-03-23-cli-tui-mvp-implementation.md`
+
+**Step 1: Add a failing documentation checklist to your local notes**
+
+Checklist:
+
+- README explains terminal entrypoints
+- command examples match the implemented binary
+- MVP boundary is explicit
+
+Expected: checklist is incomplete before README edits
+
+**Step 2: Update `README.md`**
+
+Add sections for:
+
+- terminal binary purpose
+- supported commands
+- example invocations
+- MVP boundary and what is intentionally excluded
+
+Example command block:
+
+```bash
+go run ./cmd/ai-sync scan
+go run ./cmd/ai-sync snapshot create --tools codex,claude --message "first snapshot"
+go run ./cmd/ai-sync snapshot list
+go run ./cmd/ai-sync tui
+```
+
+**Step 3: Run full verification**
+
+Run:
+
+- `go test ./...`
+- `go run ./cmd/ai-sync scan`
+- `go run ./cmd/ai-sync snapshot list`
+
+Expected: all pass without panic
+
+**Step 4: Commit**
+
+```bash
+git add README.md docs/plans/2026-03-23-cli-tui-mvp-design.md docs/plans/2026-03-23-cli-tui-mvp-implementation.md
+git commit -m "docs: add cli tui mvp plan and usage"
+```
+
+## Verification Checklist
+
+- `go test ./...` passes
+- `go run ./cmd/ai-sync --help` shows `scan`, `snapshot`, and `tui`
+- `go run ./cmd/ai-sync scan` prints detected tool summaries or a readable empty-state message
+- `go run ./cmd/ai-sync snapshot create --tools codex --message "test"` creates a snapshot without panic
+- `go run ./cmd/ai-sync snapshot list` shows created snapshots or a readable empty-state message
+- `go run ./cmd/ai-sync tui` completes the local workflow end-to-end
+- Existing Wails app still starts because `app.go` remains compatible with shared runtime extraction
+
+## Risks to Watch
+
+- `database.InitDB` uses package-level singleton state, so tests must avoid hidden cross-test coupling
+- TUI scope can easily expand; keep it menu-driven in this pass
+- Snapshot creation can legitimately return “未找到任何配置文件”; treat that as a user-facing validation error, not a crash
+- Keep CLI output stable enough that later scripts and tests can depend on it

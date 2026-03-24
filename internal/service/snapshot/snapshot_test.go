@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/internal/database"
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
+	"ai-sync-manager/pkg/database"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,7 +107,7 @@ func TestService_ListSnapshots(t *testing.T) {
 		},
 	}
 
-	snapshotDAO := database.NewSnapshotDAO(db)
+	snapshotDAO := models.NewSnapshotDAO(db)
 	err = snapshotDAO.Create(snapshot)
 	require.NoError(t, err)
 
@@ -151,7 +151,7 @@ func TestService_GetSnapshot(t *testing.T) {
 		},
 	}
 
-	snapshotDAO := database.NewSnapshotDAO(db)
+	snapshotDAO := models.NewSnapshotDAO(db)
 	err = snapshotDAO.Create(snapshot)
 	require.NoError(t, err)
 
@@ -197,7 +197,7 @@ func TestService_DeleteSnapshot(t *testing.T) {
 		},
 	}
 
-	snapshotDAO := database.NewSnapshotDAO(db)
+	snapshotDAO := models.NewSnapshotDAO(db)
 	err = snapshotDAO.Create(snapshot)
 	require.NoError(t, err)
 
@@ -303,7 +303,7 @@ func TestService_ExportSnapshot(t *testing.T) {
 		},
 	}
 
-	snapshotDAO := database.NewSnapshotDAO(db)
+	snapshotDAO := models.NewSnapshotDAO(db)
 	err = snapshotDAO.Create(snapshot)
 	require.NoError(t, err)
 
@@ -340,7 +340,7 @@ func TestService_CountSnapshots(t *testing.T) {
 	assert.Equal(t, 0, count)
 
 	// 创建测试快照
-	snapshotDAO := database.NewSnapshotDAO(db)
+	snapshotDAO := models.NewSnapshotDAO(db)
 	for i := 1; i <= 3; i++ {
 		snapshot := &models.Snapshot{
 			ID:        fmt.Sprintf("test-count-%d", i),

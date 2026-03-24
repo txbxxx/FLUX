@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"time"
 
-	"ai-sync-manager/internal/database"
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
+	"ai-sync-manager/pkg/database"
 	"ai-sync-manager/pkg/logger"
 
 	"github.com/google/uuid"
@@ -88,7 +88,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 	}
 
 	// 保存到数据库
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 	if err := snapshotDAO.Create(snapshot); err != nil {
 		return nil, fmt.Errorf("保存快照失败: %w", err)
 	}
@@ -115,7 +115,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 
 // GetSnapshot 获取快照详情
 func (s *Service) GetSnapshot(id string) (*models.Snapshot, error) {
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 
 	snapshot, err := snapshotDAO.GetByID(id)
 	if err != nil {
@@ -127,7 +127,7 @@ func (s *Service) GetSnapshot(id string) (*models.Snapshot, error) {
 
 // ListSnapshots 列出快照
 func (s *Service) ListSnapshots(limit, offset int) ([]*models.Snapshot, error) {
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 
 	snapshots, err := snapshotDAO.List(limit, offset)
 	if err != nil {
@@ -141,7 +141,7 @@ func (s *Service) ListSnapshots(limit, offset int) ([]*models.Snapshot, error) {
 func (s *Service) DeleteSnapshot(id string) error {
 	logger.Info("删除快照", zap.String("id", id))
 
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 
 	if err := snapshotDAO.Delete(id); err != nil {
 		return fmt.Errorf("删除快照失败: %w", err)
@@ -278,7 +278,7 @@ func (s *Service) ValidateSnapshot(snapshot *models.Snapshot) error {
 
 // GetSnapshotsByTool 按工具筛选快照
 func (s *Service) GetSnapshotsByTool(toolType string, limit, offset int) ([]*models.Snapshot, error) {
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 
 	allSnapshots, err := snapshotDAO.List(0, 0) // 获取所有快照
 	if err != nil {
@@ -311,7 +311,7 @@ func (s *Service) GetSnapshotsByTool(toolType string, limit, offset int) ([]*mod
 
 // GetSnapshotsByTag 按标签筛选快照
 func (s *Service) GetSnapshotsByTag(tag string, limit, offset int) ([]*models.Snapshot, error) {
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 
 	allSnapshots, err := snapshotDAO.List(0, 0) // 获取所有快照
 	if err != nil {
@@ -344,6 +344,6 @@ func (s *Service) GetSnapshotsByTag(tag string, limit, offset int) ([]*models.Sn
 
 // CountSnapshots 统计快照数量
 func (s *Service) CountSnapshots() (int, error) {
-	snapshotDAO := database.NewSnapshotDAO(s.db)
+	snapshotDAO := models.NewSnapshotDAO(s.db)
 	return snapshotDAO.Count()
 }

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/internal/database"
 	"ai-sync-manager/internal/models"
+	"ai-sync-manager/pkg/database"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -510,7 +510,7 @@ func TestService_isSnapshotNew(t *testing.T) {
 		},
 	}
 
-	snapshotDAO := database.NewSnapshotDAO(db)
+	snapshotDAO := models.NewSnapshotDAO(db)
 	err = snapshotDAO.Create(existingSnapshot)
 	require.NoError(t, err)
 
@@ -542,7 +542,7 @@ func TestService_saveRemoteSnapshot(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 验证保存
-	snapshotDAO := database.NewSnapshotDAO(db)
+	snapshotDAO := models.NewSnapshotDAO(db)
 	fetched, err := snapshotDAO.GetByID("remote-1")
 	require.NoError(t, err)
 	assert.Equal(t, "Remote Snapshot", fetched.Name)
