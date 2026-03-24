@@ -148,6 +148,5 @@ func CleanupMockProjects(t *testing.T) {
 
 // GetUserHomeDirForTest 获取用户主目录（测试用）
 func GetUserHomeDirForTest() string {
-	home, _ := os.UserHomeDir()
-	return home
+	return GetUserHomeDir()
 }

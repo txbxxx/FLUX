@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"ai-sync-manager/internal/database"
 	"ai-sync-manager/internal/service/snapshot"
 	"ai-sync-manager/internal/service/tool"
+	"ai-sync-manager/pkg/database"
 	"ai-sync-manager/pkg/logger"
 )
 

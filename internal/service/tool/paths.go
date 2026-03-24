@@ -2,6 +2,7 @@ package tool
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -11,10 +12,7 @@ import (
 
 // GetDefaultGlobalPath 获取工具的默认全局配置路径
 func GetDefaultGlobalPath(toolType ToolType) string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "~"
-	}
+	homeDir := GetUserHomeDir()
 
 	switch toolType {
 	case ToolTypeCodex:
@@ -181,8 +179,8 @@ func GetClaudeFileDefinitions() []ClaudeFileDefinition {
 func ExpandPath(path string) string {
 	// 处理 ~
 	if len(path) > 0 && path[0] == '~' {
-		homeDir, err := os.UserHomeDir()
-		if err == nil {
+		homeDir := GetUserHomeDir()
+		if homeDir != "" && homeDir != "~" {
 			if len(path) == 1 {
 				return homeDir
 			}
@@ -192,8 +190,10 @@ func ExpandPath(path string) string {
 
 	// 处理 %USERPROFILE%
 	if utils.IsWindows() {
-		homeDir, _ := os.UserHomeDir()
-		path = strings.ReplaceAll(path, "%USERPROFILE%", homeDir)
+		homeDir := GetUserHomeDir()
+		if homeDir != "" && homeDir != "~" {
+			path = strings.ReplaceAll(path, "%USERPROFILE%", homeDir)
+		}
 	}
 
 	return filepath.Clean(path)
@@ -216,11 +216,32 @@ func IsWindows() bool {
 
 // GetUserHomeDir 获取用户主目录
 func GetUserHomeDir() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "~"
+	if homeDir, err := os.UserHomeDir(); err == nil && isResolvedHomeDir(homeDir) {
+		return homeDir
 	}
-	return homeDir
+
+	if currentUser, err := user.Current(); err == nil && isResolvedHomeDir(currentUser.HomeDir) {
+		return currentUser.HomeDir
+	}
+
+	if homeDir := os.Getenv("HOME"); isResolvedHomeDir(homeDir) {
+		return homeDir
+	}
+
+	if homeDir := os.Getenv("USERPROFILE"); isResolvedHomeDir(homeDir) {
+		return homeDir
+	}
+
+	homeDrive := os.Getenv("HOMEDRIVE")
+	homePath := os.Getenv("HOMEPATH")
+	if homeDrive != "" && homePath != "" {
+		combined := homeDrive + homePath
+		if isResolvedHomeDir(combined) {
+			return combined
+		}
+	}
+
+	return "~"
 }
 
 // GetHomeConfigPath 获取用户主目录下的配置路径
@@ -238,4 +259,16 @@ func GetHomeConfigPath(toolType ToolType, relativePath string) string {
 	}
 
 	return filepath.Join(homeDir, toolDir, relativePath)
+}
+
+func isResolvedHomeDir(path string) bool {
+	if path == "" || path == "~" {
+		return false
+	}
+
+	if strings.HasPrefix(path, "~\\") || strings.HasPrefix(path, "~/") {
+		return false
+	}
+
+	return true
 }
