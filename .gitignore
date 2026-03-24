@@ -1,6 +1,5 @@
 # 构建产物
 build/
-frontend/dist/
 *.exe
 *.dll
 *.so
@@ -9,10 +8,6 @@ frontend/dist/
 # 依赖
 node_modules/
 vendor/
-
-# 前端构建缓存
-frontend/node_modules/.vite/
-frontend/node_modules/.cache/
 
 # Go 相关
 *.test
@@ -55,9 +50,6 @@ temp/
 .data/
 *.db
 *.sqlite
-
-# Wails 生成的文件
-wails_build.log
 
 # Git worktrees
 .worktrees/
