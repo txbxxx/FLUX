@@ -70,9 +70,9 @@ ai-sync-manager/
 │   │   └── main.ts       # 入口文件
 │   └── wailsjs/          # Wails 生成的绑定
 │
-├── cooperation/          # 开发文档
-│   ├── api-reference.md
-│   └── phase*-*.md       # 各阶段总结
+├── docs/协作文档/       # 协作文档
+│   ├── 接口文档/         # 接口文档
+│   └── 阶段总结/         # 各阶段总结
 │
 └── build/                # 构建输出目录
 ```
@@ -255,7 +255,7 @@ logger.Info("操作开始",
 2. 在 `internal/service/` 中实现业务逻辑
 3. 在 `internal/handler/` 中添加处理器（如需要）
 4. 编写单元测试（目标覆盖率 > 30%）
-5. 在 `cooperation/` 中更新文档
+5. 在 `docs/协作文档/` 中更新文档
 
 ### 测试
 ```bash
@@ -426,4 +426,4 @@ const (
 - ✅ Phase 6: Git 集成模块
 - ✅ Phase 7: 加密模块（已完成）
 - ⏸️ Phase 8: 前端界面（暂缓）
-- ✅ 前端 API 文档（见 `cooperation/frontend-api-reference.md`）
+- ✅ 前端 API 文档（见 `docs/协作文档/接口文档/前端API对接文档.md`）

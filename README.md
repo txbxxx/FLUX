@@ -1,51 +1,112 @@
 # AI Sync Manager
 
-AI Sync Manager 是一个本地优先的配置管理工具，用于扫描 AI 工具配置、创建本地快照，并通过 CLI 或轻量终端界面浏览这些快照。
+AI Sync Manager 是一个本地优先的 AI 工具配置管理器，当前主线已经收敛为纯终端形态，提供 CLI 和轻量 TUI 两种使用方式。
 
-## 当前范围
+它当前聚焦在本地闭环：
 
-当前 MVP 只覆盖本地闭环：
-
-- 扫描本机 Codex 和 Claude 配置
+- 扫描本机 Codex / Claude 配置
 - 创建本地快照
 - 列出本地快照
-- 进入轻量终端界面
+- 浏览配置目录与文件
+- 在终端内直接编辑受支持的配置文件
 
-当前阶段不包含：
+## 当前状态
+
+当前 `master` 已不再包含 Wails / Vue 桌面入口，仓库主入口是：
+
+- CLI：`cmd/ai-sync`
+- 终端界面：`ai-sync tui`
+
+当前阶段仍未覆盖：
 
 - 远端仓库同步
-- push、pull、diff、apply、rollback
-- 凭证管理界面
+- push / pull / diff / apply / rollback
+- 图形化凭证管理界面
 
-## 入口
+## 快速开始
 
-桌面开发入口：
-
-```powershell
-wails dev
-```
-
-CLI 入口：
+直接运行 CLI：
 
 ```powershell
 go run -buildvcs=false ./cmd/ai-sync <command>
 ```
 
-构建 CLI 二进制：
+构建本地二进制：
 
 ```powershell
 go build -buildvcs=false -o ai-sync.exe ./cmd/ai-sync
 ```
 
-## 使用指南
+查看帮助：
 
-CLI / TUI 使用说明见：
+```powershell
+go run -buildvcs=false ./cmd/ai-sync --help
+```
 
-- [docs/命令行与终端界面MVP使用指南.md](docs/命令行与终端界面MVP使用指南.md)
+## 主要命令
 
-## 验证
+扫描本机配置：
+
+```powershell
+ai-sync scan
+```
+
+创建快照：
+
+```powershell
+ai-sync snapshot create --name "我的快照" --message "初始化配置"
+```
+
+列出快照：
+
+```powershell
+ai-sync snapshot list
+```
+
+查看配置目录或文件：
+
+```powershell
+ai-sync get codex skills\
+ai-sync get codex skills\README.md
+```
+
+进入终端编辑模式：
+
+```powershell
+ai-sync get codex skills\README.md --edit
+```
+
+启动轻量 TUI：
+
+```powershell
+ai-sync tui
+```
+
+## 文档
+
+详细使用说明见：
+
+- [docs/使用指南/命令行与终端界面MVP使用指南.md](docs/使用指南/命令行与终端界面MVP使用指南.md)
+
+架构说明见：
+
+- [docs/架构设计/终端架构详解.md](docs/架构设计/终端架构详解.md)
+
+文档分类总览见：
+
+- [docs/文档索引.md](docs/文档索引.md)
+
+## 开发与验证
+
+常用验证命令：
 
 ```powershell
 go test ./...
 go build -buildvcs=false ./cmd/ai-sync
 ```
+
+如果你刚从旧分支切回主线，需要注意：
+
+- 旧的 `main.go` / `app.go` / `wails.json` 已移除
+- `frontend/` 已不再是当前主线入口
+- 命令入口统一收敛到 `cmd/ai-sync/main.go`

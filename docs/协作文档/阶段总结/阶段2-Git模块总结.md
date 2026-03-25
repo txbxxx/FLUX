@@ -17,7 +17,7 @@
 | `internal/service/git/auth_test.go` | 认证测试（17 个用例） |
 | `internal/service/git/client_test.go` | 客户端测试（25 个用例） |
 | 更新 `app.go` | 添加 Git 操作接口 |
-| 更新 `cooperation/api-reference.md` | 添加 Git 接口文档 |
+| 更新 `docs/协作文档/接口文档/接口对接文档.md` | 添加 Git 接口文档 |
 
 ### 2. 核心类型
 
@@ -85,7 +85,7 @@
 
 ## 接口文档
 
-已在 `cooperation/api-reference.md` 更新，包含：
+已在 `docs/协作文档/接口文档/接口对接文档.md` 更新，包含：
 - Git 操作接口详细说明
 - 返回数据格式
 - 前端调用示例
