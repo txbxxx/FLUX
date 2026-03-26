@@ -111,6 +111,9 @@ func TestDetectWithOptions_ProjectScope(t *testing.T) {
 
 	// 验证项目路径被记录
 	assert.NotEmpty(t, result.Projects, "应检测到项目信息")
+	assert.Len(t, result.ProjectInstallations, 1, "应返回独立项目扫描对象")
+	assert.Equal(t, ScopeProject, result.ProjectInstallations[0].Scope)
+	assert.Equal(t, ToolTypeCodex, result.ProjectInstallations[0].ToolType)
 }
 
 // TestDetectWithOptions_ContextCancellation 测试上下文取消
@@ -162,6 +165,7 @@ func TestDetectWithOptions_Timeout(t *testing.T) {
 func TestToInstallations(t *testing.T) {
 	result := &ToolDetectionResult{
 		Codex: &ToolInstallation{
+			Scope:      ScopeGlobal,
 			ToolType:   ToolTypeCodex,
 			Status:     StatusInstalled,
 			GlobalPath: filepath.Join(GetUserHomeDirForTest(), ".codex"),
@@ -174,28 +178,52 @@ func TestToInstallations(t *testing.T) {
 					Size:  1024,
 				},
 			},
-			ProjectPaths: []string{"D:\\test\\project"},
+		},
+		ProjectInstallations: []*ToolInstallation{
+			{
+				Scope:       ScopeProject,
+				ToolType:    ToolTypeCodex,
+				Status:      StatusInstalled,
+				ProjectName: "test",
+				ProjectPath: "D:\\test\\project",
+				ConfigFiles: []ConfigFile{
+					{
+						Name:  "AGENTS.md",
+						Path:  "D:\\test\\project\\AGENTS.md",
+						Scope: ScopeProject,
+						IsDir: false,
+						Size:  128,
+					},
+				},
+			},
 		},
 		Projects: []ProjectInfo{{Path: "D:\\test\\project", Name: "test"}},
 	}
 
 	installations := result.ToInstallations()
 
-	assert.Len(t, installations, 1, "应返回一个工具安装信息")
+	assert.Len(t, installations, 2, "应返回全局对象和项目对象两个扫描结果")
 
-	codex := installations[0]
-	assert.Equal(t, ToolTypeCodex, codex.ToolType)
-	assert.Equal(t, StatusInstalled, codex.Status)
-	assert.NotEmpty(t, codex.GlobalPath)
-	assert.NotEmpty(t, codex.ConfigFiles)
-	assert.Len(t, codex.ProjectPaths, 1)
+	globalCodex := installations[0]
+	assert.Equal(t, ToolTypeCodex, globalCodex.ToolType)
+	assert.Equal(t, ScopeGlobal, globalCodex.Scope)
+	assert.Equal(t, StatusInstalled, globalCodex.Status)
+	assert.NotEmpty(t, globalCodex.GlobalPath)
+	assert.NotEmpty(t, globalCodex.ConfigFiles)
+
+	projectCodex := installations[1]
+	assert.Equal(t, ToolTypeCodex, projectCodex.ToolType)
+	assert.Equal(t, ScopeProject, projectCodex.Scope)
+	assert.Equal(t, "test", projectCodex.ProjectName)
+	assert.Equal(t, "D:\\test\\project", projectCodex.ProjectPath)
+	assert.Len(t, projectCodex.ConfigFiles, 1)
 }
 
 // TestToInstallations_EmptyResult 测试空结果的转换
 func TestToInstallations_EmptyResult(t *testing.T) {
 	result := &ToolDetectionResult{
-		Codex:   nil,
-		Claude:  nil,
+		Codex:    nil,
+		Claude:   nil,
 		Projects: []ProjectInfo{},
 	}
 
@@ -341,6 +369,7 @@ func TestDetectWithOptions_MultipleProjects(t *testing.T) {
 	assert.True(t, projectPaths[project1], "应包含 project1")
 	assert.True(t, projectPaths[project2], "应包含 project2")
 	assert.True(t, projectPaths[project3], "应包含 project3")
+	assert.Len(t, result.ProjectInstallations, 4, "应为每个工具类型生成独立项目扫描对象")
 }
 
 // TestDetectWithOptions_InvalidPaths 测试无效路径处理
@@ -352,8 +381,8 @@ func TestDetectWithOptions_InvalidPaths(t *testing.T) {
 		ScanGlobal:   false,
 		ScanProjects: true,
 		ProjectPaths: []string{
-			"",                         // 空路径
-			"/nonexistent/path/12345",  // 不存在的路径
+			"",                           // 空路径
+			"/nonexistent/path/12345",    // 不存在的路径
 			"\\\\invalid\\network\\path", // 无效网络路径
 		},
 		IncludeFiles: true,
@@ -373,7 +402,7 @@ func TestDetectTool_Single(t *testing.T) {
 	detector := NewToolDetector()
 
 	opts := &ScanOptions{
-		ScanGlobal:  true,
+		ScanGlobal:   true,
 		IncludeFiles: true,
 		MaxDepth:     1,
 	}

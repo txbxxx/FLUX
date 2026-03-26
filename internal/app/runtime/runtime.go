@@ -22,6 +22,8 @@ type Runtime struct {
 	DataDir         string
 	DB              *database.DB
 	Detector        *tool.ToolDetector
+	RuleResolver    *tool.RuleResolver
+	RuleManager     *tool.RuleManager
 	SnapshotService *snapshot.Service
 }
 
@@ -45,14 +47,18 @@ func New(options Options) (*Runtime, error) {
 		return nil, fmt.Errorf("初始化数据库失败: %w", err)
 	}
 
-	detector := tool.NewToolDetector()
+	ruleManager := tool.NewRuleManager(db)
+	resolver := tool.NewRuleResolver(ruleManager.Store())
+	detector := tool.NewToolDetectorWithResolver(resolver)
 
 	return &Runtime{
 		Version:         options.Version,
 		DataDir:         dataDir,
 		DB:              db,
 		Detector:        detector,
-		SnapshotService: snapshot.NewService(db, detector),
+		RuleResolver:    resolver,
+		RuleManager:     ruleManager,
+		SnapshotService: snapshot.NewService(db, resolver),
 	}, nil
 }
 

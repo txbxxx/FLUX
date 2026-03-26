@@ -82,6 +82,9 @@ go build -buildvcs=false -o ai-sync ./cmd/ai-sync
 当前 Cobra 命令树包含以下入口：
 
 - `ai-sync scan`
+- `ai-sync scan add`
+- `ai-sync scan remove`
+- `ai-sync scan list`
 - `ai-sync get`
 - `ai-sync snapshot create`
 - `ai-sync snapshot list`
@@ -118,24 +121,43 @@ Available Commands:
 
 ```powershell
 .\ai-sync.exe scan
+.\ai-sync.exe scan codex
+.\ai-sync.exe scan claude
+.\ai-sync.exe scan codex claude
+.\ai-sync.exe scan ai-sync-manager
+.\ai-sync.exe scan list
+.\ai-sync.exe scan list claude
+.\ai-sync.exe scan add claude C:\Users\<user>\.claude.json
+.\ai-sync.exe scan add --project codex demo D:\workspace\demo
 ```
 
 ### 6.2 功能说明
 
-`scan` 会扫描当前用户环境中的工具配置，并输出每个工具的摘要信息，包括：
+`scan` 现在基于统一规则源工作，会输出两类同级扫描对象：
 
-- 工具名称
+- 全局扫描对象
+- 已注册项目扫描对象
+
+其中过滤参数既可以是应用名，也可以是已注册项目名：
+
+- `scan codex` 会输出 Codex 全局对象和所有 Codex 项目对象
+- `scan ai-sync-manager` 会只输出名为 `ai-sync-manager` 的已注册项目对象
+
+输出信息包括：
+
+- 扫描对象名称
 - 检测结果
-- 全局配置路径
+- 配置目录
 - 可同步项数量
-- 顶层关键配置与扩展内容
+- 原因
+- 关键配置与扩展内容
 
 ### 6.3 输出格式
 
 典型输出格式如下：
 
 ```text
-Codex
+Codex（全局）
   检测结果: 可同步
   配置目录: C:\Users\<user>\.codex
   可同步项: 4 项
@@ -152,9 +174,9 @@ Codex
 ### 6.4 状态说明
 
 - `可同步`
-  已找到配置目录，并识别到至少一项可同步配置
+  已找到关键文件，并识别到至少一项最终规则命中项
 - `暂不可同步`
-  找到了配置目录，但当前规则下没有识别到可同步项
+  找到了配置目录，但缺少关键文件，或当前最终规则下没有命中项
 - `不可同步`
   没找到对应工具的配置目录
 
@@ -181,6 +203,41 @@ Claude
 - 本机尚未安装对应工具
 - 配置目录不存在
 - 当前用户无法访问目标目录
+
+### 6.6 `scan add/remove/list`
+
+当前支持两类规则操作：
+
+```powershell
+.\ai-sync.exe scan add <app> <absolute-file-path>
+.\ai-sync.exe scan remove <app> <absolute-file-path>
+.\ai-sync.exe scan add --project <app> <project-name> <project-absolute-path>
+.\ai-sync.exe scan remove --project <app> <project-absolute-path>
+.\ai-sync.exe scan list
+.\ai-sync.exe scan list <app>
+```
+
+说明：
+
+- 默认规则由程序内置，不需要手动添加
+- `scan add <app> <absolute-file-path>` 用于补充分散在其他位置的配置文件
+- `scan add --project ...` 用于注册项目，注册后会按该工具的项目规则模板生成独立的项目扫描对象，并参与扫描和快照
+- `scan list` 会展示默认全局规则、自定义绝对路径规则和已注册项目
+- 只有存在已注册项目时，才会额外显示“已注册项目扫描模板”
+
+如果某个已注册项目下实际识别到了配置文件，`scan` 会把它作为与全局对象同级的结果输出，例如：
+
+```text
+demo（Codex 项目）
+  检测结果: 可同步
+  配置目录: D:\workspace\demo
+  可同步项: 1 项
+
+  关键配置:
+    - 代理规则: AGENTS.md
+```
+
+这表示该条结果是项目级扫描对象，不会再并入 `Codex（全局）` 或 `Claude（全局）` 的计数中。
 
 ## 7. `get`：查看或编辑配置内容
 
@@ -252,7 +309,12 @@ Codex > skills\aiskills\README.md
 
 ### 7.4 路径规则
 
-`get` 的路径不是任意本机路径，而是“相对于工具配置根目录的相对路径”。
+`get` 不再是固定白名单，而是严格跟随统一规则源。
+
+当前支持两种输入方式：
+
+- 默认全局规则路径：使用相对于工具全局配置目录的相对路径
+- 已登记规则路径：使用已登记的绝对路径
 
 例如：
 
@@ -261,7 +323,13 @@ Codex > skills\aiskills\README.md
 - `get claude commands\`
   实际针对 `C:\Users\<user>\.claude\commands`
 
-当前只允许读取工具定义范围内的配置路径，不允许越界访问系统其他文件。
+例如：
+
+- `get codex skills\`
+- `get claude settings.json`
+- `get claude C:\Users\<user>\.claude.json`
+
+当前只允许读取“最终规则命中的路径”，不允许越界访问未登记的系统其他文件。
 
 ### 7.5 常见失败
 
@@ -283,15 +351,14 @@ Codex > skills\aiskills\README.md
 .\ai-sync.exe snapshot create --tools codex --message "backup before change"
 ```
 
-### 7.2 完整示例
+### 8.2 完整示例
 
 ```powershell
 .\ai-sync.exe snapshot create `
   --tools codex,claude `
   --message "backup before change" `
   --name "Daily backup" `
-  --scope global `
-  --project-path D:\workspace\my-project
+  --scope both
 ```
 
 ### 7.3 参数说明
@@ -317,7 +384,7 @@ Codex > skills\aiskills\README.md
 - `--scope`
   快照范围，默认是 `global`
 - `--project-path`
-  项目级快照使用的路径，可选
+  当前保留兼容；统一规则模式下，项目级快照以 `scan add --project` 已注册项目为准
 
 ### 7.4 参数约束
 
@@ -354,7 +421,7 @@ size: 4096 bytes
 - `message` 为空
 - 目标工具存在，但没有可打包的配置文件
 
-例如当 `scan` 输出 `config files: 0` 时，后续执行 `snapshot create` 很可能失败，因为当前没有可归档内容。
+例如当 `scan` 输出“可同步项: 0 项”时，后续执行 `snapshot create` 很可能失败，因为当前统一规则下没有可归档内容。
 
 ## 9. `snapshot list`：列出本地快照
 
@@ -456,9 +523,10 @@ size: 4096 bytes
 
 页面展示：
 
-- 检测到的工具
-- 状态
-- 配置文件数量
+- 检测到的扫描对象
+- 中文状态
+- 原因
+- 可同步项数量
 
 退出方式：
 

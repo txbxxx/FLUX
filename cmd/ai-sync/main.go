@@ -31,8 +31,8 @@ func main() {
 		_ = rt.Close()
 	}()
 
-	accessor := tool.NewConfigAccessor()
-	workflow := usecase.NewLocalWorkflow(rt.Detector, rt.SnapshotService, accessor)
+	accessor := tool.NewConfigAccessor(rt.RuleResolver)
+	workflow := usecase.NewLocalWorkflow(rt.Detector, rt.SnapshotService, accessor).WithScanRuleManager(rt.RuleManager)
 	runner := tui.NewRunner(workflow, rt.DataDir, os.Stdin, os.Stdout)
 	editor := tui.NewConfigEditor(os.Stdin, os.Stdout)
 

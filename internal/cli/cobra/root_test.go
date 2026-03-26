@@ -13,23 +13,61 @@ import (
 )
 
 type stubWorkflow struct {
-	scanResult   *usecase.ScanResult
-	scanErr      error
-	createInput  usecase.CreateSnapshotInput
-	createResult *usecase.SnapshotSummary
-	createErr    error
-	listInput    usecase.ListSnapshotsInput
-	listResult   *usecase.ListSnapshotsResult
-	listErr      error
-	getInput     usecase.GetConfigInput
-	getResult    *usecase.GetConfigResult
-	getErr       error
-	saveInput    usecase.SaveConfigInput
-	saveErr      error
+	scanInput          usecase.ScanInput
+	scanResult         *usecase.ScanResult
+	scanErr            error
+	addRuleInput       usecase.AddCustomRuleInput
+	addRuleErr         error
+	removeRuleInput    usecase.RemoveCustomRuleInput
+	removeRuleErr      error
+	addProjectInput    usecase.AddProjectInput
+	addProjectErr      error
+	removeProjectInput usecase.RemoveProjectInput
+	removeProjectErr   error
+	listRulesInput     usecase.ListScanRulesInput
+	listRulesResult    *usecase.ListScanRulesResult
+	listRulesErr       error
+	createInput        usecase.CreateSnapshotInput
+	createResult       *usecase.SnapshotSummary
+	createErr          error
+	listInput          usecase.ListSnapshotsInput
+	listResult         *usecase.ListSnapshotsResult
+	listErr            error
+	getInput           usecase.GetConfigInput
+	getResult          *usecase.GetConfigResult
+	getErr             error
+	saveInput          usecase.SaveConfigInput
+	saveErr            error
 }
 
-func (s *stubWorkflow) Scan(context.Context) (*usecase.ScanResult, error) {
+func (s *stubWorkflow) Scan(_ context.Context, input usecase.ScanInput) (*usecase.ScanResult, error) {
+	s.scanInput = input
 	return s.scanResult, s.scanErr
+}
+
+func (s *stubWorkflow) AddCustomRule(_ context.Context, input usecase.AddCustomRuleInput) error {
+	s.addRuleInput = input
+	return s.addRuleErr
+}
+
+func (s *stubWorkflow) RemoveCustomRule(_ context.Context, input usecase.RemoveCustomRuleInput) error {
+	s.removeRuleInput = input
+	return s.removeRuleErr
+}
+
+func (s *stubWorkflow) AddProject(_ context.Context, input usecase.AddProjectInput) error {
+	s.addProjectInput = input
+	return s.addProjectErr
+}
+
+func (s *stubWorkflow) RemoveProject(_ context.Context, input usecase.RemoveProjectInput) error {
+	s.removeProjectInput = input
+	return s.removeProjectErr
+}
+
+func (s *stubWorkflow) ListScanRules(_ context.Context, input usecase.ListScanRulesInput) (*usecase.ListScanRulesResult, error) {
+	s.listRulesInput = input
+	return s.listRulesResult, s.listRulesErr
 }
 
 func (s *stubWorkflow) CreateSnapshot(_ context.Context, input usecase.CreateSnapshotInput) (*usecase.SnapshotSummary, error) {
@@ -105,13 +143,26 @@ func TestExecuteScanCommandPrintsToolSummary(t *testing.T) {
 		scanResult: &usecase.ScanResult{
 			Tools: []usecase.ToolSummary{
 				{
-					Tool:       "codex",
-					ResultText: "可同步",
-					Path:       "/home/test/.codex",
+					Tool:        "codex",
+					Scope:       "global",
+					ResultText:  "可同步",
+					Path:        "/home/test/.codex",
 					ConfigCount: 2,
 					Items: []usecase.ToolConfigItem{
 						{Group: "关键配置", Label: "主配置", RelativePath: "config.toml"},
 						{Group: "扩展内容", Label: "技能目录", RelativePath: "skills"},
+					},
+				},
+				{
+					Tool:        "codex",
+					Scope:       "project",
+					ProjectName: "demo",
+					ResultText:  "可同步",
+					Path:        "/workspace/demo",
+					ConfigCount: 2,
+					Items: []usecase.ToolConfigItem{
+						{Group: "关键配置", Label: "项目配置目录", RelativePath: ".codex/"},
+						{Group: "关键配置", Label: "代理规则", RelativePath: "AGENTS.md"},
 					},
 				},
 			},
@@ -129,14 +180,173 @@ func TestExecuteScanCommandPrintsToolSummary(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
+	if len(workflow.scanInput.Apps) != 0 {
+		t.Fatalf("expected no app filters, got %+v", workflow.scanInput)
+	}
 	if !strings.Contains(stdout.String(), "Codex") ||
-		!strings.Contains(stdout.String(), "检测结果: 可同步") ||
+		!strings.Contains(stdout.String(), "Codex（全局）") ||
+		!strings.Contains(stdout.String(), "demo（Codex 项目）") ||
+		!strings.Contains(stdout.String(), "项目配置目录: .codex/") ||
 		!strings.Contains(stdout.String(), "主配置: config.toml") ||
-		!strings.Contains(stdout.String(), "技能目录: skills") {
+		!strings.Contains(stdout.String(), "技能目录: skills") ||
+		!strings.Contains(stdout.String(), "代理规则: AGENTS.md") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %s", stderr.String())
+	}
+}
+
+func TestExecuteScanCommandPassesAppOrder(t *testing.T) {
+	workflow := &stubWorkflow{
+		scanResult: &usecase.ScanResult{
+			Tools: []usecase.ToolSummary{
+				{Tool: "claude", ResultText: "可同步"},
+				{Tool: "codex", ResultText: "可同步"},
+			},
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Execute(Dependencies{
+		Workflow: workflow,
+		TUI:      &stubTUIRunner{},
+		Out:      &stdout,
+		Err:      &stderr,
+	}, []string{"scan", "claude", "codex"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if len(workflow.scanInput.Apps) != 2 || workflow.scanInput.Apps[0] != "claude" || workflow.scanInput.Apps[1] != "codex" {
+		t.Fatalf("unexpected scan input order: %+v", workflow.scanInput)
+	}
+}
+
+func TestExecuteScanAddProjectCommand(t *testing.T) {
+	workflow := &stubWorkflow{}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Execute(Dependencies{
+		Workflow: workflow,
+		TUI:      &stubTUIRunner{},
+		Out:      &stdout,
+		Err:      &stderr,
+	}, []string{"scan", "add", "--project", "codex", "demo", `D:\workspace\demo`})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d, stderr=%s", exitCode, stderr.String())
+	}
+	if workflow.addProjectInput.App != "codex" || workflow.addProjectInput.ProjectName != "demo" || workflow.addProjectInput.ProjectPath != `D:\workspace\demo` {
+		t.Fatalf("unexpected add project input: %+v", workflow.addProjectInput)
+	}
+}
+
+func TestExecuteScanListCommandPrintsRules(t *testing.T) {
+	workflow := &stubWorkflow{
+		listRulesResult: &usecase.ListScanRulesResult{
+			App: "claude",
+			DefaultGlobalRules: []usecase.RuleItem{
+				{Path: "settings.json", Kind: "file"},
+			},
+			ProjectRuleTemplates: []usecase.RuleItem{
+				{Path: ".claude", Kind: "dir"},
+			},
+			CustomRules: []usecase.RuleItem{
+				{Path: `C:\Users\tester\.claude.json`, Kind: "file"},
+			},
+			RegisteredProjects: []usecase.RegisteredProjectItem{
+				{Name: "demo", Path: `D:\workspace\demo`},
+			},
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Execute(Dependencies{
+		Workflow: workflow,
+		TUI:      &stubTUIRunner{},
+		Out:      &stdout,
+		Err:      &stderr,
+	}, []string{"scan", "list", "claude"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if workflow.listRulesInput.App != "claude" {
+		t.Fatalf("unexpected list input: %+v", workflow.listRulesInput)
+	}
+	if !strings.Contains(stdout.String(), "默认全局规则") ||
+		!strings.Contains(stdout.String(), "settings.json") ||
+		!strings.Contains(stdout.String(), "已注册项目扫描模板") ||
+		!strings.Contains(stdout.String(), "已注册项目") ||
+		!strings.Contains(stdout.String(), `D:\workspace\demo`) {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
+func TestExecuteScanListCommandHidesProjectTemplatesWithoutRegisteredProjects(t *testing.T) {
+	workflow := &stubWorkflow{
+		listRulesResult: &usecase.ListScanRulesResult{
+			App: "codex",
+			DefaultGlobalRules: []usecase.RuleItem{
+				{Path: "config.toml", Kind: "file"},
+			},
+			ProjectRuleTemplates: []usecase.RuleItem{
+				{Path: ".codex", Kind: "dir"},
+				{Path: "AGENTS.md", Kind: "file"},
+			},
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Execute(Dependencies{
+		Workflow: workflow,
+		TUI:      &stubTUIRunner{},
+		Out:      &stdout,
+		Err:      &stderr,
+	}, []string{"scan", "list", "codex"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if strings.Contains(stdout.String(), "项目规则模板") || strings.Contains(stdout.String(), "已注册项目扫描模板") {
+		t.Fatalf("expected project template section to be hidden, got %s", stdout.String())
+	}
+}
+
+func TestExecuteScanListCommandPassesRegisteredProjectName(t *testing.T) {
+	workflow := &stubWorkflow{
+		listRulesResult: &usecase.ListScanRulesResult{
+			App: "codex",
+			DefaultGlobalRules: []usecase.RuleItem{
+				{Path: "config.toml", Kind: "file"},
+			},
+			ProjectRuleTemplates: []usecase.RuleItem{
+				{Path: ".codex", Kind: "dir"},
+				{Path: "AGENTS.md", Kind: "file"},
+			},
+			RegisteredProjects: []usecase.RegisteredProjectItem{
+				{Name: "ai-sync-manager", Path: `D:\workspace\ai-sync-manager`},
+			},
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Execute(Dependencies{
+		Workflow: workflow,
+		TUI:      &stubTUIRunner{},
+		Out:      &stdout,
+		Err:      &stderr,
+	}, []string{"scan", "list", "ai-sync-manager"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if workflow.listRulesInput.App != "ai-sync-manager" {
+		t.Fatalf("unexpected list input: %+v", workflow.listRulesInput)
+	}
+	if !strings.Contains(stdout.String(), "Codex 规则") || !strings.Contains(stdout.String(), `D:\workspace\ai-sync-manager`) {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 }
 

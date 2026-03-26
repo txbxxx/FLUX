@@ -19,42 +19,40 @@ import (
 
 // Collector 文件收集器
 type Collector struct {
-	detector *tool.ToolDetector
+	resolver *tool.RuleResolver
 }
 
-// NewCollector 创建文件收集器
-func NewCollector(detector *tool.ToolDetector) *Collector {
+// NewCollector 创建文件收集器。
+// collector 只遍历统一规则层已经命中的目录，避免回退成“整目录打包”。
+func NewCollector(resolver *tool.RuleResolver) *Collector {
+	if resolver == nil {
+		resolver = tool.NewRuleResolver(nil)
+	}
+
 	return &Collector{
-		detector: detector,
+		resolver: resolver,
 	}
 }
 
 // Collect 收集配置文件
 func (c *Collector) Collect(options CollectOptions) (*CollectResult, error) {
 	result := &CollectResult{
-		Files: make([]models.SnapshotFile, 0),
+		Files:  make([]models.SnapshotFile, 0),
 		Errors: make([]CollectError, 0),
 	}
 
-	// 收集全局配置
 	if options.Scope == models.ScopeGlobal || options.Scope == models.ScopeBoth {
 		globalFiles, globalErrors := c.collectGlobalFiles(options)
 		result.Files = append(result.Files, globalFiles...)
 		result.Errors = append(result.Errors, globalErrors...)
 	}
 
-	// 收集项目配置
 	if options.Scope == models.ScopeProject || options.Scope == models.ScopeBoth {
-		if options.ProjectPath == "" {
-			logger.Warn("项目路径为空，跳过项目配置收集")
-		} else {
-			projectFiles, projectErrors := c.collectProjectFiles(options)
-			result.Files = append(result.Files, projectFiles...)
-			result.Errors = append(result.Errors, projectErrors...)
-		}
+		projectFiles, projectErrors := c.collectProjectFiles(options)
+		result.Files = append(result.Files, projectFiles...)
+		result.Errors = append(result.Errors, projectErrors...)
 	}
 
-	// 计算总大小
 	for _, file := range result.Files {
 		result.TotalSize += file.Size
 	}
@@ -68,17 +66,22 @@ func (c *Collector) Collect(options CollectOptions) (*CollectResult, error) {
 	return result, nil
 }
 
-// collectGlobalFiles 收集全局配置文件
 func (c *Collector) collectGlobalFiles(options CollectOptions) ([]models.SnapshotFile, []CollectError) {
 	var files []models.SnapshotFile
 	var errors []CollectError
 
-	for _, toolType := range options.Tools {
-		basePath := tool.GetDefaultGlobalPath(tool.ToolType(toolType))
-		if basePath == "" {
+	for _, toolName := range options.Tools {
+		report, err := c.resolver.ResolveTool(tool.ToolType(toolName))
+		if err != nil {
+			errors = append(errors, CollectError{Path: toolName, Message: err.Error()})
 			continue
 		}
-		collected, errs := c.collectFromPath(basePath, toolType, models.ScopeGlobal, options)
+
+		matches := make([]tool.ResolvedRuleMatch, 0, len(report.DefaultMatches)+len(report.CustomMatches))
+		matches = append(matches, report.DefaultMatches...)
+		matches = append(matches, report.CustomMatches...)
+
+		collected, errs := c.collectResolvedMatches(matches, toolName, options)
 		files = append(files, collected...)
 		errors = append(errors, errs...)
 	}
@@ -86,18 +89,23 @@ func (c *Collector) collectGlobalFiles(options CollectOptions) ([]models.Snapsho
 	return files, errors
 }
 
-// collectProjectFiles 收集项目配置文件
 func (c *Collector) collectProjectFiles(options CollectOptions) ([]models.SnapshotFile, []CollectError) {
 	var files []models.SnapshotFile
 	var errors []CollectError
 
-	for _, toolType := range options.Tools {
-		relPath := tool.GetDefaultProjectPath(tool.ToolType(toolType))
-		if relPath == "" {
+	for _, toolName := range options.Tools {
+		report, err := c.resolver.ResolveTool(tool.ToolType(toolName))
+		if err != nil {
+			errors = append(errors, CollectError{Path: toolName, Message: err.Error()})
 			continue
 		}
-		basePath := filepath.Join(options.ProjectPath, relPath)
-		collected, errs := c.collectFromPath(basePath, toolType, models.ScopeProject, options)
+
+		var matches []tool.ResolvedRuleMatch
+		for _, project := range report.ProjectMatches {
+			matches = append(matches, project.Matches...)
+		}
+
+		collected, errs := c.collectResolvedMatches(matches, toolName, options)
 		files = append(files, collected...)
 		errors = append(errors, errs...)
 	}
@@ -105,56 +113,67 @@ func (c *Collector) collectProjectFiles(options CollectOptions) ([]models.Snapsh
 	return files, errors
 }
 
-// collectFromPath 从指定路径收集文件
-func (c *Collector) collectFromPath(
-	basePath string,
-	toolType string,
-	scope models.SnapshotScope,
+func (c *Collector) collectResolvedMatches(
+	matches []tool.ResolvedRuleMatch,
+	toolName string,
 	options CollectOptions,
 ) ([]models.SnapshotFile, []CollectError) {
 	var files []models.SnapshotFile
 	var errors []CollectError
 
-	// 检查路径是否存在
-	info, err := os.Stat(basePath)
+	seen := map[string]struct{}{}
+	for _, match := range matches {
+		collected, errs := c.collectMatch(match, toolName, options, seen)
+		files = append(files, collected...)
+		errors = append(errors, errs...)
+	}
+
+	return files, errors
+}
+
+func (c *Collector) collectMatch(
+	match tool.ResolvedRuleMatch,
+	toolName string,
+	options CollectOptions,
+	seen map[string]struct{},
+) ([]models.SnapshotFile, []CollectError) {
+	if match.IsDir {
+		return c.collectFilesUnderDir(match.AbsolutePath, toolName, options, seen)
+	}
+
+	file, err := c.collectSingleFile(match.AbsolutePath, toolName, options, seen)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return files, errors // 路径不存在不是错误
-		}
-		return files, []CollectError{{Path: basePath, Message: err.Error()}}
+		return nil, []CollectError{{Path: match.AbsolutePath, Message: err.Error()}}
+	}
+	if file == nil {
+		return nil, nil
 	}
 
-	// 如果是文件，直接收集
-	if !info.IsDir() {
-		file, err := c.collectSingleFile(basePath, toolType, options)
-		if err != nil {
-			return files, []CollectError{{Path: basePath, Message: err.Error()}}
-		}
-		if file != nil {
-			files = append(files, *file)
-		}
-		return files, errors
-	}
+	return []models.SnapshotFile{*file}, nil
+}
 
-	// 遍历目录
-	err = filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+func (c *Collector) collectFilesUnderDir(
+	basePath string,
+	toolName string,
+	options CollectOptions,
+	seen map[string]struct{},
+) ([]models.SnapshotFile, []CollectError) {
+	var files []models.SnapshotFile
+	var errors []CollectError
+
+	walkErr := filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			errors = append(errors, CollectError{Path: path, Message: err.Error()})
 			return nil
 		}
-
-		// 跳过目录
 		if info.IsDir() {
 			return nil
 		}
-
-		// 检查是否应该排除
 		if c.shouldExclude(path, options.Excludes) {
 			return nil
 		}
 
-		// 收集文件
-		file, err := c.collectSingleFile(path, toolType, options)
+		file, err := c.collectSingleFile(path, toolName, options, seen)
 		if err != nil {
 			errors = append(errors, CollectError{Path: path, Message: err.Error()})
 			return nil
@@ -165,61 +184,60 @@ func (c *Collector) collectFromPath(
 
 		return nil
 	})
+	if walkErr != nil {
+		errors = append(errors, CollectError{Path: basePath, Message: walkErr.Error()})
+	}
 
 	return files, errors
 }
 
-// collectSingleFile 收集单个文件
+// collectSingleFile 收集单个文件。
 func (c *Collector) collectSingleFile(
 	path string,
-	toolType string,
+	toolName string,
 	options CollectOptions,
+	seen map[string]struct{},
 ) (*models.SnapshotFile, error) {
-	// 读取文件信息
-	info, err := os.Stat(path)
+	cleanPath := filepath.Clean(path)
+	if _, ok := seen[cleanPath]; ok {
+		return nil, nil
+	}
+
+	info, err := os.Stat(cleanPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// 读取文件内容
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// 判断是否为二进制文件
 	isBinary := c.isBinaryFile(content)
-
-	// 获取文件类别
-	category := c.categorizeFile(path, isBinary)
-
-	// 检查类别过滤
+	category := c.categorizeFile(cleanPath, isBinary)
 	if len(options.Categories) > 0 && !c.containsCategory(options.Categories, category) {
 		return nil, nil
 	}
 
-	// 计算哈希
 	hash := c.calculateHash(content)
-
-	// 获取相对路径
-	relPath, err := filepath.Rel(filepath.VolumeName(path)+string(filepath.Separator), path)
+	relPath, err := filepath.Rel(filepath.VolumeName(cleanPath)+string(filepath.Separator), cleanPath)
 	if err != nil {
-		relPath = path
+		relPath = cleanPath
 	}
 
-	file := &models.SnapshotFile{
+	seen[cleanPath] = struct{}{}
+
+	return &models.SnapshotFile{
 		Path:         relPath,
-		OriginalPath: path,
+		OriginalPath: cleanPath,
 		Size:         info.Size(),
 		Hash:         hash,
 		ModifiedAt:   info.ModTime(),
 		Content:      content,
-		ToolType:     toolType,
+		ToolType:     toolName,
 		Category:     category,
 		IsBinary:     isBinary,
-	}
-
-	return file, nil
+	}, nil
 }
 
 // isBinaryFile 判断是否为二进制文件
@@ -228,7 +246,6 @@ func (c *Collector) isBinaryFile(content []byte) bool {
 		return false
 	}
 
-	// 检查前 512 字节
 	limit := 512
 	if len(content) < limit {
 		limit = len(content)
@@ -248,7 +265,6 @@ func (c *Collector) categorizeFile(path string, isBinary bool) models.FileCatego
 	filename := filepath.Base(path)
 	ext := strings.TrimPrefix(filepath.Ext(path), ".")
 
-	// 根据文件名判断
 	switch strings.ToLower(filename) {
 	case "skills.yml", "skills.yaml":
 		return models.CategorySkills
@@ -262,7 +278,6 @@ func (c *Collector) categorizeFile(path string, isBinary bool) models.FileCatego
 		return models.CategoryRules
 	}
 
-	// 根据扩展名判断
 	switch strings.ToLower(ext) {
 	case "md", "markdown":
 		return models.CategoryDocs
@@ -270,12 +285,10 @@ func (c *Collector) categorizeFile(path string, isBinary bool) models.FileCatego
 		return models.CategoryConfig
 	}
 
-	// MCP 配置
 	if strings.Contains(strings.ToLower(path), "mcp") {
 		return models.CategoryMCP
 	}
 
-	// 二进制文件
 	if isBinary {
 		return models.CategoryOther
 	}
@@ -296,7 +309,6 @@ func (c *Collector) shouldExclude(path string, excludes []string) bool {
 		if err == nil && matched {
 			return true
 		}
-		// 检查路径包含
 		if strings.Contains(path, pattern) {
 			return true
 		}
@@ -348,7 +360,6 @@ func (c *Collector) CloneFile(src, dst string) error {
 	}
 	defer sourceFile.Close()
 
-	// 确保目标目录存在
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
 	}
@@ -365,7 +376,6 @@ func (c *Collector) CloneFile(src, dst string) error {
 
 // CloneFileWithContent 使用指定内容创建文件
 func (c *Collector) CloneFileWithContent(dst string, content []byte) error {
-	// 确保目标目录存在
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
 	}
@@ -390,7 +400,6 @@ func (c *Collector) CompareFileContent(path1, path2 string) (bool, error) {
 
 // BackupFile 备份文件
 func (c *Collector) BackupFile(src, backupDir string) (string, error) {
-	// 创建备份路径
 	relPath, err := filepath.Rel(filepath.VolumeName(src)+string(filepath.Separator), src)
 	if err != nil {
 		relPath = filepath.Base(src)
@@ -398,7 +407,6 @@ func (c *Collector) BackupFile(src, backupDir string) (string, error) {
 
 	backupPath := filepath.Join(backupDir, relPath)
 
-	// 复制文件
 	if err := c.CloneFile(src, backupPath); err != nil {
 		return "", err
 	}

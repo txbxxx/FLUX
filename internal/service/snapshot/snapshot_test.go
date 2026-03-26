@@ -17,8 +17,7 @@ import (
 
 // TestCollector_Collect 测试文件收集
 func TestCollector_Collect(t *testing.T) {
-	detector := tool.NewToolDetector()
-	collector := NewCollector(detector)
+	collector := NewCollector(tool.NewRuleResolver(nil))
 
 	// 创建测试目录
 	tempDir := t.TempDir()
@@ -29,8 +28,8 @@ func TestCollector_Collect(t *testing.T) {
 
 	// 收集文件
 	options := CollectOptions{
-		Tools:     []string{"codex"},
-		Scope:     models.ScopeGlobal,
+		Tools:      []string{"codex"},
+		Scope:      models.ScopeGlobal,
 		Categories: []models.FileCategory{models.CategoryConfig},
 	}
 
@@ -45,8 +44,7 @@ func TestService_CreateSnapshot(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	detector := tool.NewToolDetector()
-	service := NewService(db, detector)
+	service := NewService(db, tool.NewRuleResolver(nil))
 
 	// 创建测试配置目录
 	tempDir := t.TempDir()
@@ -79,8 +77,7 @@ func TestService_ListSnapshots(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	detector := tool.NewToolDetector()
-	service := NewService(db, detector)
+	service := NewService(db, tool.NewRuleResolver(nil))
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
@@ -123,8 +120,7 @@ func TestService_GetSnapshot(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	detector := tool.NewToolDetector()
-	service := NewService(db, detector)
+	service := NewService(db, tool.NewRuleResolver(nil))
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
@@ -168,8 +164,7 @@ func TestService_GetSnapshot_NotFound(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	detector := tool.NewToolDetector()
-	service := NewService(db, detector)
+	service := NewService(db, tool.NewRuleResolver(nil))
 
 	// 获取不存在的快照
 	_, err = service.GetSnapshot("non-existent")
@@ -181,8 +176,7 @@ func TestService_DeleteSnapshot(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	detector := tool.NewToolDetector()
-	service := NewService(db, detector)
+	service := NewService(db, tool.NewRuleResolver(nil))
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
@@ -215,8 +209,7 @@ func TestService_ValidateSnapshot(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	detector := tool.NewToolDetector()
-	service := NewService(db, detector)
+	service := NewService(db, tool.NewRuleResolver(nil))
 
 	// 有效快照
 	validSnapshot := &models.Snapshot{
@@ -331,8 +324,7 @@ func TestService_CountSnapshots(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	detector := tool.NewToolDetector()
-	service := NewService(db, detector)
+	service := NewService(db, tool.NewRuleResolver(nil))
 
 	// 初始计数
 	count, err := service.CountSnapshots()
@@ -365,8 +357,7 @@ func TestService_CountSnapshots(t *testing.T) {
 
 // TestApplier_ApplySnapshot 测试应用快照
 func TestApplier_ApplySnapshot(t *testing.T) {
-	detector := tool.NewToolDetector()
-	collector := NewCollector(detector)
+	collector := NewCollector(tool.NewRuleResolver(nil))
 	applier := NewApplier(collector)
 
 	// 创建测试快照
@@ -408,8 +399,7 @@ func TestApplier_ApplySnapshot(t *testing.T) {
 
 // TestComparator_CompareSnapshots 测试比较快照
 func TestComparator_CompareSnapshots(t *testing.T) {
-	detector := tool.NewToolDetector()
-	collector := NewCollector(detector)
+	collector := NewCollector(tool.NewRuleResolver(nil))
 	comparator := NewComparator(collector)
 
 	// 创建源快照
@@ -487,14 +477,13 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, summary)
 	assert.Equal(t, 2, summary.TotalFiles)
-	assert.Equal(t, 1, summary.Created)  // file3
-	assert.Equal(t, 1, summary.Deleted)  // file2
+	assert.Equal(t, 1, summary.Created) // file3
+	assert.Equal(t, 1, summary.Deleted) // file2
 }
 
 // TestCollector_CalculateHash 测试哈希计算
 func TestCollector_CalculateHash(t *testing.T) {
-	detector := tool.NewToolDetector()
-	collector := NewCollector(detector)
+	collector := NewCollector(tool.NewRuleResolver(nil))
 
 	content1 := []byte("test content")
 	content2 := []byte("test content")
@@ -504,20 +493,19 @@ func TestCollector_CalculateHash(t *testing.T) {
 	hash2 := collector.calculateHash(content2)
 	hash3 := collector.calculateHash(content3)
 
-	assert.Equal(t, hash1, hash2) // 相同内容，相同哈希
+	assert.Equal(t, hash1, hash2)    // 相同内容，相同哈希
 	assert.NotEqual(t, hash1, hash3) // 不同内容，不同哈希
 }
 
 // TestCollector_CategorizeFile 测试文件分类
 func TestCollector_CategorizeFile(t *testing.T) {
-	detector := tool.NewToolDetector()
-	collector := NewCollector(detector)
+	collector := NewCollector(tool.NewRuleResolver(nil))
 
 	tests := []struct {
-		name         string
-		path         string
-		isBinary     bool
-		expectedCat  models.FileCategory
+		name        string
+		path        string
+		isBinary    bool
+		expectedCat models.FileCategory
 	}{
 		{
 			name:        "配置文件",
@@ -555,8 +543,7 @@ func TestCollector_CategorizeFile(t *testing.T) {
 
 // TestApplier_RestoreFile 测试恢复文件
 func TestApplier_RestoreFile(t *testing.T) {
-	detector := tool.NewToolDetector()
-	collector := NewCollector(detector)
+	collector := NewCollector(tool.NewRuleResolver(nil))
 	applier := NewApplier(collector)
 
 	tempDir := t.TempDir()
@@ -576,4 +563,44 @@ func TestApplier_RestoreFile(t *testing.T) {
 	content, err := os.ReadFile(targetPath)
 	assert.NoError(t, err)
 	assert.Equal(t, backupContent, content)
+}
+
+func TestServiceCreateSnapshotIncludesRegisteredProjectAndCustomRule(t *testing.T) {
+	db, err := database.InitTestDB(t)
+	require.NoError(t, err)
+
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	tool.CreateMockFile(t, filepath.Join(homeDir, ".claude", "settings.json"), "{}")
+
+	customFile := filepath.Join(t.TempDir(), "claude.json")
+	tool.CreateMockFile(t, customFile, `{"mcpServers":[]}`)
+
+	projectPath := filepath.Join(t.TempDir(), "demo-project")
+	tool.CreateMockFile(t, filepath.Join(projectPath, ".codex", "config.toml"), "[project]")
+	tool.CreateMockFile(t, filepath.Join(projectPath, "AGENTS.md"), "# agents")
+
+	manager := tool.NewRuleManager(db)
+	require.NoError(t, manager.AddCustomRule(tool.ToolTypeClaude, customFile))
+	require.NoError(t, manager.AddProject(tool.ToolTypeCodex, "demo", projectPath))
+
+	service := NewService(db, tool.NewRuleResolver(manager.Store()))
+	pkg, err := service.CreateSnapshot(models.CreateSnapshotOptions{
+		Message: "test snapshot",
+		Tools:   []string{"claude", "codex"},
+		Scope:   models.ScopeBoth,
+	})
+	require.NoError(t, err)
+
+	paths := make([]string, 0, len(pkg.Snapshot.Files))
+	for _, file := range pkg.Snapshot.Files {
+		paths = append(paths, file.OriginalPath)
+	}
+
+	assert.Contains(t, paths, filepath.Join(homeDir, ".claude", "settings.json"))
+	assert.Contains(t, paths, customFile)
+	assert.Contains(t, paths, filepath.Join(projectPath, ".codex", "config.toml"))
+	assert.Contains(t, paths, filepath.Join(projectPath, "AGENTS.md"))
 }

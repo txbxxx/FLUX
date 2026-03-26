@@ -21,7 +21,7 @@ type stubWorkflow struct {
 	listErr      error
 }
 
-func (s *stubWorkflow) Scan(context.Context) (*usecase.ScanResult, error) {
+func (s *stubWorkflow) Scan(context.Context, usecase.ScanInput) (*usecase.ScanResult, error) {
 	return s.scanResult, s.scanErr
 }
 
@@ -52,7 +52,15 @@ func TestModelHomeEnterLoadsScanPage(t *testing.T) {
 	model := NewModel(&stubWorkflow{
 		scanResult: &usecase.ScanResult{
 			Tools: []usecase.ToolSummary{
-				{Tool: "codex", Status: "installed", ConfigCount: 2},
+				{
+					Tool:        "codex",
+					Scope:       "global",
+					Status:      "installed",
+					ResultText:  "可同步",
+					Path:        "D:/Users/test/.codex",
+					ConfigCount: 2,
+					Reason:      "",
+				},
 			},
 		},
 	}, "D:/data")
@@ -69,6 +77,41 @@ func TestModelHomeEnterLoadsScanPage(t *testing.T) {
 	}
 	if next.ScanResult == nil || len(next.ScanResult.Tools) != 1 {
 		t.Fatalf("unexpected scan result: %+v", next.ScanResult)
+	}
+}
+
+func TestScanViewShowsChineseSummary(t *testing.T) {
+	model := NewModel(&stubWorkflow{}, "D:/data")
+	model.Page = PageScan
+	model.ScanResult = &usecase.ScanResult{
+		Tools: []usecase.ToolSummary{
+			{
+				Tool:        "claude",
+				Scope:       "project",
+				ProjectName: "demo",
+				ResultText:  "暂不可同步",
+				Path:        "D:/workspace/demo",
+				ConfigCount: 1,
+				Reason:      "已注册项目下未识别到可同步的配置文件",
+				Items: []usecase.ToolConfigItem{
+					{Group: "关键配置", Label: "说明文件", RelativePath: "CLAUDE.md"},
+				},
+			},
+		},
+	}
+
+	view := model.View()
+	if !strings.Contains(view, "demo（Claude 项目）") {
+		t.Fatalf("expected tool name in view, got %q", view)
+	}
+	if !strings.Contains(view, "检测结果: 暂不可同步") {
+		t.Fatalf("expected chinese result in view, got %q", view)
+	}
+	if !strings.Contains(view, "原因: 已注册项目下未识别到可同步的配置文件") {
+		t.Fatalf("expected reason in view, got %q", view)
+	}
+	if !strings.Contains(view, "说明文件: CLAUDE.md") {
+		t.Fatalf("expected project config item in view, got %q", view)
 	}
 }
 

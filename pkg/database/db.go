@@ -244,6 +244,25 @@ func (db *DB) createTables(tx *sql.Tx) error {
 			FOREIGN KEY (remote_config_id) REFERENCES remote_configs(id) ON DELETE SET NULL
 		)`,
 
+		`CREATE TABLE IF NOT EXISTS custom_sync_rules (
+			id TEXT PRIMARY KEY,
+			tool_type TEXT NOT NULL,
+			absolute_path TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			UNIQUE(tool_type, absolute_path)
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS registered_projects (
+			id TEXT PRIMARY KEY,
+			tool_type TEXT NOT NULL,
+			project_name TEXT NOT NULL,
+			project_path TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			UNIQUE(tool_type, project_path)
+		)`,
+
 		`CREATE TABLE IF NOT EXISTS backups (
 			id TEXT PRIMARY KEY,
 			created_at INTEGER NOT NULL,
@@ -293,6 +312,8 @@ func (db *DB) createIndexes(tx *sql.Tx) error {
 		`CREATE INDEX IF NOT EXISTS idx_sync_history_task_id ON sync_history(task_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_sync_history_started_at ON sync_history(started_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_remote_configs_is_default ON remote_configs(is_default)`,
+		`CREATE INDEX IF NOT EXISTS idx_custom_sync_rules_tool_type ON custom_sync_rules(tool_type)`,
+		`CREATE INDEX IF NOT EXISTS idx_registered_projects_tool_type ON registered_projects(tool_type)`,
 	}
 
 	for _, sql := range indexes {
@@ -320,6 +341,20 @@ func (db *DB) createTriggers(tx *sql.Tx) error {
 			FOR EACH ROW
 			BEGIN
 				UPDATE app_settings SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+			END`,
+
+		`CREATE TRIGGER IF NOT EXISTS update_custom_sync_rules_updated_at
+			AFTER UPDATE ON custom_sync_rules
+			FOR EACH ROW
+			BEGIN
+				UPDATE custom_sync_rules SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+			END`,
+
+		`CREATE TRIGGER IF NOT EXISTS update_registered_projects_updated_at
+			AFTER UPDATE ON registered_projects
+			FOR EACH ROW
+			BEGIN
+				UPDATE registered_projects SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
 			END`,
 
 		// 删除快照时级联删除同步历史

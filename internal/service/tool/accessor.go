@@ -23,22 +23,47 @@ type ConfigEntry struct {
 	IsDir        bool
 }
 
-type ConfigAccessor struct{}
-
-func NewConfigAccessor() *ConfigAccessor {
-	return &ConfigAccessor{}
+// ConfigAccessor 只允许访问统一规则源已经放行的目标。
+// 相对路径继续表示默认全局规则；绝对路径则必须是已注册规则命中的真实路径。
+type ConfigAccessor struct {
+	resolver *RuleResolver
 }
 
-func (a *ConfigAccessor) Resolve(toolType ToolType, relativePath string) (*ConfigTarget, error) {
-	rootPath := GetDefaultGlobalPath(toolType)
-	if strings.TrimSpace(rootPath) == "" {
-		return nil, fmt.Errorf("不支持的工具类型 %q", toolType)
+func NewConfigAccessor(resolvers ...*RuleResolver) *ConfigAccessor {
+	var resolver *RuleResolver
+	if len(resolvers) > 0 {
+		resolver = resolvers[0]
 	}
-	if !dirExists(rootPath) {
-		return nil, fmt.Errorf("未找到配置目录 %s", rootPath)
+	if resolver == nil {
+		resolver = NewRuleResolver(nil)
 	}
 
-	cleanRelativePath := filepath.Clean(strings.TrimSpace(relativePath))
+	return &ConfigAccessor{resolver: resolver}
+}
+
+func (a *ConfigAccessor) Resolve(toolType ToolType, requestPath string) (*ConfigTarget, error) {
+	report, err := a.resolver.ResolveTool(toolType)
+	if err != nil {
+		return nil, fmt.Errorf("解析规则失败: %w", err)
+	}
+	if strings.TrimSpace(report.GlobalPath) == "" {
+		return nil, fmt.Errorf("不支持的工具类型 %q", toolType)
+	}
+
+	requestPath = strings.TrimSpace(requestPath)
+	if filepath.IsAbs(requestPath) {
+		return a.resolveAbsoluteTarget(toolType, report, requestPath)
+	}
+
+	return a.resolveRelativeTarget(toolType, report, requestPath)
+}
+
+func (a *ConfigAccessor) resolveRelativeTarget(toolType ToolType, report *ToolRuleReport, requestPath string) (*ConfigTarget, error) {
+	if !dirExists(report.GlobalPath) {
+		return nil, fmt.Errorf("未找到配置目录 %s", report.GlobalPath)
+	}
+
+	cleanRelativePath := filepath.Clean(requestPath)
 	if cleanRelativePath == "." || cleanRelativePath == "" {
 		return nil, errors.New("请求路径不能为空")
 	}
@@ -49,13 +74,9 @@ func (a *ConfigAccessor) Resolve(toolType ToolType, relativePath string) (*Confi
 		return nil, fmt.Errorf("请求路径超出允许范围：%s", cleanRelativePath)
 	}
 
-	if !isAllowedRelativePath(toolType, cleanRelativePath) {
-		return nil, fmt.Errorf("请求路径超出允许范围：%s", cleanRelativePath)
-	}
-
-	resolvedRootPath, err := filepath.EvalSymlinks(rootPath)
+	resolvedRootPath, err := filepath.EvalSymlinks(report.GlobalPath)
 	if err != nil {
-		resolvedRootPath, err = filepath.Abs(rootPath)
+		resolvedRootPath, err = filepath.Abs(report.GlobalPath)
 		if err != nil {
 			return nil, fmt.Errorf("解析配置目录失败: %w", err)
 		}
@@ -85,7 +106,7 @@ func (a *ConfigAccessor) Resolve(toolType ToolType, relativePath string) (*Confi
 	if resolvedRelativePath == ".." || strings.HasPrefix(resolvedRelativePath, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("请求路径超出允许范围：%s", cleanRelativePath)
 	}
-	if !isAllowedRelativePath(toolType, resolvedRelativePath) {
+	if !isAllowedRelativePath(report.DefaultMatches, resolvedRelativePath) {
 		return nil, fmt.Errorf("请求路径超出允许范围：%s", cleanRelativePath)
 	}
 
@@ -93,6 +114,31 @@ func (a *ConfigAccessor) Resolve(toolType ToolType, relativePath string) (*Confi
 		ToolType:     toolType,
 		RootPath:     resolvedRootPath,
 		RelativePath: filepath.Clean(resolvedRelativePath),
+		AbsolutePath: resolvedAbsolutePath,
+		IsDir:        info.IsDir(),
+	}, nil
+}
+
+func (a *ConfigAccessor) resolveAbsoluteTarget(toolType ToolType, report *ToolRuleReport, requestPath string) (*ConfigTarget, error) {
+	resolvedAbsolutePath, info, err := normalizeExistingPath(requestPath)
+	if err != nil {
+		return nil, err
+	}
+
+	match, ok := findAllowedAbsoluteMatch(report, resolvedAbsolutePath)
+	if !ok {
+		return nil, fmt.Errorf("请求路径超出允许范围：%s", requestPath)
+	}
+
+	rootPath := filepath.Dir(match.AbsolutePath)
+	if match.IsDir {
+		rootPath = match.AbsolutePath
+	}
+
+	return &ConfigTarget{
+		ToolType:     toolType,
+		RootPath:     rootPath,
+		RelativePath: resolvedAbsolutePath,
 		AbsolutePath: resolvedAbsolutePath,
 		IsDir:        info.IsDir(),
 	}, nil
@@ -113,8 +159,12 @@ func (a *ConfigAccessor) ListDir(target *ConfigTarget) ([]ConfigEntry, error) {
 
 	items := make([]ConfigEntry, 0, len(entries))
 	for _, entry := range entries {
-		childRelativePath := filepath.Join(target.RelativePath, entry.Name())
-		childTarget, err := a.Resolve(target.ToolType, childRelativePath)
+		childRequestPath := filepath.Join(target.RelativePath, entry.Name())
+		if filepath.IsAbs(target.RelativePath) {
+			childRequestPath = filepath.Join(target.AbsolutePath, entry.Name())
+		}
+
+		childTarget, err := a.Resolve(target.ToolType, childRequestPath)
 		if err != nil {
 			continue
 		}
@@ -198,17 +248,18 @@ func (a *ConfigAccessor) WriteFile(target *ConfigTarget, content string) error {
 	return nil
 }
 
-func isAllowedRelativePath(toolType ToolType, relativePath string) bool {
+func isAllowedRelativePath(matches []ResolvedRuleMatch, relativePath string) bool {
 	cleanRelativePath := filepath.Clean(relativePath)
 	if cleanRelativePath == "." || cleanRelativePath == "" {
 		return false
 	}
 
-	for _, allowedPath := range allowedGlobalPaths(toolType) {
+	for _, match := range matches {
+		allowedPath := filepath.Clean(match.RelativePath)
 		if cleanRelativePath == allowedPath {
 			return true
 		}
-		if strings.HasPrefix(cleanRelativePath, allowedPath+string(filepath.Separator)) {
+		if match.IsDir && strings.HasPrefix(cleanRelativePath, allowedPath+string(filepath.Separator)) {
 			return true
 		}
 	}
@@ -216,25 +267,28 @@ func isAllowedRelativePath(toolType ToolType, relativePath string) bool {
 	return false
 }
 
-func allowedGlobalPaths(toolType ToolType) []string {
-	paths := []string{}
-
-	switch toolType {
-	case ToolTypeCodex:
-		for _, definition := range GetCodexFileDefinitions() {
-			if definition.Scope == ScopeGlobal {
-				paths = append(paths, filepath.Clean(definition.Path))
-			}
+func findAllowedAbsoluteMatch(report *ToolRuleReport, targetPath string) (ResolvedRuleMatch, bool) {
+	for _, match := range allowedMatches(report) {
+		allowedPath := filepath.Clean(match.AbsolutePath)
+		if targetPath == allowedPath {
+			return match, true
 		}
-	case ToolTypeClaude:
-		for _, definition := range GetClaudeFileDefinitions() {
-			if definition.Scope == ScopeGlobal {
-				paths = append(paths, filepath.Clean(definition.Path))
-			}
+		if match.IsDir && strings.HasPrefix(targetPath, allowedPath+string(filepath.Separator)) {
+			return match, true
 		}
 	}
 
-	return paths
+	return ResolvedRuleMatch{}, false
+}
+
+func allowedMatches(report *ToolRuleReport) []ResolvedRuleMatch {
+	matches := make([]ResolvedRuleMatch, 0, len(report.DefaultMatches)+len(report.CustomMatches))
+	matches = append(matches, report.DefaultMatches...)
+	matches = append(matches, report.CustomMatches...)
+	for _, project := range report.ProjectMatches {
+		matches = append(matches, project.Matches...)
+	}
+	return matches
 }
 
 func isBinaryContent(content []byte) bool {

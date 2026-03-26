@@ -150,7 +150,7 @@ func (m *Model) updateCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) loadScanCmd() tea.Cmd {
 	return func() tea.Msg {
-		result, err := m.workflow.Scan(context.Background())
+		result, err := m.workflow.Scan(context.Background(), usecase.ScanInput{})
 		return scanLoadedMsg{result: result, err: err}
 	}
 }

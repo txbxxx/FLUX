@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"ai-sync-manager/pkg/logger"
@@ -14,13 +15,23 @@ import (
 
 // ToolDetector 工具检测器
 type ToolDetector struct {
-	logger *zap.Logger
+	logger   *zap.Logger
+	resolver *RuleResolver
 }
 
 // NewToolDetector 创建工具检测器
 func NewToolDetector() *ToolDetector {
+	return NewToolDetectorWithResolver(nil)
+}
+
+// NewToolDetectorWithResolver 创建带规则解析器的工具检测器。
+func NewToolDetectorWithResolver(resolver *RuleResolver) *ToolDetector {
+	if resolver == nil {
+		resolver = NewRuleResolver(nil)
+	}
 	return &ToolDetector{
-		logger: logger.L(),
+		logger:   logger.L(),
+		resolver: resolver,
 	}
 }
 
@@ -54,7 +65,8 @@ func (d *ToolDetector) DetectWithOptions(ctx context.Context, opts *ScanOptions)
 	}
 
 	result := &ToolDetectionResult{
-		Projects: []ProjectInfo{},
+		Projects:             []ProjectInfo{},
+		ProjectInstallations: []*ToolInstallation{},
 	}
 
 	// 检测全局配置
@@ -72,11 +84,12 @@ func (d *ToolDetector) DetectWithOptions(ctx context.Context, opts *ScanOptions)
 
 	// 检测项目配置
 	if opts.ScanProjects {
-		projects := d.scanProjects(ctx, opts)
-		result.Projects = projects
-
-		// 将项目配置信息添加到工具安装信息中
-		d.mergeProjectConfigs(result)
+		projectInstallations, projects, err := d.detectProjectInstallations(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		result.ProjectInstallations = append(result.ProjectInstallations, projectInstallations...)
+		result.Projects = append(result.Projects, projects...)
 	}
 
 	return result, nil
@@ -89,6 +102,7 @@ func (d *ToolDetector) DetectTool(ctx context.Context, toolType ToolType, opts *
 	}
 
 	result := &ToolInstallation{
+		Scope:      ScopeGlobal,
 		ToolType:   toolType,
 		DetectedAt: time.Now(),
 	}
@@ -101,20 +115,208 @@ func (d *ToolDetector) DetectTool(ctx context.Context, toolType ToolType, opts *
 	}
 
 	result.GlobalPath = globalPath
-	result.Status = StatusInstalled
 
 	// 扫描配置文件
 	if opts.IncludeFiles {
-		files := d.scanConfigDir(ctx, globalPath, ScopeGlobal, toolType, opts)
-		result.ConfigFiles = append(result.ConfigFiles, files...)
-
-		// 如果没有找到任何配置文件，标记为部分安装
-		if len(files) == 0 {
-			result.Status = StatusPartial
+		report, err := d.resolver.ResolveTool(toolType)
+		if err != nil {
+			return nil, err
 		}
+		result.Status = report.Status
+
+		files := make([]ConfigFile, 0, len(report.DefaultMatches)+len(report.CustomMatches))
+		for _, match := range report.DefaultMatches {
+			files = append(files, resolvedMatchToConfigFile(match))
+		}
+		for _, match := range report.CustomMatches {
+			files = append(files, resolvedMatchToConfigFile(match))
+		}
+		result.ConfigFiles = append(result.ConfigFiles, files...)
+	} else {
+		result.Status = StatusInstalled
 	}
 
 	return result, nil
+}
+
+func (d *ToolDetector) detectProjectInstallations(ctx context.Context, opts *ScanOptions) ([]*ToolInstallation, []ProjectInfo, error) {
+	var installations []*ToolInstallation
+	var projects []ProjectInfo
+
+	if d.resolver != nil && d.resolver.store != nil {
+		registered, infos, err := d.detectRegisteredProjectInstallations()
+		if err != nil {
+			return nil, nil, err
+		}
+		installations = append(installations, registered...)
+		projects = append(projects, infos...)
+	}
+
+	legacyProjects := d.scanProjects(ctx, opts)
+	legacyInstallations := d.buildProjectInstallationsFromProjectInfos(legacyProjects)
+	installations = append(installations, legacyInstallations...)
+	projects = append(projects, legacyProjects...)
+
+	return dedupeProjectInstallations(installations), dedupeProjectInfos(projects), nil
+}
+
+func (d *ToolDetector) detectRegisteredProjectInstallations() ([]*ToolInstallation, []ProjectInfo, error) {
+	var installations []*ToolInstallation
+	var projects []ProjectInfo
+
+	for _, toolType := range []ToolType{ToolTypeCodex, ToolTypeClaude} {
+		registeredProjects, err := d.resolver.store.ListRegisteredProjects(toolType)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		for _, project := range registeredProjects {
+			matches, err := resolveRuleDefinitions(project.ProjectPath, ProjectRuleTemplates(toolType))
+			if err != nil {
+				return nil, nil, err
+			}
+
+			// 已注册项目在 scan 结果中是独立扫描对象，
+			// 不能再合并进全局工具摘要。
+			installation := &ToolInstallation{
+				Scope:       ScopeProject,
+				ToolType:    toolType,
+				ProjectName: project.ProjectName,
+				ProjectPath: project.ProjectPath,
+				DetectedAt:  time.Now(),
+				Status:      StatusPartial,
+			}
+			for _, match := range matches {
+				installation.ConfigFiles = append(installation.ConfigFiles, resolvedMatchToConfigFile(match))
+			}
+			if len(installation.ConfigFiles) > 0 {
+				installation.Status = StatusInstalled
+			}
+
+			installations = append(installations, installation)
+
+			info := ProjectInfo{
+				Path: project.ProjectPath,
+				Name: project.ProjectName,
+			}
+			switch toolType {
+			case ToolTypeCodex:
+				info.HasCodex = true
+			case ToolTypeClaude:
+				info.HasClaude = true
+			}
+			projects = append(projects, info)
+		}
+	}
+
+	return installations, projects, nil
+}
+
+func (d *ToolDetector) buildProjectInstallationsFromProjectInfos(projects []ProjectInfo) []*ToolInstallation {
+	var installations []*ToolInstallation
+
+	for _, project := range projects {
+		if project.HasCodex {
+			installations = append(installations, newLegacyProjectInstallation(ToolTypeCodex, project))
+		}
+		if project.HasClaude {
+			installations = append(installations, newLegacyProjectInstallation(ToolTypeClaude, project))
+		}
+	}
+
+	return installations
+}
+
+func newLegacyProjectInstallation(toolType ToolType, project ProjectInfo) *ToolInstallation {
+	installation := &ToolInstallation{
+		Scope:       ScopeProject,
+		ToolType:    toolType,
+		ProjectName: project.Name,
+		ProjectPath: project.Path,
+		DetectedAt:  time.Now(),
+		Status:      StatusPartial,
+	}
+
+	for _, definition := range ProjectRuleTemplates(toolType) {
+		fullPath := filepath.Join(project.Path, definition.Path)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
+		}
+		if definition.IsDir != info.IsDir() {
+			continue
+		}
+
+		installation.ConfigFiles = append(installation.ConfigFiles, ConfigFile{
+			// 兼容旧 project scan 逻辑时，Name 仅保留基础文件名，
+			// 展示层会结合 ProjectPath 重新计算相对路径。
+			Name:       filepath.Base(definition.Path),
+			Path:       fullPath,
+			Category:   definition.Category,
+			Scope:      ScopeProject,
+			Size:       info.Size(),
+			ModifiedAt: info.ModTime(),
+			IsDir:      definition.IsDir,
+		})
+	}
+
+	if len(installation.ConfigFiles) > 0 {
+		installation.Status = StatusInstalled
+	}
+
+	return installation
+}
+
+func dedupeProjectInstallations(items []*ToolInstallation) []*ToolInstallation {
+	seen := map[string]struct{}{}
+	result := make([]*ToolInstallation, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		key := item.ToolType.String() + "|" + item.ProjectPath
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, item)
+	}
+	return result
+}
+
+func dedupeProjectInfos(items []ProjectInfo) []ProjectInfo {
+	seen := map[string]int{}
+	result := make([]ProjectInfo, 0, len(items))
+	for _, item := range items {
+		if idx, ok := seen[item.Path]; ok {
+			result[idx].HasCodex = result[idx].HasCodex || item.HasCodex
+			result[idx].HasClaude = result[idx].HasClaude || item.HasClaude
+			if strings.TrimSpace(result[idx].Name) == "" {
+				result[idx].Name = item.Name
+			}
+			continue
+		}
+		seen[item.Path] = len(result)
+		result = append(result, item)
+	}
+	return result
+}
+
+func resolvedMatchToConfigFile(match ResolvedRuleMatch) ConfigFile {
+	name := match.RelativePath
+	if match.AbsolutePath != "" {
+		name = filepath.Base(match.AbsolutePath)
+	}
+
+	return ConfigFile{
+		Name:       name,
+		Path:       match.AbsolutePath,
+		Category:   match.Category,
+		Scope:      match.Scope,
+		Size:       match.Size,
+		ModifiedAt: match.ModifiedAt,
+		IsDir:      match.IsDir,
+	}
 }
 
 // scanConfigDir 扫描配置目录
@@ -342,45 +544,6 @@ func (d *ToolDetector) scanProjects(ctx context.Context, opts *ScanOptions) []Pr
 	}
 
 	return projects
-}
-
-// mergeProjectConfigs 将项目配置合并到工具安装信息中
-func (d *ToolDetector) mergeProjectConfigs(result *ToolDetectionResult) {
-	for _, project := range result.Projects {
-		projectPath := project.Path
-
-		// 处理 Codex 项目配置
-		if project.HasCodex && result.Codex != nil {
-			projectFiles := d.scanCodexConfig(
-				context.Background(),
-				projectPath,
-				ScopeProject,
-				&ScanOptions{IncludeFiles: true, MaxDepth: 1},
-			)
-
-			result.Codex.ConfigFiles = append(result.Codex.ConfigFiles, projectFiles...)
-			if len(result.Codex.ProjectPaths) == 0 {
-				result.Codex.ProjectPaths = []string{}
-			}
-			result.Codex.ProjectPaths = append(result.Codex.ProjectPaths, projectPath)
-		}
-
-		// 处理 Claude 项目配置
-		if project.HasClaude && result.Claude != nil {
-			projectFiles := d.scanClaudeConfig(
-				context.Background(),
-				projectPath,
-				ScopeProject,
-				&ScanOptions{IncludeFiles: true, MaxDepth: 1},
-			)
-
-			result.Claude.ConfigFiles = append(result.Claude.ConfigFiles, projectFiles...)
-			if len(result.Claude.ProjectPaths) == 0 {
-				result.Claude.ProjectPaths = []string{}
-			}
-			result.Claude.ProjectPaths = append(result.Claude.ProjectPaths, projectPath)
-		}
-	}
 }
 
 // WalkConfigDir 遍历配置目录（用于深度扫描）

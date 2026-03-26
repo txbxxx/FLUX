@@ -12,7 +12,7 @@ import (
 )
 
 type Workflow interface {
-	Scan(ctx context.Context) (*usecase.ScanResult, error)
+	Scan(ctx context.Context, input usecase.ScanInput) (*usecase.ScanResult, error)
 	CreateSnapshot(ctx context.Context, input usecase.CreateSnapshotInput) (*usecase.SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input usecase.ListSnapshotsInput) (*usecase.ListSnapshotsResult, error)
 }

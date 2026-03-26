@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"ai-sync-manager/pkg/database"
 )
 
 func TestConfigAccessorListDirReturnsImmediateEntries(t *testing.T) {
@@ -165,5 +167,64 @@ func TestConfigAccessorWriteFileReplacesOriginalContent(t *testing.T) {
 	}
 	if string(raw) != "# after" {
 		t.Fatalf("unexpected disk content: %q", string(raw))
+	}
+}
+
+func TestConfigAccessorResolveAllowsRegisteredAbsoluteFile(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	CreateMockFile(t, filepath.Join(homeDir, ".claude", "settings.json"), "{}")
+	customFile := filepath.Join(t.TempDir(), "claude.json")
+	CreateMockFile(t, customFile, `{"mcpServers":[]}`)
+
+	db, err := database.InitTestDB(t)
+	if err != nil {
+		t.Fatalf("init test db: %v", err)
+	}
+
+	manager := NewRuleManager(db)
+	if err := manager.AddCustomRule(ToolTypeClaude, customFile); err != nil {
+		t.Fatalf("add custom rule: %v", err)
+	}
+
+	accessor := NewConfigAccessor(NewRuleResolver(manager.Store()))
+	target, err := accessor.Resolve(ToolTypeClaude, customFile)
+	if err != nil {
+		t.Fatalf("expected registered absolute file to resolve: %v", err)
+	}
+	if target.RelativePath != filepath.Clean(customFile) {
+		t.Fatalf("expected absolute request path to be preserved, got %+v", target)
+	}
+}
+
+func TestConfigAccessorResolveAllowsRegisteredProjectAbsolutePath(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	CreateMockFile(t, filepath.Join(homeDir, ".codex", "config.toml"), "[codex]")
+	projectPath := filepath.Join(t.TempDir(), "demo-project")
+	projectFile := filepath.Join(projectPath, ".codex", "config.toml")
+	CreateMockFile(t, projectFile, "[project]")
+
+	db, err := database.InitTestDB(t)
+	if err != nil {
+		t.Fatalf("init test db: %v", err)
+	}
+
+	manager := NewRuleManager(db)
+	if err := manager.AddProject(ToolTypeCodex, "demo", projectPath); err != nil {
+		t.Fatalf("add project: %v", err)
+	}
+
+	accessor := NewConfigAccessor(NewRuleResolver(manager.Store()))
+	target, err := accessor.Resolve(ToolTypeCodex, projectFile)
+	if err != nil {
+		t.Fatalf("expected registered project file to resolve: %v", err)
+	}
+	if target.AbsolutePath != filepath.Clean(projectFile) {
+		t.Fatalf("unexpected absolute path: %+v", target)
 	}
 }

@@ -18,18 +18,16 @@ import (
 
 // Service 快照管理服务
 type Service struct {
-	db       *database.DB
-	detector *tool.ToolDetector
+	db        *database.DB
 	collector *Collector
 }
 
 // NewService 创建快照服务
-func NewService(db *database.DB, detector *tool.ToolDetector) *Service {
-	collector := NewCollector(detector)
+func NewService(db *database.DB, resolver *tool.RuleResolver) *Service {
+	collector := NewCollector(resolver)
 
 	return &Service{
-		db:       db,
-		detector: detector,
+		db:        db,
 		collector: collector,
 	}
 }
@@ -44,8 +42,8 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 
 	// 收集配置文件
 	collectOpts := CollectOptions{
-		Tools:      options.Tools,
-		Scope:      options.Scope,
+		Tools:       options.Tools,
+		Scope:       options.Scope,
 		ProjectPath: options.ProjectPath,
 	}
 

@@ -17,7 +17,12 @@ import (
 var errCommandHandled = errors.New("command handled")
 
 type Workflow interface {
-	Scan(ctx context.Context) (*usecase.ScanResult, error)
+	Scan(ctx context.Context, input usecase.ScanInput) (*usecase.ScanResult, error)
+	AddCustomRule(ctx context.Context, input usecase.AddCustomRuleInput) error
+	RemoveCustomRule(ctx context.Context, input usecase.RemoveCustomRuleInput) error
+	AddProject(ctx context.Context, input usecase.AddProjectInput) error
+	RemoveProject(ctx context.Context, input usecase.RemoveProjectInput) error
+	ListScanRules(ctx context.Context, input usecase.ListScanRulesInput) (*usecase.ListScanRulesResult, error)
 	CreateSnapshot(ctx context.Context, input usecase.CreateSnapshotInput) (*usecase.SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input usecase.ListSnapshotsInput) (*usecase.ListSnapshotsResult, error)
 	GetConfig(ctx context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error)
@@ -111,7 +116,7 @@ func printScanResult(w io.Writer, result *usecase.ScanResult) {
 			fmt.Fprintln(w)
 		}
 
-		fmt.Fprintln(w, displayToolName(item.Tool))
+		fmt.Fprintln(w, displayScanSummaryTitle(item))
 		fmt.Fprintf(w, "  检测结果: %s\n", item.ResultText)
 		if strings.TrimSpace(item.Path) != "" {
 			fmt.Fprintf(w, "  配置目录: %s\n", item.Path)
@@ -146,6 +151,42 @@ func printScanResult(w io.Writer, result *usecase.ScanResult) {
 			for _, configItem := range grouped[group] {
 				fmt.Fprintf(w, "    - %s: %s\n", configItem.Label, configItem.RelativePath)
 			}
+		}
+	}
+}
+
+func printScanRuleList(w io.Writer, result *usecase.ListScanRulesResult) {
+	if strings.TrimSpace(result.App) != "" {
+		fmt.Fprintf(w, "%s 规则\n\n", displayToolName(result.App))
+	}
+
+	fmt.Fprintln(w, "默认全局规则:")
+	for _, item := range result.DefaultGlobalRules {
+		fmt.Fprintf(w, "  - %s\n", item.Path)
+	}
+
+	if len(result.RegisteredProjects) > 0 && len(result.ProjectRuleTemplates) > 0 {
+		fmt.Fprintln(w, "\n已注册项目扫描模板:")
+		for _, item := range result.ProjectRuleTemplates {
+			fmt.Fprintf(w, "  - %s\n", item.Path)
+		}
+	}
+
+	fmt.Fprintln(w, "\n自定义规则:")
+	if len(result.CustomRules) == 0 {
+		fmt.Fprintln(w, "  - 暂无")
+	} else {
+		for _, item := range result.CustomRules {
+			fmt.Fprintf(w, "  - %s\n", item.Path)
+		}
+	}
+
+	fmt.Fprintln(w, "\n已注册项目:")
+	if len(result.RegisteredProjects) == 0 {
+		fmt.Fprintln(w, "  - 暂无")
+	} else {
+		for _, item := range result.RegisteredProjects {
+			fmt.Fprintf(w, "  - %s: %s\n", item.Name, item.Path)
 		}
 	}
 }
@@ -211,6 +252,20 @@ func displayToolName(name string) string {
 	default:
 		return strings.Title(name)
 	}
+}
+
+func displayScanSummaryTitle(item usecase.ToolSummary) string {
+	if item.Scope == "project" {
+		projectName := strings.TrimSpace(item.ProjectName)
+		if projectName == "" && strings.TrimSpace(item.Path) != "" {
+			projectName = filepath.Base(item.Path)
+		}
+		if projectName == "" {
+			projectName = "未命名项目"
+		}
+		return fmt.Sprintf("%s（%s 项目）", projectName, displayToolName(item.Tool))
+	}
+	return displayToolName(item.Tool) + "（全局）"
 }
 
 func filepathSeparator() rune {
