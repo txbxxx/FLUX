@@ -8,65 +8,65 @@ import (
 type AuthType string
 
 const (
-	AuthTypeNone   AuthType = ""        // 无认证（公开仓库）
-	AuthTypeSSH    AuthType = "ssh"     // SSH 密钥认证
-	AuthTypeToken  AuthType = "token"   // Token 认证（GitHub PAT、GitLab Token 等）
-	AuthTypeBasic  AuthType = "basic"   // 用户名密码认证
+	AuthTypeNone  AuthType = ""      // 无认证（公开仓库）
+	AuthTypeSSH   AuthType = "ssh"   // SSH 密钥认证
+	AuthTypeToken AuthType = "token" // Token 认证（GitHub PAT、GitLab Token 等）
+	AuthTypeBasic AuthType = "basic" // 用户名密码认证
 )
 
 // GitAuthConfig Git 认证配置
 type GitAuthConfig struct {
-	Type     AuthType `json:"type"`               // 认证类型
-	Username string   `json:"username,omitempty"` // 用户名（Basic Auth）
-	Password string   `json:"password,omitempty"` // 密码或 Token（加密存储）
-	SSHKey   string   `json:"ssh_key,omitempty"`  // SSH 私钥路径或内容（加密存储）
-	Passphrase string `json:"passphrase,omitempty"` // SSH 私钥密码（可选）
+	Type       AuthType `json:"type"`                 // 认证类型
+	Username   string   `json:"username,omitempty"`   // 用户名（Basic Auth）
+	Password   string   `json:"password,omitempty"`   // 密码或 Token（加密存储）
+	SSHKey     string   `json:"ssh_key,omitempty"`    // SSH 私钥路径或内容（加密存储）
+	Passphrase string   `json:"passphrase,omitempty"` // SSH 私钥密码（可选）
 }
 
 // GitRemoteConfig Git 远端仓库配置
 type GitRemoteConfig struct {
-	URL       string         `json:"url"`                 // 仓库 URL
-	Auth      GitAuthConfig  `json:"auth,omitempty"`      // 认证配置
-	Branch    string         `json:"branch,omitempty"`    // 分支名，默认 "main"
+	URL        string        `json:"url"`                   // 仓库 URL
+	Auth       GitAuthConfig `json:"auth,omitempty"`        // 认证配置
+	Branch     string        `json:"branch,omitempty"`      // 分支名，默认 "main"
 	RemoteName string        `json:"remote_name,omitempty"` // 远端名称，默认 "origin"
 }
 
 // RepositoryInfo 仓库信息
 type RepositoryInfo struct {
-	Path       string    `json:"path"`                 // 仓库本地路径
-	RemoteURL  string    `json:"remote_url,omitempty"` // 远端 URL
-	Branch     string    `json:"branch,omitempty"`     // 当前分支
-	CommitHash string    `json:"commit_hash,omitempty"` // 当前提交哈希
-	IsBare     bool      `json:"is_bare"`              // 是否为裸仓库
-	Head       string    `json:"head,omitempty"`       // HEAD 引用
+	Path       string `json:"path"`                  // 仓库本地路径
+	RemoteURL  string `json:"remote_url,omitempty"`  // 远端 URL
+	Branch     string `json:"branch,omitempty"`      // 当前分支
+	CommitHash string `json:"commit_hash,omitempty"` // 当前提交哈希
+	IsBare     bool   `json:"is_bare"`               // 是否为裸仓库
+	Head       string `json:"head,omitempty"`        // HEAD 引用
 }
 
 // CloneOptions 克隆选项
 type CloneOptions struct {
-	URL        string         `json:"url"`                  // 仓库 URL
-	Path       string         `json:"path"`                 // 本地路径
-	Auth       *GitAuthConfig `json:"auth,omitempty"`       // 认证配置
-	Branch     string         `json:"branch,omitempty"`     // 要克隆的分支
-	Depth      int            `json:"depth,omitempty"`      // 克隆深度（0 表示完整克隆）
-	SingleBranch bool         `json:"single_branch,omitempty"` // 是否只克隆单个分支
+	URL          string         `json:"url"`                     // 仓库 URL
+	Path         string         `json:"path"`                    // 本地路径
+	Auth         *GitAuthConfig `json:"auth,omitempty"`          // 认证配置
+	Branch       string         `json:"branch,omitempty"`        // 要克隆的分支
+	Depth        int            `json:"depth,omitempty"`         // 克隆深度（0 表示完整克隆）
+	SingleBranch bool           `json:"single_branch,omitempty"` // 是否只克隆单个分支
 }
 
 // PullOptions 拉取选项
 type PullOptions struct {
-	Path       string         `json:"path"`                 // 仓库路径
-	Auth       *GitAuthConfig `json:"auth,omitempty"`       // 认证配置
+	Path       string         `json:"path"`                  // 仓库路径
+	Auth       *GitAuthConfig `json:"auth,omitempty"`        // 认证配置
 	RemoteName string         `json:"remote_name,omitempty"` // 远端名称
-	Branch     string         `json:"branch,omitempty"`     // 要拉取的分支
-	Force      bool           `json:"force,omitempty"`      // 是否强制拉取
+	Branch     string         `json:"branch,omitempty"`      // 要拉取的分支
+	Force      bool           `json:"force,omitempty"`       // 是否强制拉取
 }
 
 // PushOptions 推送选项
 type PushOptions struct {
-	Path       string         `json:"path"`                 // 仓库路径
-	Auth       *GitAuthConfig `json:"auth,omitempty"`       // 认证配置
+	Path       string         `json:"path"`                  // 仓库路径
+	Auth       *GitAuthConfig `json:"auth,omitempty"`        // 认证配置
 	RemoteName string         `json:"remote_name,omitempty"` // 远端名称
-	Branch     string         `json:"branch,omitempty"`     // 要推送的分支
-	Force      bool           `json:"force,omitempty"`      // 是否强制推送
+	Branch     string         `json:"branch,omitempty"`      // 要推送的分支
+	Force      bool           `json:"force,omitempty"`       // 是否强制推送
 }
 
 // StatusOptions 状态查询选项
@@ -83,19 +83,19 @@ type FileStatus struct {
 
 // RepositoryStatus 仓库状态
 type RepositoryStatus struct {
-	IsClean   bool          `json:"is_clean"`    // 是否干净（无未提交更改）
-	Branch    string        `json:"branch"`       // 当前分支
-	Files     []FileStatus  `json:"files"`        // 有更改的文件
-	Ahead     int           `json:"ahead"`        // 领先提交数
-	Behind    int           `json:"behind"`       // 落后提交数
+	IsClean bool         `json:"is_clean"` // 是否干净（无未提交更改）
+	Branch  string       `json:"branch"`   // 当前分支
+	Files   []FileStatus `json:"files"`    // 有更改的文件
+	Ahead   int          `json:"ahead"`    // 领先提交数
+	Behind  int          `json:"behind"`   // 落后提交数
 }
 
 // CommitOptions 提交选项
 type CommitOptions struct {
-	Path    string `json:"path"`              // 仓库路径
-	Message string `json:"message"`           // 提交消息
-	Author  string `json:"author,omitempty"`  // 作者信息（可选）
-	All     bool   `json:"all,omitempty"`     // 是否添加所有更改
+	Path    string `json:"path"`             // 仓库路径
+	Message string `json:"message"`          // 提交消息
+	Author  string `json:"author,omitempty"` // 作者信息（可选）
+	All     bool   `json:"all,omitempty"`    // 是否添加所有更改
 }
 
 // CommitResult 提交结果
@@ -108,14 +108,14 @@ type CommitResult struct {
 
 // BranchInfo 分支信息
 type BranchInfo struct {
-	Name      string `json:"name"`                // 分支名称
-	IsHead    bool   `json:"is_head,omitempty"`   // 是否为当前分支
-	IsRemote  bool   `json:"is_remote,omitempty"` // 是否为远程分支
+	Name     string `json:"name"`                // 分支名称
+	IsHead   bool   `json:"is_head,omitempty"`   // 是否为当前分支
+	IsRemote bool   `json:"is_remote,omitempty"` // 是否为远程分支
 }
 
 // OperationResult 操作结果
 type OperationResult struct {
-	Success bool   `json:"success"` // 是否成功
-	Message string `json:"message"` // 结果消息
+	Success bool   `json:"success"`         // 是否成功
+	Message string `json:"message"`         // 结果消息
 	Error   string `json:"error,omitempty"` // 错误信息（如果失败）
 }

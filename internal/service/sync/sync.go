@@ -195,15 +195,15 @@ func (s *Service) GetSyncStatus(
 	// 检查仓库是否存在
 	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
 		return &SyncStatus{
-			RemoteURL:      options.RemoteURL,
+			RemoteURL:       options.RemoteURL,
 			RemoteSnapshots: []RemoteSnapshotInfo{},
 		}, nil
 	}
 
 	// TODO: 实现状态查询
 	status := &SyncStatus{
-		RemoteURL:      options.RemoteURL,
-		Branch:         options.Branch,
+		RemoteURL:       options.RemoteURL,
+		Branch:          options.Branch,
 		RemoteSnapshots: []RemoteSnapshotInfo{},
 	}
 
@@ -349,10 +349,10 @@ func (s *Service) convertAuth(auth *models.AuthConfig) *git.GitAuthConfig {
 	}
 
 	return &git.GitAuthConfig{
-		Type:     git.AuthType(auth.Type),
-		Username: auth.Username,
-		Password: auth.Password,
-		SSHKey:   auth.SSHKey,
+		Type:       git.AuthType(auth.Type),
+		Username:   auth.Username,
+		Password:   auth.Password,
+		SSHKey:     auth.SSHKey,
 		Passphrase: auth.Passphrase,
 	}
 }
@@ -471,10 +471,10 @@ func (s *Service) ValidateRemoteConfig(
 	)
 
 	result := &RepositoryTestResult{
-		Success:   false,
-		URL:       config.URL,
-		Branch:    config.Branch,
-		TestedAt:  time.Now().Format(time.RFC3339),
+		Success:  false,
+		URL:      config.URL,
+		Branch:   config.Branch,
+		TestedAt: time.Now().Format(time.RFC3339),
 	}
 
 	// TODO: 实现连接测试
@@ -487,11 +487,11 @@ func (s *Service) ValidateRemoteConfig(
 
 // RepositoryTestResult 仓库测试结果
 type RepositoryTestResult struct {
-	Success   bool     `json:"success"`
-	URL       string   `json:"url"`
-	Branch    string   `json:"branch"`
-	Branches  []string `json:"branches"`
-	Latency   int      `json:"latency_ms"`
-	Error     string   `json:"error,omitempty"`
-	TestedAt  string   `json:"tested_at"`
+	Success  bool     `json:"success"`
+	URL      string   `json:"url"`
+	Branch   string   `json:"branch"`
+	Branches []string `json:"branches"`
+	Latency  int      `json:"latency_ms"`
+	Error    string   `json:"error,omitempty"`
+	TestedAt string   `json:"tested_at"`
 }

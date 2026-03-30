@@ -34,10 +34,10 @@ func (p *Packager) PackageSnapshot(
 	)
 
 	packaged := &PackagedSnapshot{
-		Snapshot:  snapshot,
-		RepoPath:  repoPath,
-		Metadata:  PackageMetadata{},
-		Files:     make([]PackagedFile, len(snapshot.Files)),
+		Snapshot: snapshot,
+		RepoPath: repoPath,
+		Metadata: PackageMetadata{},
+		Files:    make([]PackagedFile, len(snapshot.Files)),
 	}
 
 	// 创建快照元数据文件
@@ -92,15 +92,15 @@ func (p *Packager) packageFile(
 // createMetadataFile 创建快照元数据文件
 func (p *Packager) createMetadataFile(snapshot *models.Snapshot) ([]byte, error) {
 	metadata := struct {
-		ID          string                 `json:"id"`
-		Name        string                 `json:"name"`
-		Description string                 `json:"description"`
-		Message     string                 `json:"message"`
-		CreatedAt   string                 `json:"created_at"`
-		Tools       []string               `json:"tools"`
-		Tags        []string               `json:"tags"`
+		ID          string                  `json:"id"`
+		Name        string                  `json:"name"`
+		Description string                  `json:"description"`
+		Message     string                  `json:"message"`
+		CreatedAt   string                  `json:"created_at"`
+		Tools       []string                `json:"tools"`
+		Tags        []string                `json:"tags"`
 		Metadata    models.SnapshotMetadata `json:"metadata"`
-		FileCount   int                    `json:"file_count"`
+		FileCount   int                     `json:"file_count"`
 	}{
 		ID:          snapshot.ID,
 		Name:        snapshot.Name,
@@ -136,15 +136,15 @@ func (p *Packager) ParseSnapshotFromCommit(
 ) (*models.Snapshot, error) {
 	// 解析元数据
 	var metadata struct {
-		ID          string                 `json:"id"`
-		Name        string                 `json:"name"`
-		Description string                 `json:"description"`
-		Message     string                 `json:"message"`
-		CreatedAt   string                 `json:"created_at"`
-		Tools       []string               `json:"tools"`
-		Tags        []string               `json:"tags"`
+		ID          string                  `json:"id"`
+		Name        string                  `json:"name"`
+		Description string                  `json:"description"`
+		Message     string                  `json:"message"`
+		CreatedAt   string                  `json:"created_at"`
+		Tools       []string                `json:"tools"`
+		Tags        []string                `json:"tags"`
 		Metadata    models.SnapshotMetadata `json:"metadata"`
-		FileCount   int                    `json:"file_count"`
+		FileCount   int                     `json:"file_count"`
 	}
 
 	if err := json.Unmarshal(metadataContent, &metadata); err != nil {
@@ -213,19 +213,19 @@ func (p *Packager) ValidateSnapshotForPush(snapshot *models.Snapshot) error {
 
 // PackagedSnapshot 打包的快照
 type PackagedSnapshot struct {
-	Snapshot      *models.Snapshot       // 快照对象
-	RepoPath     string                  // 仓库路径
-	Metadata     PackageMetadata        // 打包元数据
-	MetadataFile []byte                 // 元数据文件内容
-	Files        []PackagedFile         // 打包的文件列表
+	Snapshot     *models.Snapshot // 快照对象
+	RepoPath     string           // 仓库路径
+	Metadata     PackageMetadata  // 打包元数据
+	MetadataFile []byte           // 元数据文件内容
+	Files        []PackagedFile   // 打包的文件列表
 }
 
 // PackageMetadata 打包元数据
 type PackageMetadata struct {
-	PackagedAt   string `json:"packaged_at"`    // 打包时间
-	TotalSize    int64  `json:"total_size"`     // 总大小
-	FileCount    int    `json:"file_count"`    // 文件数量
-	Compressed   bool   `json:"compressed"`    // 是否压缩
+	PackagedAt string `json:"packaged_at"` // 打包时间
+	TotalSize  int64  `json:"total_size"`  // 总大小
+	FileCount  int    `json:"file_count"`  // 文件数量
+	Compressed bool   `json:"compressed"`  // 是否压缩
 }
 
 // PackagedFile 打包的文件
@@ -236,9 +236,9 @@ type PackagedFile struct {
 
 // SnapshotFileIndex 快照文件索引
 type SnapshotFileIndex struct {
-	SnapshotID string                    `json:"snapshot_id"` // 快照 ID
-	FilePaths  []string                 `json:"file_paths"`  // 文件路径列表
-	Metadata   map[string]string        `json:"metadata"`    // 元数据
+	SnapshotID string            `json:"snapshot_id"` // 快照 ID
+	FilePaths  []string          `json:"file_paths"`  // 文件路径列表
+	Metadata   map[string]string `json:"metadata"`    // 元数据
 }
 
 // CreateIndex 创建快照文件索引

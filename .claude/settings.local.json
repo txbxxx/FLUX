@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make build:*)",
+      "Bash(./bin/ai-sync.exe --help)",
+      "Bash(./bin/ai-sync.exe scan:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(./bin/ai-sync.exe get:*)",
+      "Bash(./bin/ai-sync.exe snapshot:*)",
+      "Bash(./bin/ai-sync.exe completion:*)"
+    ]
+  }
+}

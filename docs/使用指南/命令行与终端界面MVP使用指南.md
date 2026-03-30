@@ -61,21 +61,37 @@ go run -buildvcs=false ./cmd/ai-sync scan
 ### 4.2 构建为二进制
 
 ```powershell
-go build -buildvcs=false -o ai-sync.exe ./cmd/ai-sync
+make build
 ```
 
 构建完成后可以直接执行：
 
 ```powershell
-.\ai-sync.exe <command>
+.\bin\ai-sync.exe <command>
 ```
 
-如果你使用的是非 Windows 环境，可以把 `ai-sync.exe` 替换为你自己的目标文件名，例如：
+如果你想修改 CLI 名称，例如生成 `sync-tool.exe`：
+
+```powershell
+make build CLI_NAME=sync-tool
+.\bin\sync-tool.exe <command>
+```
+
+如果你使用的是非 Windows 环境，可以继续直接使用 `go build`，或者在 `make` 中显式去掉扩展名：
 
 ```bash
-go build -buildvcs=false -o ai-sync ./cmd/ai-sync
-./ai-sync scan
+make build CLI_NAME=sync-tool GOEXE=
+./bin/sync-tool scan
 ```
+
+如果你想直接构建并运行 CLI，可以使用：
+
+```powershell
+make run
+make run ARGS=scan
+```
+
+其中 `make run` 默认会执行 `.\bin\ai-sync.exe --help`。
 
 ## 5. 命令总览
 

@@ -258,10 +258,10 @@ func TestExtractRepoInfo(t *testing.T) {
 			wantErr:       false,
 		},
 		{
-			name:        "无效 URL",
-			url:         "not-a-valid-url",
+			name:         "无效 URL",
+			url:          "not-a-valid-url",
 			expectedHost: "",
-			wantErr:     true,
+			wantErr:      true,
 		},
 	}
 

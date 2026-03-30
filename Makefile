@@ -7,6 +7,7 @@ CMD_PATH ?= ./cmd/ai-sync
 OUTPUT_DIR ?= bin
 CLI_NAME ?= ai-sync
 GOEXE ?= .exe
+ARGS ?= --help
 
 BINARY_NAME := $(CLI_NAME)$(GOEXE)
 BINARY_PATH := $(OUTPUT_DIR)/$(BINARY_NAME)

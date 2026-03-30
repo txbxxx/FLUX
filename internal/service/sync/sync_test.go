@@ -647,12 +647,12 @@ func TestSyncStatus(t *testing.T) {
 		LocalBehind: 1,
 		RemoteSnapshots: []RemoteSnapshotInfo{
 			{
-				ID:          "snap-1",
-				Name:        "Snapshot 1",
-				CommitHash:  "abc123",
-				Author:      "Test Author",
-				Date:        "2026-03-20T10:00:00Z",
-				Tools:       []string{"codex"},
+				ID:         "snap-1",
+				Name:       "Snapshot 1",
+				CommitHash: "abc123",
+				Author:     "Test Author",
+				Date:       "2026-03-20T10:00:00Z",
+				Tools:      []string{"codex"},
 			},
 		},
 	}
@@ -727,9 +727,9 @@ func TestSyncResult(t *testing.T) {
 	}
 
 	result := SyncResult{
-		Success:     true,
-		Action:      SyncActionPush,
-		PushResult:  pushResult,
+		Success:      true,
+		Action:       SyncActionPush,
+		PushResult:   pushResult,
 		ErrorMessage: "",
 	}
 

@@ -26,9 +26,9 @@ func TestNewSnapshot(t *testing.T) {
 // TestValidateSnapshot 测试验证快照
 func TestValidateSnapshot(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		snapshot *Snapshot
-		wantErr bool
+		wantErr  bool
 	}{
 		{
 			name: "有效快照",
@@ -39,9 +39,9 @@ func TestValidateSnapshot(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "空快照",
+			name:     "空快照",
 			snapshot: nil,
-			wantErr: true,
+			wantErr:  true,
 		},
 		{
 			name: "空消息",
@@ -342,12 +342,12 @@ func TestFormatBytes(t *testing.T) {
 // TestCloneSnapshot 测试克隆快照
 func TestCloneSnapshot(t *testing.T) {
 	original := &Snapshot{
-		ID:          "snap-1",
-		Name:        "Test Snapshot",
-		Message:     "Test message",
-		Tools:       []string{"codex", "claude"},
-		Tags:        []string{"backup", "test"},
-		CreatedAt:   time.Now(),
+		ID:        "snap-1",
+		Name:      "Test Snapshot",
+		Message:   "Test message",
+		Tools:     []string{"codex", "claude"},
+		Tags:      []string{"backup", "test"},
+		CreatedAt: time.Now(),
 	}
 
 	clone := CloneSnapshot(original)
@@ -368,19 +368,19 @@ func TestCloneSnapshot(t *testing.T) {
 // TestMergeSummary 测试合并变更摘要
 func TestMergeSummary(t *testing.T) {
 	sum1 := ChangeSummary{
-		TotalFiles: 10,
-		Created:    5,
-		Updated:    3,
-		Deleted:    2,
-		FilesByTool: map[string]int{"codex": 7, "claude": 3},
+		TotalFiles:      10,
+		Created:         5,
+		Updated:         3,
+		Deleted:         2,
+		FilesByTool:     map[string]int{"codex": 7, "claude": 3},
 		FilesByCategory: map[string]int{"config": 4, "skills": 6},
 	}
 
 	sum2 := ChangeSummary{
-		TotalFiles: 5,
-		Created:    2,
-		Updated:    3,
-		FilesByTool: map[string]int{"codex": 5},
+		TotalFiles:      5,
+		Created:         2,
+		Updated:         3,
+		FilesByTool:     map[string]int{"codex": 5},
 		FilesByCategory: map[string]int{"config": 2, "docs": 3},
 	}
 
@@ -464,32 +464,32 @@ func TestNewSuccessResponse(t *testing.T) {
 // TestValidatePageRequest 测试验证分页请求
 func TestValidatePageRequest(t *testing.T) {
 	tests := []struct {
-		name        string
-		req         *PageRequest
+		name         string
+		req          *PageRequest
 		expectedPage int
 		expectedSize int
 	}{
 		{
-			name: "有效请求",
-			req: &PageRequest{Page: 2, PageSize: 20},
+			name:         "有效请求",
+			req:          &PageRequest{Page: 2, PageSize: 20},
 			expectedPage: 2,
 			expectedSize: 20,
 		},
 		{
-			name: "页码小于1",
-			req: &PageRequest{Page: 0, PageSize: 20},
+			name:         "页码小于1",
+			req:          &PageRequest{Page: 0, PageSize: 20},
 			expectedPage: 1,
 			expectedSize: 20,
 		},
 		{
-			name: "页面大小小于1",
-			req: &PageRequest{Page: 1, PageSize: 0},
+			name:         "页面大小小于1",
+			req:          &PageRequest{Page: 1, PageSize: 0},
 			expectedPage: 1,
 			expectedSize: 10,
 		},
 		{
-			name: "页面大小超过100",
-			req: &PageRequest{Page: 1, PageSize: 200},
+			name:         "页面大小超过100",
+			req:          &PageRequest{Page: 1, PageSize: 200},
 			expectedPage: 1,
 			expectedSize: 100,
 		},
@@ -544,9 +544,9 @@ func TestFileCategory_Values(t *testing.T) {
 // Table驱动测试：同步方向
 func TestSyncDirection_Values(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		direction SyncDirection
-		expected string
+		expected  string
 	}{
 		{"上传", DirectionUpload, "upload"},
 		{"下载", DirectionDownload, "download"},

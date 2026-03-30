@@ -46,6 +46,15 @@ make build CLI_NAME=sync-tool
 默认输出目录是 `bin/`，例如 Windows 下会生成 `bin/ai-sync.exe`。
 如果你需要非 Windows 产物，可以继续直接使用 `go build`，或者执行 `make build GOEXE=`。
 
+如果你想直接运行 CLI，可以使用：
+
+```powershell
+make run
+make run ARGS=scan
+```
+
+其中 `make run` 默认会执行 `.\bin\ai-sync.exe --help`。
+
 查看帮助：
 
 ```powershell

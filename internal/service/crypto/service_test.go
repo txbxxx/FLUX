@@ -17,7 +17,7 @@ func TestService_EncryptDecrypt(t *testing.T) {
 		Enabled:   true,
 		Algorithm: "aes256-gcm",
 		KeyEnvVar: "", // 不使用环境变量
-		KeyPath:   "",  // 将自动生成
+		KeyPath:   "", // 将自动生成
 	}
 
 	svc, err := NewService(config)
