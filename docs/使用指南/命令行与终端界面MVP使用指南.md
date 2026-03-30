@@ -85,6 +85,7 @@ go build -buildvcs=false -o ai-sync ./cmd/ai-sync
 - `ai-sync scan add`
 - `ai-sync scan remove`
 - `ai-sync scan list`
+- `ai-sync scan rules`
 - `ai-sync get`
 - `ai-sync snapshot create`
 - `ai-sync snapshot list`
@@ -127,6 +128,8 @@ Available Commands:
 .\ai-sync.exe scan ai-sync-manager
 .\ai-sync.exe scan list
 .\ai-sync.exe scan list claude
+.\ai-sync.exe scan rules
+.\ai-sync.exe scan rules claude
 .\ai-sync.exe scan add claude C:\Users\<user>\.claude.json
 .\ai-sync.exe scan add --project codex demo D:\workspace\demo
 ```
@@ -204,7 +207,7 @@ Claude
 - 配置目录不存在
 - 当前用户无法访问目标目录
 
-### 6.6 `scan add/remove/list`
+### 6.6 `scan add/remove/list/rules`
 
 当前支持两类规则操作：
 
@@ -214,7 +217,9 @@ Claude
 .\ai-sync.exe scan add --project <app> <project-name> <project-absolute-path>
 .\ai-sync.exe scan remove --project <app> <project-absolute-path>
 .\ai-sync.exe scan list
-.\ai-sync.exe scan list <app>
+.\ai-sync.exe scan list <app-or-project>
+.\ai-sync.exe scan rules
+.\ai-sync.exe scan rules <app-or-project>
 ```
 
 说明：
@@ -222,8 +227,9 @@ Claude
 - 默认规则由程序内置，不需要手动添加
 - `scan add <app> <absolute-file-path>` 用于补充分散在其他位置的配置文件
 - `scan add --project ...` 用于注册项目，注册后会按该工具的项目规则模板生成独立的项目扫描对象，并参与扫描和快照
-- `scan list` 会展示默认全局规则、自定义绝对路径规则和已注册项目
-- 只有存在已注册项目时，才会额外显示“已注册项目扫描模板”
+- `scan` 和 `scan list` 都用于查看当前扫描结果
+- `scan rules` 用于查看默认全局规则、自定义绝对路径规则和已注册项目
+- 只有存在已注册项目时，`scan rules` 才会额外显示“已注册项目扫描模板”
 
 如果某个已注册项目下实际识别到了配置文件，`scan` 会把它作为与全局对象同级的结果输出，例如：
 

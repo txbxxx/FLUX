@@ -242,7 +242,40 @@ func TestExecuteScanAddProjectCommand(t *testing.T) {
 	}
 }
 
-func TestExecuteScanListCommandPrintsRules(t *testing.T) {
+func TestExecuteScanListCommandPrintsScanResult(t *testing.T) {
+	workflow := &stubWorkflow{
+		scanResult: &usecase.ScanResult{
+			Tools: []usecase.ToolSummary{
+				{
+					Tool:       "claude",
+					Scope:      "global",
+					ResultText: "可同步",
+					Path:       "/home/test/.claude",
+				},
+			},
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Execute(Dependencies{
+		Workflow: workflow,
+		TUI:      &stubTUIRunner{},
+		Out:      &stdout,
+		Err:      &stderr,
+	}, []string{"scan", "list", "claude"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if len(workflow.scanInput.Apps) != 1 || workflow.scanInput.Apps[0] != "claude" {
+		t.Fatalf("unexpected scan input: %+v", workflow.scanInput)
+	}
+	if !strings.Contains(stdout.String(), "Claude（全局）") || !strings.Contains(stdout.String(), "检测结果: 可同步") {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
+func TestExecuteScanRulesCommandPrintsRules(t *testing.T) {
 	workflow := &stubWorkflow{
 		listRulesResult: &usecase.ListScanRulesResult{
 			App: "claude",
@@ -267,7 +300,7 @@ func TestExecuteScanListCommandPrintsRules(t *testing.T) {
 		TUI:      &stubTUIRunner{},
 		Out:      &stdout,
 		Err:      &stderr,
-	}, []string{"scan", "list", "claude"})
+	}, []string{"scan", "rules", "claude"})
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
@@ -284,7 +317,7 @@ func TestExecuteScanListCommandPrintsRules(t *testing.T) {
 	}
 }
 
-func TestExecuteScanListCommandHidesProjectTemplatesWithoutRegisteredProjects(t *testing.T) {
+func TestExecuteScanRulesCommandHidesProjectTemplatesWithoutRegisteredProjects(t *testing.T) {
 	workflow := &stubWorkflow{
 		listRulesResult: &usecase.ListScanRulesResult{
 			App: "codex",
@@ -304,7 +337,7 @@ func TestExecuteScanListCommandHidesProjectTemplatesWithoutRegisteredProjects(t 
 		TUI:      &stubTUIRunner{},
 		Out:      &stdout,
 		Err:      &stderr,
-	}, []string{"scan", "list", "codex"})
+	}, []string{"scan", "rules", "codex"})
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
@@ -314,7 +347,7 @@ func TestExecuteScanListCommandHidesProjectTemplatesWithoutRegisteredProjects(t 
 	}
 }
 
-func TestExecuteScanListCommandPassesRegisteredProjectName(t *testing.T) {
+func TestExecuteScanRulesCommandPassesRegisteredProjectName(t *testing.T) {
 	workflow := &stubWorkflow{
 		listRulesResult: &usecase.ListScanRulesResult{
 			App: "codex",
@@ -337,7 +370,7 @@ func TestExecuteScanListCommandPassesRegisteredProjectName(t *testing.T) {
 		TUI:      &stubTUIRunner{},
 		Out:      &stdout,
 		Err:      &stderr,
-	}, []string{"scan", "list", "ai-sync-manager"})
+	}, []string{"scan", "rules", "ai-sync-manager"})
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
