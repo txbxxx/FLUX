@@ -10,7 +10,7 @@ import (
 	"ai-sync-manager/pkg/utils"
 )
 
-// GetDefaultGlobalPath 获取工具的默认全局配置路径
+// GetDefaultGlobalPath 返回工具在用户主目录下的默认全局配置目录。
 func GetDefaultGlobalPath(toolType ToolType) string {
 	homeDir := GetUserHomeDir()
 
@@ -24,7 +24,7 @@ func GetDefaultGlobalPath(toolType ToolType) string {
 	}
 }
 
-// GetDefaultProjectPath 获取工具的默认项目配置路径
+// GetDefaultProjectPath 返回项目根目录下的默认配置子目录名。
 func GetDefaultProjectPath(toolType ToolType) string {
 	switch toolType {
 	case ToolTypeCodex:
@@ -38,14 +38,14 @@ func GetDefaultProjectPath(toolType ToolType) string {
 
 // CodexFileDefinitions Codex 配置文件定义
 type CodexFileDefinition struct {
-	Name     string        // 文件/目录名
-	Path     string        // 相对于配置根目录的路径
+	Name     string         // 文件/目录名
+	Path     string         // 相对于配置根目录的路径
 	Category ConfigCategory // 配置类别
-	Scope    ConfigScope   // 作用域
-	IsDir    bool          // 是否为目录
+	Scope    ConfigScope    // 作用域
+	IsDir    bool           // 是否为目录
 }
 
-// GetCodexFileDefinitions 获取 Codex 配置文件定义列表
+// GetCodexFileDefinitions 返回 Codex 默认关注的文件/目录定义。
 func GetCodexFileDefinitions() []CodexFileDefinition {
 	return []CodexFileDefinition{
 		// 全局配置
@@ -97,14 +97,14 @@ func GetCodexFileDefinitions() []CodexFileDefinition {
 
 // ClaudeFileDefinition Claude 配置文件定义
 type ClaudeFileDefinition struct {
-	Name     string        // 文件/目录名
-	Path     string        // 相对于配置根目录的路径
+	Name     string         // 文件/目录名
+	Path     string         // 相对于配置根目录的路径
 	Category ConfigCategory // 配置类别
-	Scope    ConfigScope   // 作用域
-	IsDir    bool          // 是否为目录
+	Scope    ConfigScope    // 作用域
+	IsDir    bool           // 是否为目录
 }
 
-// GetClaudeFileDefinitions 获取 Claude 配置文件定义列表
+// GetClaudeFileDefinitions 返回 Claude 默认关注的文件/目录定义。
 func GetClaudeFileDefinitions() []ClaudeFileDefinition {
 	return []ClaudeFileDefinition{
 		// 全局配置
@@ -175,7 +175,7 @@ func GetClaudeFileDefinitions() []ClaudeFileDefinition {
 	}
 }
 
-// ExpandPath 展开路径中的环境变量和用户目录
+// ExpandPath 展开路径中的用户目录和常见环境变量。
 func ExpandPath(path string) string {
 	// 处理 ~
 	if len(path) > 0 && path[0] == '~' {
@@ -199,7 +199,7 @@ func ExpandPath(path string) string {
 	return filepath.Clean(path)
 }
 
-// ResolveToolPath 解析工具配置路径
+// ResolveToolPath 按作用域解析工具配置根路径。
 func ResolveToolPath(toolType ToolType, scope ConfigScope, basePath string) string {
 	if scope == ScopeGlobal {
 		return GetDefaultGlobalPath(toolType)
@@ -209,12 +209,12 @@ func ResolveToolPath(toolType ToolType, scope ConfigScope, basePath string) stri
 	return filepath.Join(basePath, GetDefaultProjectPath(toolType))
 }
 
-// IsWindows 判断是否为 Windows 系统
+// IsWindows 返回当前进程是否运行在 Windows。
 func IsWindows() bool {
 	return runtime.GOOS == "windows"
 }
 
-// GetUserHomeDir 获取用户主目录
+// GetUserHomeDir 以多种来源兜底解析用户主目录。
 func GetUserHomeDir() string {
 	if homeDir, err := os.UserHomeDir(); err == nil && isResolvedHomeDir(homeDir) {
 		return homeDir
@@ -244,7 +244,7 @@ func GetUserHomeDir() string {
 	return "~"
 }
 
-// GetHomeConfigPath 获取用户主目录下的配置路径
+// GetHomeConfigPath 拼出用户主目录下某个工具的配置路径。
 func GetHomeConfigPath(toolType ToolType, relativePath string) string {
 	homeDir := GetUserHomeDir()
 	var toolDir string

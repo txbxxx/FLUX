@@ -15,6 +15,7 @@ type ConfigEditorRunner struct {
 	out io.Writer
 }
 
+// NewConfigEditor 创建配置编辑器运行器，并补齐默认 IO。
 func NewConfigEditor(in io.Reader, out io.Writer) *ConfigEditorRunner {
 	if in == nil {
 		in = os.Stdin
@@ -29,6 +30,7 @@ func NewConfigEditor(in io.Reader, out io.Writer) *ConfigEditorRunner {
 	}
 }
 
+// Run 以独立 alt-screen 会话启动配置编辑器。
 func (r *ConfigEditorRunner) Run(_ context.Context, result *usecase.GetConfigResult, save func(string) error) error {
 	model := newEditorModel(result, save)
 	program := tea.NewProgram(

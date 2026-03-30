@@ -8,33 +8,33 @@ import (
 	"strings"
 )
 
-// StringIsEmpty 判断字符串是否为空
+// StringIsEmpty 判断字符串在 trim 后是否为空。
 func StringIsEmpty(s string) bool {
 	return strings.TrimSpace(s) == ""
 }
 
-// StringNotEmpty 判断字符串是否非空
+// StringNotEmpty 是 StringIsEmpty 的反义包装。
 func StringNotEmpty(s string) bool {
 	return !StringIsEmpty(s)
 }
 
-// StringTrimSpace 去除首尾空格
+// StringTrimSpace 去除首尾空白字符。
 func StringTrimSpace(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// StringContains 判断是否包含子串（忽略大小写）
+// StringContains 以不区分大小写的方式判断是否包含子串。
 func StringContains(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
-// StringSplit 分割字符串
+// StringSplit 分割字符串并过滤空白项。
 func StringSplit(s, sep string) []string {
 	if StringIsEmpty(s) {
 		return []string{}
 	}
 	result := strings.Split(s, sep)
-	// 过滤空字符串
+	// 过滤空字符串和纯空白项。
 	var filtered []string
 	for _, item := range result {
 		if StringNotEmpty(item) {
@@ -44,7 +44,7 @@ func StringSplit(s, sep string) []string {
 	return filtered
 }
 
-// StringJoin 连接字符串
+// StringJoin 在空切片时返回空字符串。
 func StringJoin(parts []string, sep string) string {
 	if len(parts) == 0 {
 		return ""
@@ -52,7 +52,7 @@ func StringJoin(parts []string, sep string) string {
 	return strings.Join(parts, sep)
 }
 
-// SanitizeFilename 清理文件名，移除非法字符
+// SanitizeFilename 清理文件名中的常见非法字符。
 func SanitizeFilename(filename string) string {
 	// Windows 不允许的字符: \ / : * ? " < > |
 	reg := regexp.MustCompile(`[\\/:*?"<>|]`)
@@ -63,12 +63,12 @@ func SanitizeFilename(filename string) string {
 	return sanitized
 }
 
-// IsWindows 判断是否为 Windows 系统
+// IsWindows 返回当前进程是否运行在 Windows。
 func IsWindows() bool {
 	return runtime.GOOS == "windows"
 }
 
-// NormalizePath 标准化路径（处理路径分隔符）
+// NormalizePath 按当前平台统一路径分隔符风格。
 func NormalizePath(path string) string {
 	if IsWindows() {
 		// 统一使用反斜杠
@@ -78,8 +78,8 @@ func NormalizePath(path string) string {
 	return filepath.ToSlash(path)
 }
 
-// ExpandUserHome 展开用户目录路径
-// 支持 ~ 和 %USERPROFILE%
+// ExpandUserHome 展开用户目录路径。
+// 当前支持 `~` 和 `%USERPROFILE%` 两种写法。
 func ExpandUserHome(path string) string {
 	if strings.HasPrefix(path, "~") {
 		homeDir, err := os.UserHomeDir()

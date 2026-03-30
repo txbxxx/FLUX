@@ -28,7 +28,7 @@ func NewGitClient() *GitClient {
 	}
 }
 
-// Clone 克隆仓库
+// Clone 基于 go-git 执行克隆，并在结束后回填基础仓库信息。
 func (c *GitClient) Clone(ctx context.Context, opts *CloneOptions) (*RepositoryInfo, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("克隆选项不能为空")
@@ -90,7 +90,7 @@ func (c *GitClient) Clone(ctx context.Context, opts *CloneOptions) (*RepositoryI
 	return c.getRepositoryInfo(repo, opts.Path)
 }
 
-// Pull 拉取更新
+// Pull 只处理当前工作树所在分支，不在这里做额外分支切换。
 func (c *GitClient) Pull(ctx context.Context, opts *PullOptions) (*OperationResult, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("拉取选项不能为空")
@@ -167,7 +167,7 @@ func (c *GitClient) Pull(ctx context.Context, opts *PullOptions) (*OperationResu
 	}, nil
 }
 
-// Push 推送提交
+// Push 根据给定分支构造 refspec；未指定分支时交给 go-git 使用默认行为。
 func (c *GitClient) Push(ctx context.Context, opts *PushOptions) (*OperationResult, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("推送选项不能为空")
@@ -237,7 +237,7 @@ func (c *GitClient) Push(ctx context.Context, opts *PushOptions) (*OperationResu
 	}, nil
 }
 
-// GetStatus 获取仓库状态
+// GetStatus 汇总工作树变更和当前分支信息。
 func (c *GitClient) GetStatus(opts *StatusOptions) (*RepositoryStatus, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("状态选项不能为空")
@@ -290,7 +290,7 @@ func (c *GitClient) GetStatus(opts *StatusOptions) (*RepositoryStatus, error) {
 	}, nil
 }
 
-// GetRepositoryInfo 获取仓库信息
+// GetRepositoryInfo 对外暴露只读仓库概览。
 func (c *GitClient) GetRepositoryInfo(path string) (*RepositoryInfo, error) {
 	repo, err := git.PlainOpen(path)
 	if err != nil {
@@ -300,7 +300,7 @@ func (c *GitClient) GetRepositoryInfo(path string) (*RepositoryInfo, error) {
 	return c.getRepositoryInfo(repo, path)
 }
 
-// getRepositoryInfo 内部方法：获取仓库信息
+// getRepositoryInfo 统一提取远程、HEAD 和裸仓库等基础信息。
 func (c *GitClient) getRepositoryInfo(repo *git.Repository, path string) (*RepositoryInfo, error) {
 	info := &RepositoryInfo{
 		Path: path,
@@ -335,7 +335,7 @@ func (c *GitClient) getRepositoryInfo(repo *git.Repository, path string) (*Repos
 	return info, nil
 }
 
-// Commit 提交更改
+// Commit 当前支持“全部加入后提交”的简单模式，满足快照仓库场景。
 func (c *GitClient) Commit(ctx context.Context, opts *CommitOptions) (*CommitResult, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("提交选项不能为空")
@@ -409,7 +409,7 @@ func (c *GitClient) Commit(ctx context.Context, opts *CommitOptions) (*CommitRes
 	}, nil
 }
 
-// ListBranches 列出所有分支
+// ListBranches 同时返回本地和远程分支，并标记当前 HEAD。
 func (c *GitClient) ListBranches(path string) ([]BranchInfo, error) {
 	repo, err := git.PlainOpen(path)
 	if err != nil {
@@ -434,8 +434,8 @@ func (c *GitClient) ListBranches(path string) ([]BranchInfo, error) {
 		if strings.HasPrefix(name, "refs/heads/") {
 			branchName := strings.TrimPrefix(name, "refs/heads/")
 			branches = append(branches, BranchInfo{
-				Name:    branchName,
-				IsHead:  ref.Name() == head.Name(),
+				Name:     branchName,
+				IsHead:   ref.Name() == head.Name(),
 				IsRemote: false,
 			})
 		} else if strings.HasPrefix(name, "refs/remotes/") && !strings.HasSuffix(name, "/HEAD") {
@@ -455,13 +455,13 @@ func (c *GitClient) ListBranches(path string) ([]BranchInfo, error) {
 	return branches, nil
 }
 
-// IsRepository 检查路径是否为 Git 仓库
+// IsRepository 用于轻量判断路径是否已经是 Git 仓库。
 func IsRepository(path string) bool {
 	_, err := git.PlainOpen(path)
 	return err == nil
 }
 
-// InitRepository 初始化新仓库
+// InitRepository 初始化新仓库，并复用 GitClient 的信息提取逻辑。
 func InitRepository(path string, bare bool) (*RepositoryInfo, error) {
 	repo, err := git.PlainInit(path, bare)
 	if err != nil {
@@ -472,7 +472,7 @@ func InitRepository(path string, bare bool) (*RepositoryInfo, error) {
 	return client.getRepositoryInfo(repo, path)
 }
 
-// AddRemote 添加远程仓库
+// AddRemote 为现有仓库添加远端配置。
 func AddRemote(path, name, url string) error {
 	repo, err := git.PlainOpen(path)
 	if err != nil {

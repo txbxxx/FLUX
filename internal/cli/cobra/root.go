@@ -16,6 +16,7 @@ import (
 
 var errCommandHandled = errors.New("command handled")
 
+// Workflow 抽象 CLI 依赖的全部用例能力，便于命令层测试替换。
 type Workflow interface {
 	Scan(ctx context.Context, input usecase.ScanInput) (*usecase.ScanResult, error)
 	AddCustomRule(ctx context.Context, input usecase.AddCustomRuleInput) error
@@ -29,6 +30,7 @@ type Workflow interface {
 	SaveConfig(ctx context.Context, input usecase.SaveConfigInput) error
 }
 
+// TUIRunner / EditorRunner 抽象终端交互能力，避免 cobra 直接依赖具体实现。
 type TUIRunner interface {
 	Run(ctx context.Context) error
 }
@@ -37,6 +39,7 @@ type EditorRunner interface {
 	Run(ctx context.Context, result *usecase.GetConfigResult, save func(string) error) error
 }
 
+// Dependencies 集中描述 root command 所需依赖。
 type Dependencies struct {
 	Workflow Workflow
 	TUI      TUIRunner
@@ -47,6 +50,7 @@ type Dependencies struct {
 	Context  context.Context
 }
 
+// NewRootCommand 组装顶层命令并注入所有子命令。
 func NewRootCommand(deps Dependencies) *spcobra.Command {
 	root := &spcobra.Command{
 		Use:           "ai-sync",
@@ -71,6 +75,7 @@ func NewRootCommand(deps Dependencies) *spcobra.Command {
 	return root
 }
 
+// Execute 负责执行命令，并把“已自行输出帮助”的情况转换为稳定退出码。
 func Execute(deps Dependencies, args []string) int {
 	cmd := NewRootCommand(deps)
 	cmd.SetArgs(args)
@@ -85,6 +90,7 @@ func Execute(deps Dependencies, args []string) int {
 	return 0
 }
 
+// commandContext 优先复用外部上下文，便于测试和取消控制。
 func commandContext(deps Dependencies) context.Context {
 	if deps.Context != nil {
 		return deps.Context
@@ -92,6 +98,7 @@ func commandContext(deps Dependencies) context.Context {
 	return context.Background()
 }
 
+// outputWriter / errorWriter 在未注入 writer 时回退到 io.Discard，避免 nil 判断散落各处。
 func outputWriter(w io.Writer) io.Writer {
 	if w == nil {
 		return io.Discard
@@ -106,10 +113,12 @@ func errorWriter(w io.Writer) io.Writer {
 	return w
 }
 
+// printUsage 输出顶层简版帮助。
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "用法: ai-sync <scan|get|snapshot|tui>")
 }
 
+// printScanResult 负责把扫描结果整理成面向终端的分组文本。
 func printScanResult(w io.Writer, result *usecase.ScanResult) {
 	for index, item := range result.Tools {
 		if index > 0 {
@@ -155,6 +164,7 @@ func printScanResult(w io.Writer, result *usecase.ScanResult) {
 	}
 }
 
+// printScanRuleList 把默认规则、自定义规则和项目规则合并成稳定输出。
 func printScanRuleList(w io.Writer, result *usecase.ListScanRulesResult) {
 	if strings.TrimSpace(result.App) != "" {
 		fmt.Fprintf(w, "%s 规则\n\n", displayToolName(result.App))
@@ -191,6 +201,7 @@ func printScanRuleList(w io.Writer, result *usecase.ListScanRulesResult) {
 	}
 }
 
+// 其余 print* 函数都是 cobra 层的纯展示逻辑，不承载业务判断。
 func printCreatedSnapshot(w io.Writer, result *usecase.SnapshotSummary) {
 	fmt.Fprintf(w, "created snapshot: %s\n", result.ID)
 	fmt.Fprintf(w, "name: %s\n", result.Name)
@@ -243,6 +254,7 @@ func printConfigFile(w io.Writer, result *usecase.GetConfigResult) {
 	fmt.Fprintln(w, result.Content)
 }
 
+// displayToolName 统一工具名的人类可读展示。
 func displayToolName(name string) string {
 	switch name {
 	case "codex":
@@ -254,6 +266,7 @@ func displayToolName(name string) string {
 	}
 }
 
+// displayScanSummaryTitle 根据全局/项目作用域生成结果标题。
 func displayScanSummaryTitle(item usecase.ToolSummary) string {
 	if item.Scope == "project" {
 		projectName := strings.TrimSpace(item.ProjectName)
@@ -268,6 +281,7 @@ func displayScanSummaryTitle(item usecase.ToolSummary) string {
 	return displayToolName(item.Tool) + "（全局）"
 }
 
+// filepathSeparator 包一层便于测试时统一处理平台差异。
 func filepathSeparator() rune {
 	return filepath.Separator
 }

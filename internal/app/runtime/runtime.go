@@ -17,6 +17,7 @@ type Options struct {
 	DisableConsoleLog bool
 }
 
+// Runtime 聚合命令行入口需要复用的基础依赖。
 type Runtime struct {
 	Version         string
 	DataDir         string
@@ -27,6 +28,7 @@ type Runtime struct {
 	SnapshotService *snapshot.Service
 }
 
+// New 按“日志 -> 数据库 -> 规则 -> 业务服务”的顺序构建运行时。
 func New(options Options) (*Runtime, error) {
 	dataDir := options.DataDir
 	if dataDir == "" {
@@ -62,6 +64,7 @@ func New(options Options) (*Runtime, error) {
 	}, nil
 }
 
+// DefaultDataDir 返回默认数据目录；用户主目录不可用时退回相对目录。
 func DefaultDataDir() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -70,6 +73,7 @@ func DefaultDataDir() string {
 	return filepath.Join(homeDir, ".ai-sync-manager")
 }
 
+// Close 负责关闭数据库并刷新日志缓冲。
 func (r *Runtime) Close() error {
 	if r == nil {
 		return nil

@@ -16,16 +16,17 @@ var (
 
 // Config 日志配置
 type Config struct {
-	Level      string  // 日志级别: debug, info, warn, error
-	FilePath   string  // 日志文件路径
-	MaxSize    int     // 单个日志文件最大大小(MB)
-	MaxBackups int     // 保留的旧日志文件最大数量
-	MaxAge     int     // 保留旧日志文件的最大天数
-	Compress   bool    // 是否压缩旧日志文件
-	ConsoleOut bool    // 是否同时输出到控制台
+	Level      string // 日志级别: debug, info, warn, error
+	FilePath   string // 日志文件路径
+	MaxSize    int    // 单个日志文件最大大小(MB)
+	MaxBackups int    // 保留的旧日志文件最大数量
+	MaxAge     int    // 保留旧日志文件的最大天数
+	Compress   bool   // 是否压缩旧日志文件
+	ConsoleOut bool   // 是否同时输出到控制台
 }
 
-// DefaultConfig 返回默认配置
+// DefaultConfig 返回默认日志配置。
+// 默认同时写文件和控制台，方便 CLI/TUI 调试。
 func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
 	logDir := filepath.Join(homeDir, ".ai-sync-manager", "logs")
@@ -41,7 +42,8 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Init 初始化全局日志器
+// Init 初始化全局日志器。
+// 这里会同时装配滚动文件输出和可选控制台输出。
 func Init(config *Config) error {
 	if config == nil {
 		config = DefaultConfig()
@@ -117,7 +119,7 @@ func Init(config *Config) error {
 	return nil
 }
 
-// L 返回全局 logger
+// L 返回全局 logger；未初始化时会按默认配置懒加载。
 func L() *zap.Logger {
 	if globalLogger == nil {
 		// 如果未初始化，使用默认配置初始化
@@ -126,7 +128,7 @@ func L() *zap.Logger {
 	return globalLogger
 }
 
-// S 返回全局 sugared logger
+// S 返回全局 sugared logger；未初始化时会按默认配置懒加载。
 func S() *zap.SugaredLogger {
 	if sugarLogger == nil {
 		// 如果未初始化，使用默认配置初始化
@@ -135,7 +137,7 @@ func S() *zap.SugaredLogger {
 	return sugarLogger
 }
 
-// Sync 刷新缓冲区
+// Sync 刷新缓冲区，通常在进程退出前调用。
 func Sync() error {
 	if globalLogger != nil {
 		return globalLogger.Sync()
@@ -143,7 +145,7 @@ func Sync() error {
 	return nil
 }
 
-// 便捷方法
+// 下面这些便捷方法用于减少业务层直接触碰全局 logger 的样板代码。
 
 // Debug 输出 debug 级别日志
 func Debug(msg string, fields ...zap.Field) {
@@ -170,7 +172,7 @@ func Fatal(msg string, fields ...zap.Field) {
 	L().Fatal(msg, fields...)
 }
 
-// With 创建带预设字段的 logger
+// With 创建带预设字段的 logger。
 func With(fields ...zap.Field) *zap.Logger {
 	return L().With(fields...)
 }

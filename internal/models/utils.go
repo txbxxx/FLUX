@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// NewSnapshot 创建新快照
+// NewSnapshot 创建一个带默认时间和基础元数据的快照对象。
 func NewSnapshot(message string, tools []string, scope SnapshotScope) *Snapshot {
 	return &Snapshot{
 		ID:          generateID("snap"),
@@ -25,15 +25,15 @@ func NewSnapshot(message string, tools []string, scope SnapshotScope) *Snapshot 
 	}
 }
 
-// generateID 生成唯一 ID
+// generateID 使用时间戳生成轻量唯一 ID。
 func generateID(prefix string) string {
 	timestamp := time.Now().UnixNano()
 	return fmt.Sprintf("%s-%d", prefix, timestamp)
 }
 
-// generateSnapshotName 生成快照名称
+// generateSnapshotName 从消息生成展示用名称。
 func generateSnapshotName(message string) string {
-	// 从消息中提取简短名称
+	// 这里仅做简单截断，避免名称过长影响列表展示。
 	maxLen := 50
 	if len(message) <= maxLen {
 		return message
@@ -41,7 +41,7 @@ func generateSnapshotName(message string) string {
 	return message[:maxLen] + "..."
 }
 
-// ValidateSnapshot 验证快照数据
+// ValidateSnapshot 校验快照的最基础输入合法性。
 func ValidateSnapshot(snapshot *Snapshot) error {
 	if snapshot == nil {
 		return fmt.Errorf("快照不能为空")
@@ -64,7 +64,7 @@ func ValidateSnapshot(snapshot *Snapshot) error {
 	return nil
 }
 
-// ValidateRemoteConfig 验证远端配置
+// ValidateRemoteConfig 验证远端配置的最基础合法性。
 func ValidateRemoteConfig(config *RemoteConfig) error {
 	if config == nil {
 		return fmt.Errorf("配置不能为空")
@@ -85,7 +85,7 @@ func ValidateRemoteConfig(config *RemoteConfig) error {
 	return nil
 }
 
-// isValidGitURL 检查是否为有效的 Git URL
+// isValidGitURL 用简单模式匹配判断 URL 是否像一个 Git 地址。
 func isValidGitURL(url string) bool {
 	patterns := []string{
 		`^https?://`,
@@ -103,7 +103,7 @@ func isValidGitURL(url string) bool {
 	return false
 }
 
-// ValidateSyncConfig 验证同步配置
+// ValidateSyncConfig 校验同步配置中的关键约束。
 func ValidateSyncConfig(config *SyncConfig) error {
 	if config == nil {
 		return fmt.Errorf("同步配置不能为空")
@@ -120,7 +120,8 @@ func ValidateSyncConfig(config *SyncConfig) error {
 	return nil
 }
 
-// CalculateChecksum 计算快照校验和
+// CalculateChecksum 计算快照校验和。
+// 当前实现是轻量占位版本，只基于文件数和总大小。
 func CalculateChecksum(files []SnapshotFile) string {
 	// 简化实现：使用文件数量和总大小作为校验和
 	var totalSize int64
@@ -130,7 +131,7 @@ func CalculateChecksum(files []SnapshotFile) string {
 	return fmt.Sprintf("%d-%d", len(files), totalSize)
 }
 
-// FilterFilesByCategory 按类别过滤文件
+// FilterFilesByCategory 按类别过滤文件。
 func FilterFilesByCategory(files []SnapshotFile, categories []FileCategory) []SnapshotFile {
 	if len(categories) == 0 {
 		return files
@@ -151,7 +152,7 @@ func FilterFilesByCategory(files []SnapshotFile, categories []FileCategory) []Sn
 	return result
 }
 
-// FilterFilesByTool 按工具过滤文件
+// FilterFilesByTool 按工具过滤文件。
 func FilterFilesByTool(files []SnapshotFile, toolTypes []string) []SnapshotFile {
 	if len(toolTypes) == 0 {
 		return files
@@ -172,13 +173,13 @@ func FilterFilesByTool(files []SnapshotFile, toolTypes []string) []SnapshotFile 
 	return result
 }
 
-// GetFileExtension 获取文件扩展名
+// GetFileExtension 返回不带点号的扩展名。
 func GetFileExtension(path string) string {
 	ext := filepath.Ext(path)
 	return strings.TrimPrefix(ext, ".")
 }
 
-// IsConfigFile 判断是否为配置文件
+// IsConfigFile 用扩展名和少量常见文件名判断是否像配置文件。
 func IsConfigFile(path string) bool {
 	configExts := []string{
 		".toml", ".yaml", ".yml", ".json", ".xml", ".ini", ".conf",
@@ -195,7 +196,7 @@ func IsConfigFile(path string) bool {
 	return base == "config" || base == "settings"
 }
 
-// IsBinaryFile 判断是否为二进制文件（简单实现）
+// IsBinaryFile 用扩展名做轻量判断，适合作为启发式过滤。
 func IsBinaryFile(path string) bool {
 	binaryExts := []string{
 		".exe", ".dll", ".so", ".dylib", ".bin", ".img", ".iso",
@@ -213,7 +214,7 @@ func IsBinaryFile(path string) bool {
 	return false
 }
 
-// FormatDuration 格式化时长
+// FormatDuration 把时长格式化为更适合展示的短文本。
 func FormatDuration(d time.Duration) string {
 	if d < time.Second {
 		return fmt.Sprintf("%dms", d.Milliseconds())
@@ -227,7 +228,7 @@ func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%.1fh", d.Hours())
 }
 
-// FormatBytes 格式化字节数
+// FormatBytes 用二进制单位格式化字节数。
 func FormatBytes(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -241,7 +242,7 @@ func FormatBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// CloneSnapshot 克隆快照（深拷贝）
+// CloneSnapshot 对切片字段做深拷贝，避免调用方互相污染。
 func CloneSnapshot(snapshot *Snapshot) *Snapshot {
 	if snapshot == nil {
 		return nil
@@ -258,7 +259,7 @@ func CloneSnapshot(snapshot *Snapshot) *Snapshot {
 	return &clone
 }
 
-// MergeSummary 合并变更摘要
+// MergeSummary 合并多个变更摘要。
 func MergeSummary(summaries ...ChangeSummary) ChangeSummary {
 	result := ChangeSummary{
 		FilesByTool:     make(map[string]int),
@@ -284,7 +285,7 @@ func MergeSummary(summaries ...ChangeSummary) ChangeSummary {
 	return result
 }
 
-// NewTaskProgress 创建任务进度
+// NewTaskProgress 根据当前值和总量创建进度对象。
 func NewTaskProgress(current, total int, message string) TaskProgress {
 	percentage := 0
 	if total > 0 {
@@ -300,12 +301,12 @@ func NewTaskProgress(current, total int, message string) TaskProgress {
 	}
 }
 
-// AddStep 添加步骤到进度
+// AddStep 追加一条进度步骤说明。
 func (p *TaskProgress) AddStep(step string) {
 	p.Steps = append(p.Steps, step)
 }
 
-// UpdateProgress 更新进度
+// UpdateProgress 更新进度计数和展示消息。
 func (p *TaskProgress) UpdateProgress(current, total int, message string) {
 	p.Current = current
 	p.Total = total
@@ -317,12 +318,12 @@ func (p *TaskProgress) UpdateProgress(current, total int, message string) {
 	}
 }
 
-// IsCompleted 检查任务是否完成
+// IsCompleted 判断任务是否到达完成状态。
 func (p *TaskProgress) IsCompleted() bool {
 	return p.Current >= p.Total && p.Total > 0
 }
 
-// NewErrorResponse 创建错误响应
+// NewErrorResponse 创建统一错误响应。
 func NewErrorResponse(code, message, details string) *Response {
 	return &Response{
 		Success: false,
@@ -334,7 +335,7 @@ func NewErrorResponse(code, message, details string) *Response {
 	}
 }
 
-// NewSuccessResponse 创建成功响应
+// NewSuccessResponse 创建统一成功响应。
 func NewSuccessResponse(data interface{}) *Response {
 	return &Response{
 		Success: true,
@@ -342,7 +343,7 @@ func NewSuccessResponse(data interface{}) *Response {
 	}
 }
 
-// ValidatePageRequest 验证分页请求
+// ValidatePageRequest 规范化分页参数到合理范围。
 func ValidatePageRequest(req *PageRequest) error {
 	if req.Page < 1 {
 		req.Page = 1
@@ -356,7 +357,7 @@ func ValidatePageRequest(req *PageRequest) error {
 	return nil
 }
 
-// NewPageResponse 创建分页响应
+// NewPageResponse 根据总量和页参数构建分页结果。
 func NewPageResponse(total int64, page, pageSize int) *PageResponse {
 	pageCount := int(total) / pageSize
 	if int(total)%pageSize > 0 {

@@ -6,6 +6,7 @@ import (
 	spcobra "github.com/spf13/cobra"
 )
 
+// newSnapshotCommand 组装 snapshot 命令树。
 func newSnapshotCommand(deps Dependencies) *spcobra.Command {
 	command := &spcobra.Command{
 		Use:   "snapshot",

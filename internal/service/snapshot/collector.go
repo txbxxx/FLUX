@@ -66,6 +66,7 @@ func (c *Collector) Collect(options CollectOptions) (*CollectResult, error) {
 	return result, nil
 }
 
+// collectGlobalFiles 只收集默认全局规则和自定义全局规则命中的内容。
 func (c *Collector) collectGlobalFiles(options CollectOptions) ([]models.SnapshotFile, []CollectError) {
 	var files []models.SnapshotFile
 	var errors []CollectError
@@ -89,6 +90,7 @@ func (c *Collector) collectGlobalFiles(options CollectOptions) ([]models.Snapsho
 	return files, errors
 }
 
+// collectProjectFiles 收集所有已注册项目规则命中的内容。
 func (c *Collector) collectProjectFiles(options CollectOptions) ([]models.SnapshotFile, []CollectError) {
 	var files []models.SnapshotFile
 	var errors []CollectError
@@ -113,6 +115,7 @@ func (c *Collector) collectProjectFiles(options CollectOptions) ([]models.Snapsh
 	return files, errors
 }
 
+// collectResolvedMatches 用 seen 去重，避免同一文件被多条规则重复纳入。
 func (c *Collector) collectResolvedMatches(
 	matches []tool.ResolvedRuleMatch,
 	toolName string,
@@ -131,6 +134,7 @@ func (c *Collector) collectResolvedMatches(
 	return files, errors
 }
 
+// collectMatch 根据命中项是目录还是文件，分发到不同收集路径。
 func (c *Collector) collectMatch(
 	match tool.ResolvedRuleMatch,
 	toolName string,
@@ -152,6 +156,7 @@ func (c *Collector) collectMatch(
 	return []models.SnapshotFile{*file}, nil
 }
 
+// collectFilesUnderDir 递归遍历目录，但仍会经过排除规则和 seen 去重。
 func (c *Collector) collectFilesUnderDir(
 	basePath string,
 	toolName string,
@@ -219,6 +224,7 @@ func (c *Collector) collectSingleFile(
 		return nil, nil
 	}
 
+	// 快照里保存系统盘根路径下的相对表示，减少跨机器展示时的绝对路径噪音。
 	hash := c.calculateHash(content)
 	relPath, err := filepath.Rel(filepath.VolumeName(cleanPath)+string(filepath.Separator), cleanPath)
 	if err != nil {
@@ -296,13 +302,13 @@ func (c *Collector) categorizeFile(path string, isBinary bool) models.FileCatego
 	return models.CategoryConfig
 }
 
-// calculateHash 计算文件哈希
+// calculateHash 生成内容哈希，供快照校验和去重参考使用。
 func (c *Collector) calculateHash(content []byte) string {
 	hash := sha256.Sum256(content)
 	return hex.EncodeToString(hash[:])
 }
 
-// shouldExclude 检查是否应该排除
+// shouldExclude 同时支持 basename 匹配和路径子串匹配。
 func (c *Collector) shouldExclude(path string, excludes []string) bool {
 	for _, pattern := range excludes {
 		matched, err := filepath.Match(pattern, filepath.Base(path))
@@ -316,7 +322,7 @@ func (c *Collector) shouldExclude(path string, excludes []string) bool {
 	return false
 }
 
-// containsCategory 检查类别是否在列表中
+// containsCategory 用于可选类别过滤。
 func (c *Collector) containsCategory(categories []models.FileCategory, category models.FileCategory) bool {
 	for _, cat := range categories {
 		if cat == category {
@@ -398,7 +404,7 @@ func (c *Collector) CompareFileContent(path1, path2 string) (bool, error) {
 	return bytes.Equal(content1, content2), nil
 }
 
-// BackupFile 备份文件
+// BackupFile 按源文件相对盘符根路径生成备份位置，尽量保留原有目录结构。
 func (c *Collector) BackupFile(src, backupDir string) (string, error) {
 	relPath, err := filepath.Rel(filepath.VolumeName(src)+string(filepath.Separator), src)
 	if err != nil {

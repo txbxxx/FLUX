@@ -9,6 +9,7 @@ import (
 	"ai-sync-manager/internal/models"
 )
 
+// newSnapshotCreateCommand 把命令行参数映射成创建快照用例输入。
 func newSnapshotCreateCommand(deps Dependencies) *spcobra.Command {
 	var tools string
 	var message string
@@ -46,6 +47,7 @@ func newSnapshotCreateCommand(deps Dependencies) *spcobra.Command {
 	return command
 }
 
+// splitCSV / parseScope 负责把 CLI 字符串参数规范化成模型层输入。
 func splitCSV(value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return nil

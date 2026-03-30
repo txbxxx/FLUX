@@ -8,6 +8,7 @@ import (
 	spcobra "github.com/spf13/cobra"
 )
 
+// newScanCommand 组装 scan 命令及其规则管理子命令。
 func newScanCommand(deps Dependencies) *spcobra.Command {
 	command := &spcobra.Command{
 		Use:   "scan [app-or-project...]",

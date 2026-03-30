@@ -14,6 +14,7 @@ import (
 
 const version = "1.0.0-alpha"
 
+// runtimeOptions 收敛命令行入口使用的运行时默认配置。
 func runtimeOptions() appruntime.Options {
 	return appruntime.Options{
 		Version:           version,
@@ -21,6 +22,7 @@ func runtimeOptions() appruntime.Options {
 	}
 }
 
+// main 负责组装运行时依赖，并把 CLI/TUI 所需对象注入命令入口。
 func main() {
 	rt, err := appruntime.New(runtimeOptions())
 	if err != nil {

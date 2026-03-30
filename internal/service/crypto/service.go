@@ -24,7 +24,8 @@ type Service struct {
 	key    []byte
 }
 
-// NewService 创建加密服务
+// NewService 创建加密服务。
+// 未启用加密时会返回一个“直通模式”服务，避免上层反复判空。
 func NewService(config *models.EncryptionConfig) (*Service, error) {
 	if config == nil || !config.Enabled {
 		return &Service{
@@ -36,7 +37,7 @@ func NewService(config *models.EncryptionConfig) (*Service, error) {
 		config: config,
 	}
 
-	// 获取加密密钥
+	// 初始化阶段就把密钥取齐，避免运行时首次加解密才暴露问题。
 	key, err := svc.getEncryptionKey()
 	if err != nil {
 		return nil, fmt.Errorf("获取加密密钥失败: %w", err)
@@ -56,12 +57,12 @@ func NewService(config *models.EncryptionConfig) (*Service, error) {
 	return svc, nil
 }
 
-// Encrypt 加密数据
+// Encrypt 使用 AES-GCM 加密文本，并返回 Base64 编码结果。
 func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
 	if !s.config.Enabled {
 		return &models.EncryptionResult{
-			Success: true,
-			Data:    plaintext, // 未启用加密，直接返回原文
+			Success:   true,
+			Data:      plaintext, // 未启用加密，直接返回原文
 			Algorithm: "none",
 		}, nil
 	}
@@ -118,7 +119,7 @@ func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
 	}, nil
 }
 
-// Decrypt 解密数据
+// Decrypt 解密由 Encrypt 产生的 Base64 密文。
 func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
 	if !s.config.Enabled {
 		return &models.DecryptionResult{
@@ -192,7 +193,7 @@ func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
 	}, nil
 }
 
-// EncryptSensitiveData 加密敏感数据
+// EncryptSensitiveData 把敏感值包装成带类型标识的结构。
 func (s *Service) EncryptSensitiveData(dataType models.SensitiveType, value string) (*models.SensitiveData, error) {
 	result, err := s.Encrypt(value)
 	if err != nil {
@@ -205,7 +206,7 @@ func (s *Service) EncryptSensitiveData(dataType models.SensitiveType, value stri
 	}, nil
 }
 
-// DecryptSensitiveData 解密敏感数据
+// DecryptSensitiveData 解密并返回敏感数据原文。
 func (s *Service) DecryptSensitiveData(data *models.SensitiveData) (string, error) {
 	result, err := s.Decrypt(data.Content)
 	if err != nil {
@@ -215,7 +216,7 @@ func (s *Service) DecryptSensitiveData(data *models.SensitiveData) (string, erro
 	return result.Data, nil
 }
 
-// EncryptPassword 加密密码
+// EncryptPassword / DecryptPassword / EncryptToken 等是按语义区分的薄包装。
 func (s *Service) EncryptPassword(password string) (string, error) {
 	result, err := s.Encrypt(password)
 	if err != nil {
@@ -253,7 +254,7 @@ func (s *Service) DecryptSSHKey(encrypted string) (string, error) {
 	return s.DecryptPassword(encrypted)
 }
 
-// getEncryptionKey 获取加密密钥
+// getEncryptionKey 按“环境变量 -> 密钥文件 -> 自动生成”的顺序取密钥。
 func (s *Service) getEncryptionKey() ([]byte, error) {
 	// 优先级：环境变量 > 密钥文件 > 生成默认密钥
 

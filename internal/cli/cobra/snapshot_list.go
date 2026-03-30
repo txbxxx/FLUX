@@ -6,6 +6,7 @@ import (
 	"ai-sync-manager/internal/app/usecase"
 )
 
+// newSnapshotListCommand 组装本地快照列表命令。
 func newSnapshotListCommand(deps Dependencies) *spcobra.Command {
 	var limit int
 	var offset int

@@ -31,11 +31,20 @@ AI Sync Manager 是一个本地优先的 AI 工具配置管理器，当前主线
 go run -buildvcs=false ./cmd/ai-sync <command>
 ```
 
-构建本地二进制：
+使用 `Makefile` 构建本地二进制：
 
 ```powershell
-go build -buildvcs=false -o ai-sync.exe ./cmd/ai-sync
+make build
 ```
+
+如果你想修改 CLI 名称，例如生成 `sync-tool.exe`：
+
+```powershell
+make build CLI_NAME=sync-tool
+```
+
+默认输出目录是 `bin/`，例如 Windows 下会生成 `bin/ai-sync.exe`。
+如果你需要非 Windows 产物，可以继续直接使用 `go build`，或者执行 `make build GOEXE=`。
 
 查看帮助：
 
@@ -102,7 +111,7 @@ ai-sync tui
 
 ```powershell
 go test ./...
-go build -buildvcs=false ./cmd/ai-sync
+make build
 ```
 
 如果你刚从旧分支切回主线，需要注意：

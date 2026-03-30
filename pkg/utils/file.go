@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// FileExists 判断文件是否存在
+// FileExists 判断路径是否存在且是普通文件。
 func FileExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -15,7 +15,7 @@ func FileExists(path string) bool {
 	return !info.IsDir()
 }
 
-// DirExists 判断目录是否存在
+// DirExists 判断路径是否存在且是目录。
 func DirExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -24,7 +24,7 @@ func DirExists(path string) bool {
 	return info.IsDir()
 }
 
-// EnsureDir 确保目录存在，不存在则创建
+// EnsureDir 确保目录存在，不存在时递归创建。
 func EnsureDir(dir string) error {
 	if DirExists(dir) {
 		return nil
@@ -32,7 +32,7 @@ func EnsureDir(dir string) error {
 	return os.MkdirAll(dir, 0755)
 }
 
-// GetFileSize 获取文件大小
+// GetFileSize 返回文件大小。
 func GetFileSize(path string) (int64, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -41,7 +41,7 @@ func GetFileSize(path string) (int64, error) {
 	return info.Size(), nil
 }
 
-// IsFile 判断路径是否为文件
+// IsFile 是 FileExists 的语义别名，便于调用端表达意图。
 func IsFile(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -50,7 +50,7 @@ func IsFile(path string) bool {
 	return !info.IsDir()
 }
 
-// IsDir 判断路径是否为目录
+// IsDir 是 DirExists 的语义别名，便于调用端表达意图。
 func IsDir(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -59,24 +59,24 @@ func IsDir(path string) bool {
 	return info.IsDir()
 }
 
-// GetFileExt 获取文件扩展名
+// GetFileExt 返回包含点号的文件扩展名。
 func GetFileExt(path string) string {
 	return filepath.Ext(path)
 }
 
-// GetFileNameWithoutExt 获取不带扩展名的文件名
+// GetFileNameWithoutExt 返回不带扩展名的基础文件名。
 func GetFileNameWithoutExt(path string) string {
 	base := filepath.Base(path)
 	ext := filepath.Ext(path)
 	return strings.TrimSuffix(base, ext)
 }
 
-// ReadFile 读取文件内容
+// ReadFile 直接代理 os.ReadFile，保留统一工具入口。
 func ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// WriteFile 写入文件内容
+// WriteFile 写文件前会先确保父目录存在。
 func WriteFile(path string, data []byte) error {
 	// 确保目录存在
 	dir := filepath.Dir(path)
@@ -86,7 +86,7 @@ func WriteFile(path string, data []byte) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// JoinPath 连接路径
+// JoinPath 在空输入时返回空字符串，而不是 "."。
 func JoinPath(parts ...string) string {
 	if len(parts) == 0 {
 		return ""
@@ -94,7 +94,7 @@ func JoinPath(parts ...string) string {
 	return filepath.Join(parts...)
 }
 
-// AbsPath 获取绝对路径
+// AbsPath 返回路径的绝对表示。
 func AbsPath(path string) (string, error) {
 	return filepath.Abs(path)
 }

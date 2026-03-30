@@ -50,6 +50,7 @@ func renderScanPage(m *Model) string {
 	return builder.String()
 }
 
+// displayToolName / displayScanSummaryTitle 统一扫描结果页的展示文案。
 func displayToolName(tool string) string {
 	switch strings.ToLower(strings.TrimSpace(tool)) {
 	case "codex":

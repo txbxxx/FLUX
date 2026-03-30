@@ -17,12 +17,14 @@ type ResolvedRuleMatch struct {
 	ModifiedAt   time.Time
 }
 
+// ResolvedProjectMatch 记录某个已注册项目命中的全部规则结果。
 type ResolvedProjectMatch struct {
 	ProjectName string
 	ProjectPath string
 	Matches     []ResolvedRuleMatch
 }
 
+// ToolRuleReport 是某个工具在当前机器上的完整规则解析结果。
 type ToolRuleReport struct {
 	ToolType             ToolType
 	GlobalPath           string
@@ -39,10 +41,12 @@ type RuleResolver struct {
 	store *RuleStore
 }
 
+// NewRuleResolver 创建规则解析器；store 为空时只解析内置默认规则。
 func NewRuleResolver(store *RuleStore) *RuleResolver {
 	return &RuleResolver{store: store}
 }
 
+// ResolveTool 把默认规则、自定义规则和项目规则统一解析成一个报告。
 func (r *RuleResolver) ResolveTool(toolType ToolType) (*ToolRuleReport, error) {
 	report := &ToolRuleReport{
 		ToolType:   toolType,
@@ -128,6 +132,7 @@ func (r *RuleResolver) ResolveTool(toolType ToolType) (*ToolRuleReport, error) {
 	return report, nil
 }
 
+// resolveRuleDefinitions 把规则定义映射成当前文件系统上真实存在的命中项。
 func resolveRuleDefinitions(basePath string, rules []SyncRuleDefinition) ([]ResolvedRuleMatch, error) {
 	matches := make([]ResolvedRuleMatch, 0, len(rules))
 	for _, rule := range rules {
@@ -158,6 +163,7 @@ func resolveRuleDefinitions(basePath string, rules []SyncRuleDefinition) ([]Reso
 	return matches, nil
 }
 
+// resolveAbsoluteFileRule 用于解析用户登记的绝对路径文件规则。
 func resolveAbsoluteFileRule(toolType ToolType, absolutePath string) (ResolvedRuleMatch, bool, error) {
 	info, err := os.Stat(absolutePath)
 	if err != nil {
@@ -182,6 +188,7 @@ func resolveAbsoluteFileRule(toolType ToolType, absolutePath string) (ResolvedRu
 	}, true, nil
 }
 
+// fileExists 用于 required-path 检查，只认普通文件不认目录。
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()

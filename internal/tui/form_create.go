@@ -12,12 +12,14 @@ import (
 
 func newCreateForm() CreateForm {
 	return CreateForm{
-		Scope:       models.ScopeGlobal,
+		Scope: models.ScopeGlobal,
 	}
 }
 
+// focusCreateForm 当前表单使用纯文本输入，暂不需要额外焦点同步逻辑。
 func (m *Model) focusCreateForm() {}
 
+// nextFormFocus / previousFormFocus 在固定字段集合中循环切换焦点。
 func (m *Model) nextFormFocus() {
 	m.FormFocus++
 	if m.FormFocus > formFocusSubmit {
@@ -34,6 +36,7 @@ func (m *Model) previousFormFocus() {
 	m.focusCreateForm()
 }
 
+// createSnapshotCmd 先创建快照，再顺手刷新列表页数据。
 func (m *Model) createSnapshotCmd() tea.Cmd {
 	input := usecase.CreateSnapshotInput{
 		Tools:       splitTools(m.Form.Tools),
@@ -61,6 +64,7 @@ func (m *Model) createSnapshotCmd() tea.Cmd {
 	}
 }
 
+// splitTools 把逗号分隔输入转换成去空白后的工具列表。
 func splitTools(value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return nil
@@ -78,6 +82,7 @@ func splitTools(value string) []string {
 	return items
 }
 
+// updateFocusedField 只处理当前简化表单需要的退格和普通字符输入。
 func (m *Model) updateFocusedField(value string, msg tea.KeyMsg) string {
 	switch msg.Type {
 	case tea.KeyBackspace:

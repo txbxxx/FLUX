@@ -32,7 +32,8 @@ func NewService(db *database.DB, resolver *tool.RuleResolver) *Service {
 	}
 }
 
-// CreateSnapshot 创建配置快照
+// CreateSnapshot 创建配置快照。
+// 它先按规则收集文件，再生成快照记录和可导出的快照包。
 func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.SnapshotPackage, error) {
 	logger.Info("开始创建快照",
 		zap.Strings("tools", options.Tools),
@@ -56,7 +57,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 		return nil, fmt.Errorf("未找到任何配置文件")
 	}
 
-	// 生成快照 ID 和名称
+	// ID 用于数据库和后续同步；名称主要面向用户展示。
 	snapshotID := uuid.New().String()
 	name := options.Name
 	if name == "" {
@@ -72,7 +73,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 		Extra:       make(map[string]string),
 	}
 
-	// 创建快照
+	// Snapshot 记录完整文件内容，SnapshotPackage 则补充导出/校验所需元数据。
 	snapshot := &models.Snapshot{
 		ID:          snapshotID,
 		Name:        name,
@@ -85,7 +86,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 		Tags:        options.Tags,
 	}
 
-	// 保存到数据库
+	// 先落库，再返回快照包，保证后续列表和详情查询能立即看到结果。
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 	if err := snapshotDAO.Create(snapshot); err != nil {
 		return nil, fmt.Errorf("保存快照失败: %w", err)
@@ -111,7 +112,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 	return pkg, nil
 }
 
-// GetSnapshot 获取快照详情
+// GetSnapshot 获取单个快照详情。
 func (s *Service) GetSnapshot(id string) (*models.Snapshot, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 
@@ -123,7 +124,7 @@ func (s *Service) GetSnapshot(id string) (*models.Snapshot, error) {
 	return snapshot, nil
 }
 
-// ListSnapshots 列出快照
+// ListSnapshots 返回分页快照列表。
 func (s *Service) ListSnapshots(limit, offset int) ([]*models.Snapshot, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 
@@ -135,7 +136,8 @@ func (s *Service) ListSnapshots(limit, offset int) ([]*models.Snapshot, error) {
 	return snapshots, nil
 }
 
-// DeleteSnapshot 删除快照
+// DeleteSnapshot 删除快照。
+// 当前只删除数据库记录；如果未来增加外部存储，应在这里统一扩展清理逻辑。
 func (s *Service) DeleteSnapshot(id string) error {
 	logger.Info("删除快照", zap.String("id", id))
 
@@ -149,7 +151,7 @@ func (s *Service) DeleteSnapshot(id string) error {
 	return nil
 }
 
-// GetSnapshotFiles 获取快照文件列表
+// GetSnapshotFiles 是 GetSnapshot 的轻量包装，供仅关心文件列表的调用方使用。
 func (s *Service) GetSnapshotFiles(id string) ([]models.SnapshotFile, error) {
 	snapshot, err := s.GetSnapshot(id)
 	if err != nil {
@@ -159,7 +161,7 @@ func (s *Service) GetSnapshotFiles(id string) ([]models.SnapshotFile, error) {
 	return snapshot.Files, nil
 }
 
-// ExportSnapshot 导出快照到指定目录
+// ExportSnapshot 把快照文件恢复到指定目录结构下。
 func (s *Service) ExportSnapshot(id string, exportPath string) error {
 	snapshot, err := s.GetSnapshot(id)
 	if err != nil {
@@ -176,7 +178,7 @@ func (s *Service) ExportSnapshot(id string, exportPath string) error {
 		return fmt.Errorf("创建导出目录失败: %w", err)
 	}
 
-	// 导出文件
+	// 这里使用快照内记录的相对路径还原目录结构。
 	for _, file := range snapshot.Files {
 		targetPath := filepath.Join(exportPath, file.Path)
 
@@ -197,7 +199,7 @@ func (s *Service) ExportSnapshot(id string, exportPath string) error {
 	return nil
 }
 
-// CreateBackup 为指定路径创建备份
+// CreateBackup 把现有文件复制到备份目录，供回滚前保护现场使用。
 func (s *Service) CreateBackup(paths []string, backupDir string) (string, error) {
 	logger.Info("创建备份",
 		zap.Int("file_count", len(paths)),
@@ -240,7 +242,7 @@ func (s *Service) CreateBackup(paths []string, backupDir string) (string, error)
 	return backupDir, nil
 }
 
-// ValidateSnapshot 验证快照数据完整性
+// ValidateSnapshot 校验快照最基础的结构完整性，不做深层语义校验。
 func (s *Service) ValidateSnapshot(snapshot *models.Snapshot) error {
 	if snapshot.ID == "" {
 		return fmt.Errorf("快照 ID 不能为空")
@@ -274,7 +276,8 @@ func (s *Service) ValidateSnapshot(snapshot *models.Snapshot) error {
 	return nil
 }
 
-// GetSnapshotsByTool 按工具筛选快照
+// GetSnapshotsByTool 按工具筛选快照。
+// 当前在内存中过滤，适合当前数据规模。
 func (s *Service) GetSnapshotsByTool(toolType string, limit, offset int) ([]*models.Snapshot, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 
@@ -307,7 +310,8 @@ func (s *Service) GetSnapshotsByTool(toolType string, limit, offset int) ([]*mod
 	return filtered[offset:end], nil
 }
 
-// GetSnapshotsByTag 按标签筛选快照
+// GetSnapshotsByTag 按标签筛选快照。
+// 当前在内存中过滤，适合当前数据规模。
 func (s *Service) GetSnapshotsByTag(tag string, limit, offset int) ([]*models.Snapshot, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 
@@ -340,7 +344,7 @@ func (s *Service) GetSnapshotsByTag(tag string, limit, offset int) ([]*models.Sn
 	return filtered[offset:end], nil
 }
 
-// CountSnapshots 统计快照数量
+// CountSnapshots 返回当前本地快照总数。
 func (s *Service) CountSnapshots() (int, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 	return snapshotDAO.Count()

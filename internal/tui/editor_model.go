@@ -25,6 +25,7 @@ func (k editorKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{{k.Save, k.Quit}}
 }
 
+// editorBuffer 用极简行缓冲实现终端编辑，不依赖外部编辑器组件。
 type editorBuffer struct {
 	ShowLineNumbers bool
 	lines           []string
@@ -32,6 +33,7 @@ type editorBuffer struct {
 	height          int
 }
 
+// newEditorBuffer 创建带默认尺寸的编辑缓冲。
 func newEditorBuffer(content string) editorBuffer {
 	buffer := editorBuffer{
 		ShowLineNumbers: true,
@@ -42,6 +44,7 @@ func newEditorBuffer(content string) editorBuffer {
 	return buffer
 }
 
+// SetValue 会先统一换行符，再拆成按行编辑的内部结构。
 func (b *editorBuffer) SetValue(content string) {
 	normalized := strings.ReplaceAll(content, "\r\n", "\n")
 	b.lines = strings.Split(normalized, "\n")
@@ -50,6 +53,7 @@ func (b *editorBuffer) SetValue(content string) {
 	}
 }
 
+// Value 把当前缓冲重新拼成完整文本。
 func (b editorBuffer) Value() string {
 	return strings.Join(b.lines, "\n")
 }
@@ -70,6 +74,7 @@ func (b editorBuffer) Height() int {
 	return b.height
 }
 
+// EditorModel 保存终端编辑器的全部状态。
 type EditorModel struct {
 	result          *usecase.GetConfigResult
 	editor          editorBuffer
@@ -87,6 +92,7 @@ type EditorModel struct {
 	scrollOffset    int
 }
 
+// newEditorModel 根据配置读取结果创建编辑器状态。
 func newEditorModel(result *usecase.GetConfigResult, save func(string) error) *EditorModel {
 	buffer := newEditorBuffer(result.Content)
 
@@ -112,10 +118,12 @@ func newEditorModel(result *usecase.GetConfigResult, save func(string) error) *E
 	}
 }
 
+// Init 当前没有预加载命令。
 func (m *EditorModel) Init() tea.Cmd {
 	return nil
 }
 
+// Update 处理窗口尺寸变化、保存、退出和基础文本编辑行为。
 func (m *EditorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -187,6 +195,7 @@ func (m *EditorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View 渲染标题、状态栏、编辑区和帮助信息。
 func (m *EditorModel) View() string {
 	title := lipgloss.NewStyle().Bold(true).Render(
 		fmt.Sprintf("%s > %s", displayEditorToolName(m.result.Tool), m.result.RelativePath),
@@ -203,6 +212,7 @@ func (m *EditorModel) View() string {
 	}, "\n")
 }
 
+// renderBuffer 只渲染当前视口内的内容，避免大文件时整屏重排。
 func (m *EditorModel) renderBuffer() string {
 	var lines []string
 
@@ -231,6 +241,7 @@ func (m *EditorModel) renderBuffer() string {
 	return strings.Join(lines, "\n")
 }
 
+// resizeEditor 根据终端窗口尺寸调整可视区大小。
 func (m *EditorModel) resizeEditor() {
 	editorWidth := max(20, m.width-4)
 	editorHeight := max(5, m.height-6)
@@ -238,6 +249,7 @@ func (m *EditorModel) resizeEditor() {
 	m.editor.SetHeight(editorHeight)
 }
 
+// insertRunes 在当前光标位置插入文本。
 func (m *EditorModel) insertRunes(value string) {
 	line := m.editor.lines[m.cursorRow]
 	if m.cursorCol > len(line) {
@@ -247,6 +259,7 @@ func (m *EditorModel) insertRunes(value string) {
 	m.cursorCol += len(value)
 }
 
+// insertNewLine 把当前行拆成两行，模拟常规编辑器的回车行为。
 func (m *EditorModel) insertNewLine() {
 	line := m.editor.lines[m.cursorRow]
 	head := line[:m.cursorCol]
@@ -257,6 +270,7 @@ func (m *EditorModel) insertNewLine() {
 	m.cursorCol = 0
 }
 
+// deleteBackward 实现退格：优先删当前字符，行首时与上一行合并。
 func (m *EditorModel) deleteBackward() {
 	if m.cursorCol > 0 {
 		line := m.editor.lines[m.cursorRow]
@@ -276,6 +290,7 @@ func (m *EditorModel) deleteBackward() {
 	m.cursorRow--
 }
 
+// ensureCursorInBounds 防止光标因窗口变化或编辑操作越界。
 func (m *EditorModel) ensureCursorInBounds() {
 	if len(m.editor.lines) == 0 {
 		m.editor.lines = []string{""}
@@ -284,6 +299,7 @@ func (m *EditorModel) ensureCursorInBounds() {
 	m.cursorCol = clamp(m.cursorCol, 0, len(m.editor.lines[m.cursorRow]))
 }
 
+// ensureViewport 保证光标始终落在当前可视区域内。
 func (m *EditorModel) ensureViewport() {
 	height := m.editor.Height()
 	if m.cursorRow < m.scrollOffset {
@@ -299,6 +315,7 @@ func (m *EditorModel) ensureViewport() {
 	}
 }
 
+// updateDirtyState 根据当前内容和原始内容比较来更新脏状态。
 func (m *EditorModel) updateDirtyState() {
 	m.dirty = m.editor.Value() != m.originalContent
 	if m.dirty {
@@ -306,11 +323,13 @@ func (m *EditorModel) updateDirtyState() {
 	}
 }
 
+// insertCursor 用可见字符标记光标位置，保持纯文本渲染简单可控。
 func insertCursor(line string, col int) string {
 	col = clamp(col, 0, len(line))
 	return line[:col] + "|" + line[col:]
 }
 
+// displayEditorToolName 统一编辑器标题中的工具展示名。
 func displayEditorToolName(name string) string {
 	switch name {
 	case "codex":
@@ -322,6 +341,7 @@ func displayEditorToolName(name string) string {
 	}
 }
 
+// clamp 用于光标和滚动范围约束。
 func clamp(v, low, high int) int {
 	if high < low {
 		low, high = high, low

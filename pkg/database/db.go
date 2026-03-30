@@ -11,8 +11,8 @@ import (
 
 	"ai-sync-manager/pkg/logger"
 
-	_ "modernc.org/sqlite"
 	"go.uber.org/zap"
+	_ "modernc.org/sqlite"
 )
 
 // DB 数据库实例
@@ -28,7 +28,7 @@ var (
 	once     sync.Once
 )
 
-// InitDB 初始化数据库
+// InitDB 初始化数据库单例，并完成首次迁移。
 func InitDB(dataDir string) (*DB, error) {
 	var initErr error
 	once.Do(func() {
@@ -44,7 +44,7 @@ func InitDB(dataDir string) (*DB, error) {
 			closed: false,
 		}
 
-		// 打开数据库连接
+		// SQLite 以单文件形式落在数据目录下，便于本地优先场景备份和迁移。
 		conn, err := sql.Open("sqlite", dbPath)
 		if err != nil {
 			initErr = fmt.Errorf("打开数据库失败: %w", err)
@@ -80,7 +80,7 @@ func InitDB(dataDir string) (*DB, error) {
 	return instance, nil
 }
 
-// GetDB 获取数据库实例
+// GetDB 返回当前进程内的数据库单例。
 func GetDB() *DB {
 	return instance
 }
@@ -110,14 +110,14 @@ func (db *DB) IsClosed() bool {
 	return db.closed
 }
 
-// GetConn 获取底层连接（仅供内部使用）
+// GetConn 暴露底层连接给 DAO 层使用。
 func (db *DB) GetConn() *sql.DB {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.conn
 }
 
-// migrate 执行数据库迁移
+// migrate 在单个事务里完成建表、建索引和建触发器，避免半迁移状态。
 func (db *DB) migrate() error {
 	conn := db.GetConn()
 
@@ -151,7 +151,7 @@ func (db *DB) migrate() error {
 	return nil
 }
 
-// createTables 创建表
+// createTables 维护当前应用需要的全部逻辑表。
 func (db *DB) createTables(tx *sql.Tx) error {
 	tables := []string{
 		`CREATE TABLE IF NOT EXISTS snapshots (
