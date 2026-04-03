@@ -53,3 +53,4 @@ temp/
 
 # Git worktrees
 .worktrees/
+.codex/worktrees/
