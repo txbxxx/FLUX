@@ -89,6 +89,39 @@ func (dao *RegisteredProjectDAO) ListByTool(toolType string) ([]*RegisteredProje
 	return projects, nil
 }
 
+// GetByToolAndName 根据工具类型和项目名查找已注册项目。
+func (dao *RegisteredProjectDAO) GetByToolAndName(toolType, projectName string) (*RegisteredProject, error) {
+	conn := dao.db.GetConn()
+
+	query := `
+		SELECT id, tool_type, project_name, project_path, created_at, updated_at
+		FROM registered_projects
+		WHERE tool_type = ? AND project_name = ?
+		LIMIT 1
+	`
+
+	row := conn.QueryRow(query, toolType, projectName)
+
+	var (
+		id, loadedToolType, foundProjectName, projectPath string
+		createdAt, updatedAt                                int64
+	)
+
+	err := row.Scan(&id, &loadedToolType, &foundProjectName, &projectPath, &createdAt, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RegisteredProject{
+		ID:          id,
+		ToolType:    loadedToolType,
+		ProjectName: foundProjectName,
+		ProjectPath: projectPath,
+		CreatedAt:   time.Unix(createdAt, 0),
+		UpdatedAt:   time.Unix(updatedAt, 0),
+	}, nil
+}
+
 // DeleteByToolAndPath 删除指定工具与路径的已注册项目。
 func (dao *RegisteredProjectDAO) DeleteByToolAndPath(toolType, projectPath string) error {
 	conn := dao.db.GetConn()

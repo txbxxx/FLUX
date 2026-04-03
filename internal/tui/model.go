@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/models"
 )
 
 type Workflow interface {
@@ -30,7 +29,7 @@ const (
 	formFocusTools = iota
 	formFocusMessage
 	formFocusName
-	formFocusProjectPath
+	formFocusProjectName
 	formFocusSubmit
 )
 
@@ -45,8 +44,7 @@ type CreateForm struct {
 	Tools       string
 	Message     string
 	Name        string
-	ProjectPath string
-	Scope       models.SnapshotScope
+	ProjectName string // 项目名称（必填）
 }
 
 type KeyMap struct {

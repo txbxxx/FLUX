@@ -6,13 +6,31 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
+	"ai-sync-manager/pkg/config"
 	"ai-sync-manager/pkg/utils"
 )
 
+// toolsConfig 全局工具配置，由 Runtime 注入。
+var (
+	toolsCfg     map[string]config.ToolConfig
+	toolsCfgOnce sync.Once
+)
+
+// SetToolsConfig 注入从 YAML 加载的工具配置。
+func SetToolsConfig(cfg map[string]config.ToolConfig) {
+	toolsCfg = cfg
+}
+
 // GetDefaultGlobalPath 返回工具在用户主目录下的默认全局配置目录。
+// 优先从 YAML 配置读取，回退到硬编码默认值。
 func GetDefaultGlobalPath(toolType ToolType) string {
 	homeDir := GetUserHomeDir()
+
+	if tc, ok := toolsCfg[string(toolType)]; ok && tc.GlobalDir != "" {
+		return filepath.Join(homeDir, tc.GlobalDir)
+	}
 
 	switch toolType {
 	case ToolTypeCodex:
@@ -25,7 +43,12 @@ func GetDefaultGlobalPath(toolType ToolType) string {
 }
 
 // GetDefaultProjectPath 返回项目根目录下的默认配置子目录名。
+// 优先从 YAML 配置读取，回退到硬编码默认值。
 func GetDefaultProjectPath(toolType ToolType) string {
+	if tc, ok := toolsCfg[string(toolType)]; ok && tc.ProjectDir != "" {
+		return tc.ProjectDir
+	}
+
 	switch toolType {
 	case ToolTypeCodex:
 		return ".codex"

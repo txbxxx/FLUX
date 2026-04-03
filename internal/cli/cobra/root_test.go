@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/models"
 )
 
 type stubWorkflow struct {
@@ -437,13 +436,13 @@ func TestExecuteSnapshotCreateParsesFlags(t *testing.T) {
 		"--tools", "codex,claude",
 		"--message", "before change",
 		"--name", "Daily backup",
-		"--scope", "global",
+		"--project", "codex-global",
 	})
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
-	if workflow.createInput.Scope != models.ScopeGlobal || len(workflow.createInput.Tools) != 2 {
+	if workflow.createInput.ProjectName != "codex-global" || len(workflow.createInput.Tools) != 2 {
 		t.Fatalf("unexpected create input: %+v", workflow.createInput)
 	}
 	if !strings.Contains(stdout.String(), "snap-1") || !strings.Contains(stdout.String(), "文件数: 3") {

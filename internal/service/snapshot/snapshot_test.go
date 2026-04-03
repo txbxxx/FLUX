@@ -28,9 +28,9 @@ func TestCollector_Collect(t *testing.T) {
 
 	// 收集文件
 	options := CollectOptions{
-		Tools:      []string{"codex"},
-		Scope:      models.ScopeGlobal,
-		Categories: []models.FileCategory{models.CategoryConfig},
+		Tools:       []string{"codex"},
+		ProjectPath: tempDir,
+		Categories:  []models.FileCategory{models.CategoryConfig},
 	}
 
 	// 由于路径不存在，应该返回空结果但不报错
@@ -44,7 +44,7 @@ func TestService_CreateSnapshot(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	service := NewService(db, tool.NewRuleResolver(nil))
+	service := NewService(db, tool.NewRuleResolver(nil), tool.NewRuleManager(db))
 
 	// 创建测试配置目录
 	tempDir := t.TempDir()
@@ -57,11 +57,14 @@ func TestService_CreateSnapshot(t *testing.T) {
 	require.NoError(t, os.WriteFile(testFile, testContent, 0644))
 
 	// 创建快照选项
+	ruleManager := tool.NewRuleManager(db)
+	ruleManager.EnsureGlobalProjectsRegistered()
+
 	options := models.CreateSnapshotOptions{
-		Message: "Test snapshot",
-		Tools:   []string{"codex"},
-		Scope:   models.ScopeBoth,
-		Tags:    []string{"test"},
+		Message:     "Test snapshot",
+		Tools:       []string{"codex"},
+		ProjectName: "codex-global",
+		Tags:        []string{"test"},
 	}
 
 	// 由于路径不是实际的全局路径，收集会失败
@@ -77,7 +80,7 @@ func TestService_ListSnapshots(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	service := NewService(db, tool.NewRuleResolver(nil))
+	service := NewService(db, tool.NewRuleResolver(nil), tool.NewRuleManager(db))
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
@@ -100,7 +103,7 @@ func TestService_ListSnapshots(t *testing.T) {
 			},
 		},
 		Metadata: models.SnapshotMetadata{
-			Scope: models.ScopeGlobal,
+			
 		},
 	}
 
@@ -120,7 +123,7 @@ func TestService_GetSnapshot(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	service := NewService(db, tool.NewRuleResolver(nil))
+	service := NewService(db, tool.NewRuleResolver(nil), tool.NewRuleManager(db))
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
@@ -143,7 +146,7 @@ func TestService_GetSnapshot(t *testing.T) {
 			},
 		},
 		Metadata: models.SnapshotMetadata{
-			Scope: models.ScopeGlobal,
+			
 		},
 	}
 
@@ -164,7 +167,7 @@ func TestService_GetSnapshot_NotFound(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	service := NewService(db, tool.NewRuleResolver(nil))
+	service := NewService(db, tool.NewRuleResolver(nil), tool.NewRuleManager(db))
 
 	// 获取不存在的快照
 	_, err = service.GetSnapshot("non-existent")
@@ -176,7 +179,7 @@ func TestService_DeleteSnapshot(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	service := NewService(db, tool.NewRuleResolver(nil))
+	service := NewService(db, tool.NewRuleResolver(nil), tool.NewRuleManager(db))
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
@@ -187,7 +190,7 @@ func TestService_DeleteSnapshot(t *testing.T) {
 		Tools:     []string{"codex"},
 		Files:     []models.SnapshotFile{},
 		Metadata: models.SnapshotMetadata{
-			Scope: models.ScopeGlobal,
+			
 		},
 	}
 
@@ -209,7 +212,7 @@ func TestService_ValidateSnapshot(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	service := NewService(db, tool.NewRuleResolver(nil))
+	service := NewService(db, tool.NewRuleResolver(nil), tool.NewRuleManager(db))
 
 	// 有效快照
 	validSnapshot := &models.Snapshot{
@@ -292,7 +295,7 @@ func TestService_ExportSnapshot(t *testing.T) {
 			},
 		},
 		Metadata: models.SnapshotMetadata{
-			Scope: models.ScopeProject,
+			
 		},
 	}
 
@@ -324,7 +327,7 @@ func TestService_CountSnapshots(t *testing.T) {
 	db, err := database.InitTestDB(t)
 	require.NoError(t, err)
 
-	service := NewService(db, tool.NewRuleResolver(nil))
+	service := NewService(db, tool.NewRuleResolver(nil), tool.NewRuleManager(db))
 
 	// 初始计数
 	count, err := service.CountSnapshots()
@@ -342,7 +345,7 @@ func TestService_CountSnapshots(t *testing.T) {
 			Tools:     []string{"codex"},
 			Files:     []models.SnapshotFile{},
 			Metadata: models.SnapshotMetadata{
-				Scope: models.ScopeGlobal,
+				
 			},
 		}
 		err = snapshotDAO.Create(snapshot)
@@ -382,7 +385,7 @@ func TestApplier_ApplySnapshot(t *testing.T) {
 			},
 		},
 		Metadata: models.SnapshotMetadata{
-			Scope: models.ScopeGlobal,
+			
 		},
 	}
 
@@ -433,7 +436,7 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 			},
 		},
 		Metadata: models.SnapshotMetadata{
-			Scope: models.ScopeGlobal,
+			
 		},
 	}
 
@@ -468,7 +471,7 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 			},
 		},
 		Metadata: models.SnapshotMetadata{
-			Scope: models.ScopeGlobal,
+			
 		},
 	}
 
@@ -586,11 +589,11 @@ func TestServiceCreateSnapshotIncludesRegisteredProjectAndCustomRule(t *testing.
 	require.NoError(t, manager.AddCustomRule(tool.ToolTypeClaude, customFile))
 	require.NoError(t, manager.AddProject(tool.ToolTypeCodex, "demo", projectPath))
 
-	service := NewService(db, tool.NewRuleResolver(manager.Store()))
+	service := NewService(db, tool.NewRuleResolver(manager.Store()), manager)
 	pkg, err := service.CreateSnapshot(models.CreateSnapshotOptions{
-		Message: "test snapshot",
-		Tools:   []string{"claude", "codex"},
-		Scope:   models.ScopeBoth,
+		Message:     "test snapshot",
+		Tools:       []string{"claude", "codex"},
+		ProjectName: "demo",
 	})
 	require.NoError(t, err)
 

@@ -57,11 +57,18 @@ ai-sync-manager/
 │       └── *.go          # HTTP/gRPC 处理器
 │
 ├── pkg/                  # 公共包（可被外部引用）
+│   ├── config/           # YAML 配置加载
+│   │   ├── config.go     # 配置类型、加载、合并逻辑
+│   │   ├── embed.go      # go:embed 嵌入默认配置
+│   │   └── default.yaml  # 默认配置（嵌入二进制）
 │   ├── database/         # 通用数据库工具
 │   │   └── db.go         # 连接、迁移、事务管理
 │   ├── errors/           # 错误处理
 │   ├── logger/           # 日志系统（基于 zap）
 │   └── utils/            # 工具函数
+│
+├── configs/              # 配置文件模板（供参考）
+│   └── default.yaml      # 默认配置模板（与 pkg/config/default.yaml 同步）
 │
 ├── frontend/             # Vue 3 前端
 │   ├── src/
@@ -324,6 +331,13 @@ wails build -clean
 - 支持：密码、Token、SSH 密钥加密
 - 密钥来源：环境变量、密钥文件、自动生成
 - **便捷方法**: EncryptPassword, EncryptToken, EncryptSSHKey
+
+### 8. YAML 配置系统 (`pkg/config`)
+- **Config**: 应用全局配置结构体
+- **加载链**: 嵌入默认值 (`default.yaml`) → 用户覆盖 (`~/.ai-sync-manager/config.yaml`)
+- **覆盖范围**: 应用配置、日志、数据库、同步默认值、工具规则定义
+- **向后兼容**: 无用户配置文件时行为与改造前完全一致
+- **接口约定**: `DatabaseConfig` 实现 `database.DatabaseConfig` 接口（`GetFilename`, `GetMaxOpenConns` 等）
 
 ---
 

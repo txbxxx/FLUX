@@ -28,8 +28,37 @@ var (
 	once     sync.Once
 )
 
-// InitDB 初始化数据库单例，并完成首次迁移。
+// DatabaseConfig 数据库配置接口（避免直接依赖 config 包）。
+type DatabaseConfig interface {
+	GetFilename() string
+	GetMaxOpenConns() int
+	GetMaxIdleConns() int
+	GetConnMaxLifetime() time.Duration
+	GetPragmas() map[string]interface{}
+}
+
+// defaultDBConfig 默认数据库配置（向后兼容）。
+type defaultDBConfig struct{}
+
+func (d *defaultDBConfig) GetFilename() string                { return "ai-sync-manager.db" }
+func (d *defaultDBConfig) GetMaxOpenConns() int               { return 1 }
+func (d *defaultDBConfig) GetMaxIdleConns() int               { return 1 }
+func (d *defaultDBConfig) GetConnMaxLifetime() time.Duration  { return time.Hour }
+func (d *defaultDBConfig) GetPragmas() map[string]interface{} {
+	return map[string]interface{}{"foreign_keys": true}
+}
+
+// InitDB 初始化数据库单例（使用默认配置）。
 func InitDB(dataDir string) (*DB, error) {
+	return InitDBWithConfig(dataDir, nil)
+}
+
+// InitDBWithConfig 使用指定配置初始化数据库单例；cfg 为 nil 时使用默认值。
+func InitDBWithConfig(dataDir string, cfg DatabaseConfig) (*DB, error) {
+	if cfg == nil {
+		cfg = &defaultDBConfig{}
+	}
+
 	var initErr error
 	once.Do(func() {
 		// 确保数据目录存在
@@ -38,7 +67,7 @@ func InitDB(dataDir string) (*DB, error) {
 			return
 		}
 
-		dbPath := filepath.Join(dataDir, "ai-sync-manager.db")
+		dbPath := filepath.Join(dataDir, cfg.GetFilename())
 		instance = &DB{
 			path:   dbPath,
 			closed: false,
@@ -54,14 +83,17 @@ func InitDB(dataDir string) (*DB, error) {
 		instance.conn = conn
 
 		// 设置连接池参数
-		instance.conn.SetMaxOpenConns(1) // SQLite 只能单写
-		instance.conn.SetMaxIdleConns(1)
-		instance.conn.SetConnMaxLifetime(time.Hour)
+		instance.conn.SetMaxOpenConns(cfg.GetMaxOpenConns())
+		instance.conn.SetMaxIdleConns(cfg.GetMaxIdleConns())
+		instance.conn.SetConnMaxLifetime(cfg.GetConnMaxLifetime())
 
-		// 启用外键约束
-		if _, err := instance.conn.Exec("PRAGMA foreign_keys = ON"); err != nil {
-			initErr = fmt.Errorf("启用外键约束失败: %w", err)
-			return
+		// 执行 PRAGMA 设置
+		for key, val := range cfg.GetPragmas() {
+			pragmaSQL := fmt.Sprintf("PRAGMA %s = %v", key, val)
+			if _, err := instance.conn.Exec(pragmaSQL); err != nil {
+				initErr = fmt.Errorf("设置 PRAGMA %s 失败: %w", key, err)
+				return
+			}
 		}
 
 		// 运行迁移

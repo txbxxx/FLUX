@@ -7,12 +7,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/models"
 )
 
 func newCreateForm() CreateForm {
 	return CreateForm{
-		Scope: models.ScopeGlobal,
+		// ProjectName 由用户输入，无默认值
 	}
 }
 
@@ -42,8 +41,7 @@ func (m *Model) createSnapshotCmd() tea.Cmd {
 		Tools:       splitTools(m.Form.Tools),
 		Message:     strings.TrimSpace(m.Form.Message),
 		Name:        strings.TrimSpace(m.Form.Name),
-		Scope:       m.Form.Scope,
-		ProjectPath: strings.TrimSpace(m.Form.ProjectPath),
+		ProjectName: strings.TrimSpace(m.Form.ProjectName),
 	}
 
 	return func() tea.Msg {

@@ -1,0 +1,92 @@
+# AI Sync Manager 默认配置
+# 此文件通过 go:embed 嵌入二进制，用户可在 ~/.ai-sync-manager/config.yaml 中覆盖
+
+app:
+  version: "1.0.0-alpha"
+  data_dir: "~/.ai-sync-manager"
+
+logger:
+  level: "info"
+  file_path: "~/.ai-sync-manager/logs/app.log"
+  max_size: 10
+  max_backups: 5
+  max_age: 30
+  compress: true
+  console_out: true
+
+database:
+  filename: "ai-sync-manager.db"
+  max_open_conns: 1
+  max_idle_conns: 1
+  conn_max_lifetime: "1h"
+  pragmas:
+    foreign_keys: true
+
+sync:
+  default_branch: "main"
+  default_remote: "origin"
+
+tools:
+  codex:
+    global_dir: ".codex"
+    project_dir: ".codex"
+    required_global_paths:
+      - "config.toml"
+    global_rules:
+      - path: "config.toml"
+        category: "config"
+        is_dir: false
+      - path: "skills"
+        category: "skills"
+        is_dir: true
+      - path: "rules"
+        category: "rules"
+        is_dir: true
+      - path: "superpowers"
+        category: "config"
+        is_dir: true
+    project_rules:
+      - path: ".codex"
+        category: "config"
+        is_dir: true
+      - path: "AGENTS.md"
+        category: "agents"
+        is_dir: false
+
+  claude:
+    global_dir: ".claude"
+    project_dir: ".claude"
+    required_global_paths:
+      - "settings.json"
+    global_rules:
+      - path: "settings.json"
+        category: "config"
+        is_dir: false
+      - path: "CLAUDE.md"
+        category: "config"
+        is_dir: false
+      - path: "commands"
+        category: "commands"
+        is_dir: true
+      - path: "skills"
+        category: "skills"
+        is_dir: true
+      - path: "output-styles"
+        category: "config"
+        is_dir: true
+      - path: "plugins/blocklist.json"
+        category: "plugins"
+        is_dir: false
+      - path: "plugins/installed_plugins.json"
+        category: "plugins"
+        is_dir: false
+      - path: "plugins/known_marketplaces.json"
+        category: "plugins"
+        is_dir: false
+    project_rules:
+      - path: ".claude"
+        category: "config"
+        is_dir: true
+      - path: "CLAUDE.md"
+        category: "config"
+        is_dir: false

@@ -134,8 +134,7 @@ type CreateSnapshotInput struct {
 	Tools       []string
 	Message     string
 	Name        string
-	Scope       models.SnapshotScope
-	ProjectPath string
+	ProjectName string
 }
 
 type SnapshotSummary struct {
@@ -411,18 +410,19 @@ func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotIn
 			Err:        errors.New("empty message"),
 		}
 	}
-
-	scope := input.Scope
-	if scope == "" {
-		scope = models.ScopeGlobal
+	if strings.TrimSpace(input.ProjectName) == "" {
+		return nil, &UserError{
+			Message:    "创建快照失败：必须指定项目名称",
+			Suggestion: "请使用 --project 参数指定项目（如 codex-global、claude-global 或用户注册的项目）",
+			Err:        errors.New("empty project name"),
+		}
 	}
 
 	pkg, err := w.snapshots.CreateSnapshot(models.CreateSnapshotOptions{
 		Message:     strings.TrimSpace(input.Message),
 		Tools:       input.Tools,
 		Name:        strings.TrimSpace(input.Name),
-		ProjectPath: strings.TrimSpace(input.ProjectPath),
-		Scope:       scope,
+		ProjectName: strings.TrimSpace(input.ProjectName),
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "未找到任何配置文件") {

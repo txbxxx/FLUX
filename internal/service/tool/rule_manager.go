@@ -216,3 +216,53 @@ func normalizeExistingPath(path string) (string, os.FileInfo, error) {
 
 	return filepath.Clean(resolvedPath), info, nil
 }
+
+// EnsureGlobalProjectsRegistered 确保全局项目已注册到数据库。
+// 自动注册 codex-global 和 claude-global，使全局配置也能作为项目管理。
+func (m *RuleManager) EnsureGlobalProjectsRegistered() error {
+	if m == nil || m.store == nil || m.store.projects == nil {
+		return nil // 数据库未初始化，跳过
+	}
+
+	// 为每个工具注册全局项目
+	globalProjects := []struct {
+		toolType ToolType
+		name     string
+	}{
+		{ToolTypeCodex, "codex-global"},
+		{ToolTypeClaude, "claude-global"},
+	}
+
+	for _, gp := range globalProjects {
+		if err := m.ensureOneGlobalProject(gp.toolType, gp.name); err != nil {
+			return fmt.Errorf("注册全局项目 %s 失败: %w", gp.name, err)
+		}
+	}
+
+	return nil
+}
+
+// ensureOneGlobalProject 确保单个全局项目已注册。
+func (m *RuleManager) ensureOneGlobalProject(toolType ToolType, projectName string) error {
+	// 检查是否已存在
+	existing, err := m.store.projects.GetByToolAndName(toolType.String(), projectName)
+	if err == nil && existing != nil {
+		return nil // 已存在，无需注册
+	}
+
+	// 不存在则注册
+	globalPath := GetDefaultGlobalPath(toolType)
+	if globalPath == "" {
+		return fmt.Errorf("无法获取 %s 的全局路径", toolType)
+	}
+
+	now := time.Now()
+	return m.store.projects.Create(&models.RegisteredProject{
+		ID:          uuid.New().String(),
+		ToolType:    toolType.String(),
+		ProjectName: projectName,
+		ProjectPath: globalPath,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+}

@@ -132,6 +132,7 @@ func TestLocalWorkflowScanMapsDetectedTools(t *testing.T) {
 	detector := &stubDetector{
 		result: &tool.ToolDetectionResult{
 			Codex: &tool.ToolInstallation{
+				
 				Scope:      tool.ScopeGlobal,
 				ToolType:   tool.ToolTypeCodex,
 				Status:     tool.StatusInstalled,
@@ -142,22 +143,24 @@ func TestLocalWorkflowScanMapsDetectedTools(t *testing.T) {
 				},
 			},
 			Claude: &tool.ToolInstallation{
-				Scope:       tool.ScopeGlobal,
+				
 				ToolType:    tool.ToolTypeClaude,
+				Scope:      tool.ScopeGlobal,
 				Status:      tool.StatusInstalled,
 				GlobalPath:  "/home/test/.claude",
 				ConfigFiles: []tool.ConfigFile{{Name: "settings.json", Path: "/home/test/.claude/settings.json", Category: tool.CategoryConfigFile}},
 			},
 			ProjectInstallations: []*tool.ToolInstallation{
 				{
-					Scope:       tool.ScopeProject,
+					Scope:      tool.ScopeProject,
+					
 					ToolType:    tool.ToolTypeCodex,
 					Status:      tool.StatusInstalled,
 					ProjectName: "demo",
 					ProjectPath: "/workspace/demo",
 					ConfigFiles: []tool.ConfigFile{
-						{Name: ".codex", Path: "/workspace/demo/.codex", Category: tool.CategoryConfigFile, Scope: tool.ScopeProject, IsDir: true},
-						{Name: "AGENTS.md", Path: "/workspace/demo/AGENTS.md", Category: tool.CategoryAgents, Scope: tool.ScopeProject},
+						{Name: ".codex", Path: "/workspace/demo/.codex", Category: tool.CategoryConfigFile, IsDir: true},
+						{Name: "AGENTS.md", Path: "/workspace/demo/AGENTS.md", Category: tool.CategoryAgents},
 					},
 				},
 			},
@@ -252,13 +255,14 @@ func TestLocalWorkflowCreateSnapshotMapsServiceResult(t *testing.T) {
 		Tools:   []string{"codex", "claude"},
 		Message: "backup before change",
 		Name:    "Daily backup",
-		Scope:   models.ScopeGlobal,
+		ProjectName: "codex-global",
+		
 	})
 	if err != nil {
 		t.Fatalf("CreateSnapshot() error = %v", err)
 	}
 
-	if service.createInput.Scope != models.ScopeGlobal || service.createInput.Message != "backup before change" {
+	if service.createInput.ProjectName != "codex-global" || service.createInput.Message != "backup before change" {
 		t.Fatalf("unexpected create input: %+v", service.createInput)
 	}
 	if result.ID != "snap-123" || result.FileCount != 4 || result.Size != 2048 {
@@ -269,10 +273,10 @@ func TestLocalWorkflowCreateSnapshotMapsServiceResult(t *testing.T) {
 func TestLocalWorkflowScanFiltersApps(t *testing.T) {
 	workflow := NewLocalWorkflow(&stubDetector{
 		result: &tool.ToolDetectionResult{
-			Codex:  &tool.ToolInstallation{Scope: tool.ScopeGlobal, ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, GlobalPath: "/home/test/.codex"},
+			Codex:  &tool.ToolInstallation{ ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, GlobalPath: "/home/test/.codex"},
 			Claude: &tool.ToolInstallation{ToolType: tool.ToolTypeClaude, Status: tool.StatusInstalled, GlobalPath: "/home/test/.claude"},
 			ProjectInstallations: []*tool.ToolInstallation{
-				{Scope: tool.ScopeProject, ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, ProjectName: "demo", ProjectPath: "/workspace/demo"},
+				{ ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, ProjectName: "demo", ProjectPath: "/workspace/demo"},
 			},
 		},
 	}, &stubSnapshotService{})
@@ -289,10 +293,10 @@ func TestLocalWorkflowScanFiltersApps(t *testing.T) {
 func TestLocalWorkflowScanFiltersRegisteredProjectByName(t *testing.T) {
 	workflow := NewLocalWorkflow(&stubDetector{
 		result: &tool.ToolDetectionResult{
-			Codex:  &tool.ToolInstallation{Scope: tool.ScopeGlobal, ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, GlobalPath: "/home/test/.codex"},
-			Claude: &tool.ToolInstallation{Scope: tool.ScopeGlobal, ToolType: tool.ToolTypeClaude, Status: tool.StatusInstalled, GlobalPath: "/home/test/.claude"},
+			Codex:  &tool.ToolInstallation{ ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, GlobalPath: "/home/test/.codex"},
+			Claude: &tool.ToolInstallation{ ToolType: tool.ToolTypeClaude, Status: tool.StatusInstalled, GlobalPath: "/home/test/.claude"},
 			ProjectInstallations: []*tool.ToolInstallation{
-				{Scope: tool.ScopeProject, ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, ProjectName: "ai-sync-manager", ProjectPath: "/workspace/ai-sync-manager"},
+				{ ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, ProjectName: "ai-sync-manager", ProjectPath: "/workspace/ai-sync-manager"},
 			},
 		},
 	}, &stubSnapshotService{})
@@ -385,7 +389,7 @@ func TestLocalWorkflowCreateSnapshotValidatesTools(t *testing.T) {
 
 	_, err := workflow.CreateSnapshot(context.Background(), CreateSnapshotInput{
 		Message: "missing tools",
-		Scope:   models.ScopeGlobal,
+		
 	})
 	if err == nil {
 		t.Fatal("expected validation error")
@@ -409,7 +413,7 @@ func TestLocalWorkflowCreateSnapshotMapsNoConfigFilesError(t *testing.T) {
 	_, err := workflow.CreateSnapshot(context.Background(), CreateSnapshotInput{
 		Tools:   []string{"codex"},
 		Message: "backup",
-		Scope:   models.ScopeGlobal,
+		
 	})
 	if err == nil {
 		t.Fatal("expected create snapshot error")

@@ -18,17 +18,19 @@ import (
 
 // Service 快照管理服务
 type Service struct {
-	db        *database.DB
-	collector *Collector
+	db          *database.DB
+	collector   *Collector
+	ruleManager *tool.RuleManager
 }
 
 // NewService 创建快照服务
-func NewService(db *database.DB, resolver *tool.RuleResolver) *Service {
+func NewService(db *database.DB, resolver *tool.RuleResolver, ruleManager *tool.RuleManager) *Service {
 	collector := NewCollector(resolver)
 
 	return &Service{
-		db:        db,
-		collector: collector,
+		db:          db,
+		collector:   collector,
+		ruleManager: ruleManager,
 	}
 }
 
@@ -37,15 +39,20 @@ func NewService(db *database.DB, resolver *tool.RuleResolver) *Service {
 func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.SnapshotPackage, error) {
 	logger.Info("开始创建快照",
 		zap.Strings("tools", options.Tools),
-		zap.String("scope", string(options.Scope)),
+		zap.String("project", options.ProjectName),
 		zap.String("message", options.Message),
 	)
+
+	// 根据项目名获取项目路径
+	projectPath, err := s.resolveProjectPath(options.ProjectName, options.Tools)
+	if err != nil {
+		return nil, err
+	}
 
 	// 收集配置文件
 	collectOpts := CollectOptions{
 		Tools:       options.Tools,
-		Scope:       options.Scope,
-		ProjectPath: options.ProjectPath,
+		ProjectPath: projectPath,
 	}
 
 	result, err := s.collector.Collect(collectOpts)
@@ -68,8 +75,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 	metadata := models.SnapshotMetadata{
 		OSVersion:   runtime.GOOS + "/" + runtime.GOARCH,
 		AppVersion:  "1.0.0", // TODO: 从应用配置获取
-		ProjectPath: options.ProjectPath,
-		Scope:       options.Scope,
+		ProjectPath: projectPath,
 		Extra:       make(map[string]string),
 	}
 
@@ -95,7 +101,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 	// 创建快照包
 	pkg := &models.SnapshotPackage{
 		Snapshot:    snapshot,
-		ProjectPath: options.ProjectPath,
+		ProjectPath: projectPath,
 		CreatedAt:   time.Now(),
 		Size:        result.TotalSize,
 		FileCount:   len(result.Files),
@@ -348,4 +354,34 @@ func (s *Service) GetSnapshotsByTag(tag string, limit, offset int) ([]*models.Sn
 func (s *Service) CountSnapshots() (int, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 	return snapshotDAO.Count()
+}
+
+// resolveProjectPath 根据项目名解析项目路径。
+// 从 RuleManager 获取已注册的项目信息。
+func (s *Service) resolveProjectPath(projectName string, tools []string) (string, error) {
+	if s.ruleManager == nil {
+		return "", fmt.Errorf("规则管理器未初始化")
+	}
+
+	// 列出所有已注册项目，查找匹配的项目名
+	projects, err := s.ruleManager.ListRegisteredProjects(nil)
+	if err != nil {
+		return "", fmt.Errorf("查询注册项目失败: %w", err)
+	}
+
+	for _, p := range projects {
+		if p.ProjectName == projectName {
+			// 验证工具类型是否匹配
+			if len(tools) == 1 {
+				requestedTool := tool.ToolType(tools[0])
+				if tool.ToolType(p.ToolType) != requestedTool {
+					return "", fmt.Errorf("项目 %s 的工具类型是 %s，但请求的是 %s",
+						projectName, p.ToolType, tools[0])
+				}
+			}
+			return p.ProjectPath, nil
+		}
+	}
+
+	return "", fmt.Errorf("未找到项目: %s（请先使用 scan add 注册，或确保已自动注册全局项目）", projectName)
 }

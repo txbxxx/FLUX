@@ -141,12 +141,11 @@ type ChangeSummary struct {
 
 // CreateSnapshotOptions 创建快照选项
 type CreateSnapshotOptions struct {
-	Message     string        `json:"message"`                // 快照描述/提交消息
-	Tools       []string      `json:"tools"`                  // 包含的工具 [codex, claude]
-	Name        string        `json:"name"`                   // 快照名称（可选）
-	Tags        []string      `json:"tags"`                   // 标签（可选）
-	ProjectPath string        `json:"project_path,omitempty"` // 项目路径（可选）
-	Scope       SnapshotScope `json:"scope"`                  // 快照范围
+	Message     string   `json:"message"`      // 快照描述/提交消息
+	Tools       []string `json:"tools"`        // 包含的工具 [codex, claude]
+	Name        string   `json:"name"`         // 快照名称（可选）
+	Tags        []string `json:"tags"`         // 标签（可选）
+	ProjectName string   `json:"project_name"` // 项目名称（必填）
 }
 
 // SnapshotDAO 快照数据访问对象

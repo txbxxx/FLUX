@@ -35,29 +35,25 @@ func NewCollector(resolver *tool.RuleResolver) *Collector {
 }
 
 // Collect 收集配置文件
+// 统一为基于项目的收集方式：global 项目也是项目，只是路径不同
 func (c *Collector) Collect(options CollectOptions) (*CollectResult, error) {
 	result := &CollectResult{
 		Files:  make([]models.SnapshotFile, 0),
 		Errors: make([]CollectError, 0),
 	}
 
-	if options.Scope == models.ScopeGlobal || options.Scope == models.ScopeBoth {
-		globalFiles, globalErrors := c.collectGlobalFiles(options)
-		result.Files = append(result.Files, globalFiles...)
-		result.Errors = append(result.Errors, globalErrors...)
-	}
-
-	if options.Scope == models.ScopeProject || options.Scope == models.ScopeBoth {
-		projectFiles, projectErrors := c.collectProjectFiles(options)
-		result.Files = append(result.Files, projectFiles...)
-		result.Errors = append(result.Errors, projectErrors...)
-	}
+	// 统一收集逻辑：根据工具和项目路径收集文件
+	files, errs := c.collectFilesByTools(options)
+	result.Files = append(result.Files, files...)
+	result.Errors = append(result.Errors, errs...)
 
 	for _, file := range result.Files {
 		result.TotalSize += file.Size
 	}
 
 	logger.Info("文件收集完成",
+		zap.String("project_path", options.ProjectPath),
+		zap.Strings("tools", options.Tools),
 		zap.Int("total_files", len(result.Files)),
 		zap.Int64("total_size", result.TotalSize),
 		zap.Int("errors", len(result.Errors)),
@@ -66,8 +62,9 @@ func (c *Collector) Collect(options CollectOptions) (*CollectResult, error) {
 	return result, nil
 }
 
-// collectGlobalFiles 只收集默认全局规则和自定义全局规则命中的内容。
-func (c *Collector) collectGlobalFiles(options CollectOptions) ([]models.SnapshotFile, []CollectError) {
+// collectFilesByTools 根据工具列表收集匹配的文件。
+// 统一处理 global 和 project 配置，差异仅在于规则匹配的路径。
+func (c *Collector) collectFilesByTools(options CollectOptions) ([]models.SnapshotFile, []CollectError) {
 	var files []models.SnapshotFile
 	var errors []CollectError
 
@@ -78,36 +75,15 @@ func (c *Collector) collectGlobalFiles(options CollectOptions) ([]models.Snapsho
 			continue
 		}
 
-		matches := make([]tool.ResolvedRuleMatch, 0, len(report.DefaultMatches)+len(report.CustomMatches))
-		matches = append(matches, report.DefaultMatches...)
-		matches = append(matches, report.CustomMatches...)
-
-		collected, errs := c.collectResolvedMatches(matches, toolName, options)
-		files = append(files, collected...)
-		errors = append(errors, errs...)
-	}
-
-	return files, errors
-}
-
-// collectProjectFiles 收集所有已注册项目规则命中的内容。
-func (c *Collector) collectProjectFiles(options CollectOptions) ([]models.SnapshotFile, []CollectError) {
-	var files []models.SnapshotFile
-	var errors []CollectError
-
-	for _, toolName := range options.Tools {
-		report, err := c.resolver.ResolveTool(tool.ToolType(toolName))
-		if err != nil {
-			errors = append(errors, CollectError{Path: toolName, Message: err.Error()})
-			continue
-		}
-
-		var matches []tool.ResolvedRuleMatch
+		// 收集所有匹配项（包括默认规则、自定义全局规则和项目规则）
+		var allMatches []tool.ResolvedRuleMatch
+		allMatches = append(allMatches, report.DefaultMatches...)
+		allMatches = append(allMatches, report.CustomMatches...)
 		for _, project := range report.ProjectMatches {
-			matches = append(matches, project.Matches...)
+			allMatches = append(allMatches, project.Matches...)
 		}
 
-		collected, errs := c.collectResolvedMatches(matches, toolName, options)
+		collected, errs := c.collectResolvedMatches(allMatches, toolName, options)
 		files = append(files, collected...)
 		errors = append(errors, errs...)
 	}
