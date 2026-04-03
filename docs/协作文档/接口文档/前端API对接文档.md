@@ -298,8 +298,7 @@ interface SnapshotDetail {
 interface SnapshotMetadata {
   os_version?: string
   app_version?: string
-  project_path?: string
-  scope: string           // "global", "project", "both"
+  project_path?: string    // 项目路径（用于标识快照来源）
   extra?: Record<string, string>
 }
 
@@ -795,11 +794,16 @@ type FileCategory =
   | "other"      // 其他文件
 ```
 
-### 快照范围
+### 项目模型
 
-```typescript
-type SnapshotScope = "global" | "project" | "both"
-```
+快照现在基于项目模型创建，不再区分 global/project/both scope。
+
+**全局项目**（自动注册）：
+- `codex-global` - Codex 全局配置 (~/.codex)
+- `claude-global` - Claude 全局配置 (~/.claude)
+
+**用户项目**：
+- 通过 `scan add` 命令注册的自定义项目
 
 ### 认证类型
 
