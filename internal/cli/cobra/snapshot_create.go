@@ -35,10 +35,10 @@ func newSnapshotCreateCommand(deps Dependencies) *spcobra.Command {
 	}
 
 	flags := command.Flags()
-	flags.StringVar(&tools, "tools", "", "指定要备份的工具，多个用逗号分隔（如 codex,claude）")
-	flags.StringVar(&message, "message", "", "快照说明（必填）")
-	flags.StringVar(&name, "name", "", "快照名称（可选）")
-	flags.StringVar(&projectName, "project", "", "项目名称（必填，如 codex-global、claude-global 或用户注册的项目）")
+	flags.StringVarP(&tools, "tools", "t", "", "指定要备份的工具，多个用逗号分隔（如 codex,claude）")
+	flags.StringVarP(&message, "message", "m", "", "快照说明（必填）")
+	flags.StringVarP(&name, "name", "n", "", "快照名称（可选）")
+	flags.StringVarP(&projectName, "project", "p", "", "项目名称（必填，如 codex-global、claude-global 或用户注册的项目）")
 
 	return command
 }

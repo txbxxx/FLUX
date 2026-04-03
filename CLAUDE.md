@@ -88,7 +88,10 @@ ai-sync-manager/
 │   │   ├── tool/                   # 工具检测服务
 │   │   │   ├── detector.go         # 工具检测器
 │   │   │   ├── accessor.go         # 配置访问器
-│   │   │   └── paths.go            # 路径解析
+│   │   │   ├── paths.go            # 路径解析
+│   │   │   ├── rule_definitions.go # 规则定义
+│   │   │   ├── rule_manager.go     # 规则管理器
+│   │   │   └── rule_resolver.go    # 规则解析器
 │   │   ├── snapshot/               # 快照管理服务
 │   │   │   ├── service.go          # 快照 CRUD
 │   │   │   ├── collector.go        # 文件收集器
@@ -365,23 +368,163 @@ logger.Info("操作开始",
 
 ### 添加新 CLI 命令
 
-### 8. YAML 配置系统 (`pkg/config`)
+1. 在 `internal/cli/cobra/` 中创建命令文件
+2. 在 `root.go` 中注册子命令
+3. 在 `usecase` 层添加业务流程（如需要）
+4. 编写测试
+
+### YAML 配置系统 (`pkg/config`)
 - **Config**: 应用全局配置结构体
 - **加载链**: 嵌入默认值 (`default.yaml`) → 用户覆盖 (`~/.ai-sync-manager/config.yaml`)
 - **覆盖范围**: 应用配置、日志、数据库、同步默认值、工具规则定义
 - **向后兼容**: 无用户配置文件时行为与改造前完全一致
 - **接口约定**: `DatabaseConfig` 实现 `database.DatabaseConfig` 接口（`GetFilename`, `GetMaxOpenConns` 等）
 
----
+### CLI 命令速查
 
-## 开发指南
+| 命令 | 用法 | 缩写 |
+|------|------|------|
+| scan | `ai-sync scan [app-or-project...]` | — |
+| scan add | `ai-sync scan add <app> <path>` | `--project/-p` 注册项目 |
+| scan remove | `ai-sync scan remove <app> <path>` | `--project/-p` 删除项目 |
+| get | `ai-sync get <project> [path]` | `--edit/-e` 编辑模式 |
+| snapshot create | `ai-sync snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
+| snapshot list | `ai-sync snapshot list` | `-l` 条数 `-o` 偏移 |
+| tui | `ai-sync tui` | — |
 
-### 添加新 CLI 命令
+### 开发工作流
 
-1. 在 `internal/cli/cobra/` 中创建命令文件
-2. 在 `root.go` 中注册子命令
-3. 在 `usecase` 层添加业务流程（如需要）
-4. 编写测试
+#### 1. 开发前：从 master 切出 worktree
+
+每次开始一个功能或修复前，必须从 `master` 创建独立 worktree 分支开发，禁止直接在 `master` 上编码。
+
+**分支命名规则**：与提交 type 保持一致
+
+| 分支前缀 | 场景 | 示例 |
+|----------|------|------|
+| `feat/` | 新增功能 | `feat/get-optional-path` |
+| `fix/` | 修复 Bug | `fix/editor-line-ending` |
+| `refactor/` | 重构 | `refactor/rule-resolver` |
+| `docs/` | 文档 | `docs/snapshot-architecture` |
+| `test/` | 测试补充 | `test/accessor-edge-cases` |
+| `chore/` | 构建/工具 | `chore/upgrade-go-125` |
+
+**操作步骤**：
+
+```bash
+# 1. 确保 master 最新
+git checkout master && git pull origin master
+
+# 2. 创建 worktree（自动创建分支并切换）
+git worktree add ../AToSync-feat-xxx feat/xxx
+
+# 3. 在 worktree 中开发
+cd ../AToSync-feat-xxx
+# ... 编码、测试 ...
+
+# 4. 完成后提交并推送
+git add ... && git commit
+git push -u origin feat/xxx
+
+# 5. 合并回 master
+git checkout master
+git merge feat/xxx
+git push origin master
+
+# 6. 清理 worktree
+git worktree remove ../AToSync-feat-xxx
+git branch -d feat/xxx
+```
+
+#### 2. 开发后：检查文档是否需要更新
+
+每次完成任务后，必须检查以下文档是否需要同步修改或新建：
+
+| 检查项 | 文档位置 | 何时更新 |
+|--------|----------|----------|
+| CLAUDE.md | 项目根目录 | 新增/删除文件、架构变更、新增命令、规范变更 |
+| 使用指南 | `docs/使用指南/` | 用户可感知的功能变更（新命令、参数变化、行为变化） |
+| 架构文档 | `docs/架构设计/` | 模块新增/重构、数据流变化、新增依赖 |
+| 文档索引 | `docs/文档索引.md` | 新增或删除任何文档时 |
+
+**检查清单**：
+
+```
+- [ ] 本次改动是否涉及新文件？→ 更新 CLAUDE.md 项目结构
+- [ ] 本次改动是否新增/修改 CLI 命令？→ 更新使用指南
+- [ ] 本次改动是否涉及架构调整？→ 更新或新建架构文档
+- [ ] 是否有新增文档？→ 更新文档索引
+```
+
+### 提交规范
+
+#### Commit Message 格式
+
+```
+<type>: <简要描述>
+
+<正文：完成了什么功能、有什么作用、可能造成什么影响>
+
+<测试用例表格>
+```
+
+#### Type 规范
+
+| Type | 含义 | 示例 |
+|------|------|------|
+| `feat` | 新增功能 | `feat: get 命令支持省略 path 参数` |
+| `fix` | 修复 Bug | `fix: 编辑器保存后保留原始换行符` |
+| `refactor` | 重构（不改变行为） | `refactor: 抽取规则解析为独立模块` |
+| `docs` | 文档变更 | `docs: 新加快照系统技术架构文档` |
+| `test` | 测试相关 | `test: 补充 accessor 空路径测试用例` |
+| `chore` | 构建/工具/依赖 | `chore: 升级 Go 1.25` |
+| `perf` | 性能优化 | `perf: 大文件收集使用流式读取` |
+| `style` | 代码风格（不影响逻辑） | `style: 统一 import 分组格式` |
+
+#### 正文要求
+
+1. **完成了什么**：简述本次改动实现的具体功能或修复的问题
+2. **有什么作用**：说明改动带来的直接效果
+3. **可能的影响**：指出对其他模块、已有行为或使用方式的潜在影响（如无影响可省略）
+
+#### 测试用例表格格式
+
+每次提交必须附带测试用例表格，格式如下：
+
+```
+| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
+|----------|-----------|----------|----------|
+| 基础功能 | xxx       | xxx      | 通过     |
+| 边界条件 | xxx       | xxx      | 通过     |
+| 错误处理 | xxx       | xxx      | 通过     |
+```
+
+#### 完整示例
+
+```
+feat: get 命令支持省略 path 参数，列出项目根目录
+
+完成了什么：
+- get 命令的 Use 从 "get <app> <path>" 改为 "get <project> [path]"
+- 参数校验从 ExactArgs(2) 改为 MinimumNArgs(1)
+- accessor 支持空路径时返回根目录 target
+
+有什么作用：
+- 用户执行 "ai-sync get claude" 即可查看 claude 配置根目录下的所有文件和文件夹
+- 无需记忆具体路径即可浏览配置结构
+
+可能的影响：
+- 原有 "ai-sync get claude settings.json" 行为不变
+- 编辑模式 (-e) 仍需指定具体文件路径
+
+| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
+|----------|-----------|----------|----------|
+| 省略 path | ai-sync get claude | 列出 claude 配置根目录 | 通过 |
+| 指定 path | ai-sync get claude settings.json | 显示文件内容 | 通过 |
+| 编辑文件 | ai-sync get claude settings.json -e | 进入编辑器 | 通过 |
+| 不存在的工具 | ai-sync get unknown | 提示不支持的应用 | 通过 |
+| go test | go test ./... | 全部通过 | 通过 |
+```
 
 ```go
 // internal/cli/cobra/hello.go

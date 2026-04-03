@@ -65,7 +65,20 @@ func (a *ConfigAccessor) resolveRelativeTarget(toolType ToolType, report *ToolRu
 
 	cleanRelativePath := filepath.Clean(requestPath)
 	if cleanRelativePath == "." || cleanRelativePath == "" {
-		return nil, errors.New("请求路径不能为空")
+		resolvedRootPath, err := filepath.EvalSymlinks(report.GlobalPath)
+		if err != nil {
+			resolvedRootPath, err = filepath.Abs(report.GlobalPath)
+			if err != nil {
+				return nil, fmt.Errorf("解析配置目录失败: %w", err)
+			}
+		}
+		return &ConfigTarget{
+			ToolType:     toolType,
+			RootPath:     resolvedRootPath,
+			RelativePath: ".",
+			AbsolutePath: resolvedRootPath,
+			IsDir:        true,
+		}, nil
 	}
 	if filepath.IsAbs(cleanRelativePath) {
 		return nil, fmt.Errorf("请求路径超出允许范围：%s", cleanRelativePath)
