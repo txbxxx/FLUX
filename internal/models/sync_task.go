@@ -1,12 +1,14 @@
 package models
 
 import (
-	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"ai-sync-manager/pkg/database"
+
+	"gorm.io/gorm"
 )
 
 // SyncTask 同步任务
@@ -169,222 +171,153 @@ func NewSyncTaskDAO(db *database.DB) *SyncTaskDAO {
 
 // Create 创建同步任务
 func (dao *SyncTaskDAO) Create(task *SyncTask) error {
-	conn := dao.db.GetConn()
-
-	metadataJSON, _ := json.Marshal(task.Metadata)
-
-	query := `
-		INSERT INTO sync_tasks (id, type, status, snapshot_id, direction, created_at, started_at, completed_at,
-			progress_current, progress_total, progress_message, error_msg, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	// 处理 snapshot_id：空字符串转为 NULL
-	var snapshotID interface{} = nil
-	if task.SnapshotID != "" {
-		snapshotID = task.SnapshotID
+	row, err := syncTaskToRow(task)
+	if err != nil {
+		return err
 	}
-
-	_, err := conn.Exec(query,
-		task.ID,
-		string(task.Type),
-		string(task.Status),
-		snapshotID,
-		string(task.Direction),
-		task.CreatedAt.Unix(),
-		timeToUnix(task.StartedAt),
-		timeToUnix(task.CompletedAt),
-		task.Progress.Current,
-		task.Progress.Total,
-		task.Progress.Message,
-		task.Error,
-		string(metadataJSON),
-	)
-
-	return err
+	return dao.db.GetConn().Create(&row).Error
 }
 
 // GetByID 根据 ID 获取同步任务
 func (dao *SyncTaskDAO) GetByID(id string) (*SyncTask, error) {
-	conn := dao.db.GetConn()
-
-	query := `
-		SELECT id, type, status, snapshot_id, direction, created_at, started_at, completed_at,
-			progress_current, progress_total, progress_message, error_msg, metadata
-		FROM sync_tasks
-		WHERE id = ?
-	`
-
-	row := conn.QueryRow(query, id)
-
-	var (
-		taskType, status, direction, progressMessage, errorMsg, metadataJSON string
-		snapshotID                                                           sql.NullString
-		createdAt                                                            int64
-		startedAt, completedAt                                               sql.NullInt64
-		progressCurrent, progressTotal                                       int
-	)
-
-	err := row.Scan(
-		&id, &taskType, &status, &snapshotID, &direction, &createdAt, &startedAt, &completedAt,
-		&progressCurrent, &progressTotal, &progressMessage, &errorMsg, &metadataJSON,
-	)
-	if err == sql.ErrNoRows {
+	var row syncTaskRow
+	err := dao.db.GetConn().First(&row, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("任务不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
-
-	task := &SyncTask{
-		ID:         id,
-		Type:       SyncTaskType(taskType),
-		Status:     SyncTaskStatus(status),
-		SnapshotID: snapshotID.String,
-		Direction:  SyncDirection(direction),
-		CreatedAt:  time.Unix(createdAt, 0),
-		Progress: TaskProgress{
-			Current: progressCurrent,
-			Total:   progressTotal,
-			Message: progressMessage,
-		},
-		Error: errorMsg,
+	task, err := row.toModel()
+	if err != nil {
+		return nil, err
 	}
-
-	if startedAt.Valid {
-		t := time.Unix(startedAt.Int64, 0)
-		task.StartedAt = &t
-	}
-
-	if completedAt.Valid {
-		t := time.Unix(completedAt.Int64, 0)
-		task.CompletedAt = &t
-	}
-
-	_ = json.Unmarshal([]byte(metadataJSON), &task.Metadata)
-
 	return task, nil
 }
 
 // Update 更新同步任务
 func (dao *SyncTaskDAO) Update(task *SyncTask) error {
-	conn := dao.db.GetConn()
+	row, err := syncTaskToRow(task)
+	if err != nil {
+		return err
+	}
 
-	metadataJSON, _ := json.Marshal(task.Metadata)
-
-	query := `
-		UPDATE sync_tasks
-		SET status = ?, started_at = ?, completed_at = ?, progress_current = ?, progress_total = ?,
-			progress_message = ?, error_msg = ?, metadata = ?
-		WHERE id = ?
-	`
-
-	_, err := conn.Exec(query,
-		string(task.Status),
-		timeToUnixPtr(task.StartedAt),
-		timeToUnixPtr(task.CompletedAt),
-		task.Progress.Current,
-		task.Progress.Total,
-		task.Progress.Message,
-		task.Error,
-		string(metadataJSON),
-		task.ID,
-	)
-
-	return err
+	return dao.db.GetConn().
+		Model(&syncTaskRow{}).
+		Where("id = ?", task.ID).
+		Updates(map[string]interface{}{
+			"status":           row.Status,
+			"started_at":       row.StartedAt,
+			"completed_at":     row.CompletedAt,
+			"progress_current": row.ProgressCurrent,
+			"progress_total":   row.ProgressTotal,
+			"progress_message": row.ProgressMessage,
+			"error_msg":        row.ErrorMsg,
+			"metadata":         row.Metadata,
+		}).Error
 }
 
 // List 列出同步任务
 func (dao *SyncTaskDAO) List(limit, offset int, status SyncTaskStatus) ([]*SyncTask, error) {
-	conn := dao.db.GetConn()
-
-	query := `
-		SELECT id, type, status, snapshot_id, direction, created_at, started_at, completed_at,
-			progress_current, progress_total, progress_message, error_msg, metadata
-		FROM sync_tasks
-	`
-
+	query := dao.db.GetConn().Model(&syncTaskRow{})
 	if status != "" {
-		query += " WHERE status = '" + string(status) + "'"
+		query = query.Where("status = ?", string(status))
 	}
-
-	query += " ORDER BY created_at DESC"
-
 	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", limit)
+		query = query.Limit(limit)
 	}
 	if offset > 0 {
-		query += fmt.Sprintf(" OFFSET %d", offset)
+		query = query.Offset(offset)
 	}
 
-	rows, err := conn.Query(query)
-	if err != nil {
+	var rows []syncTaskRow
+	if err := query.Order("created_at DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var tasks []*SyncTask
-	for rows.Next() {
-		var (
-			id, taskType, taskStatus, direction, progressMessage, errorMsg, metadataJSON string
-			snapshotID                                                                   sql.NullString
-			createdAt                                                                    int64
-			startedAt, completedAt                                                       sql.NullInt64
-			progressCurrent, progressTotal                                               int
-		)
-
-		if err := rows.Scan(
-			&id, &taskType, &taskStatus, &snapshotID, &direction, &createdAt, &startedAt, &completedAt,
-			&progressCurrent, &progressTotal, &progressMessage, &errorMsg, &metadataJSON,
-		); err != nil {
+	tasks := make([]*SyncTask, 0, len(rows))
+	for _, row := range rows {
+		task, err := row.toModel()
+		if err != nil {
 			return nil, err
 		}
-
-		task := &SyncTask{
-			ID:         id,
-			Type:       SyncTaskType(taskType),
-			Status:     SyncTaskStatus(taskStatus),
-			SnapshotID: snapshotID.String,
-			Direction:  SyncDirection(direction),
-			CreatedAt:  time.Unix(createdAt, 0),
-			Progress: TaskProgress{
-				Current: progressCurrent,
-				Total:   progressTotal,
-				Message: progressMessage,
-			},
-			Error: errorMsg,
-		}
-
-		if startedAt.Valid {
-			t := time.Unix(startedAt.Int64, 0)
-			task.StartedAt = &t
-		}
-
-		if completedAt.Valid {
-			t := time.Unix(completedAt.Int64, 0)
-			task.CompletedAt = &t
-		}
-
-		_ = json.Unmarshal([]byte(metadataJSON), &task.Metadata)
-
 		tasks = append(tasks, task)
 	}
-
 	return tasks, nil
 }
 
-// timeToUnix 将时间转换为 Unix 时间戳
-func timeToUnix(t *time.Time) int64 {
-	if t == nil {
-		return 0
-	}
-	return t.Unix()
+type syncTaskRow struct {
+	ID              string     `gorm:"column:id;primaryKey"`
+	Type            string     `gorm:"column:type"`
+	Status          string     `gorm:"column:status"`
+	SnapshotID      *string    `gorm:"column:snapshot_id"`
+	Direction       string     `gorm:"column:direction"`
+	CreatedAt       time.Time  `gorm:"column:created_at"`
+	StartedAt       *time.Time `gorm:"column:started_at"`
+	CompletedAt     *time.Time `gorm:"column:completed_at"`
+	ProgressCurrent int        `gorm:"column:progress_current"`
+	ProgressTotal   int        `gorm:"column:progress_total"`
+	ProgressMessage string     `gorm:"column:progress_message"`
+	ErrorMsg        string     `gorm:"column:error_msg"`
+	Metadata        string     `gorm:"column:metadata"`
 }
 
-// timeToUnixPtr 将时间指针转换为 Unix 时间戳
-func timeToUnixPtr(t *time.Time) sql.NullInt64 {
-	if t == nil {
-		return sql.NullInt64{}
+func (syncTaskRow) TableName() string {
+	return "sync_tasks"
+}
+
+func syncTaskToRow(task *SyncTask) (syncTaskRow, error) {
+	metadataJSON, err := json.Marshal(task.Metadata)
+	if err != nil {
+		return syncTaskRow{}, fmt.Errorf("序列化任务元数据失败: %w", err)
 	}
-	return sql.NullInt64{Int64: t.Unix(), Valid: true}
+
+	var snapshotID *string
+	if task.SnapshotID != "" {
+		snapshotID = &task.SnapshotID
+	}
+
+	return syncTaskRow{
+		ID:              task.ID,
+		Type:            string(task.Type),
+		Status:          string(task.Status),
+		SnapshotID:      snapshotID,
+		Direction:       string(task.Direction),
+		CreatedAt:       task.CreatedAt,
+		StartedAt:       task.StartedAt,
+		CompletedAt:     task.CompletedAt,
+		ProgressCurrent: task.Progress.Current,
+		ProgressTotal:   task.Progress.Total,
+		ProgressMessage: task.Progress.Message,
+		ErrorMsg:        task.Error,
+		Metadata:        string(metadataJSON),
+	}, nil
+}
+
+func (row syncTaskRow) toModel() (*SyncTask, error) {
+	task := &SyncTask{
+		ID:          row.ID,
+		Type:        SyncTaskType(row.Type),
+		Status:      SyncTaskStatus(row.Status),
+		Direction:   SyncDirection(row.Direction),
+		CreatedAt:   row.CreatedAt,
+		StartedAt:   row.StartedAt,
+		CompletedAt: row.CompletedAt,
+		Progress: TaskProgress{
+			Current: row.ProgressCurrent,
+			Total:   row.ProgressTotal,
+			Message: row.ProgressMessage,
+		},
+		Error: row.ErrorMsg,
+	}
+	if row.SnapshotID != nil {
+		task.SnapshotID = *row.SnapshotID
+	}
+
+	if row.Metadata != "" {
+		if err := json.Unmarshal([]byte(row.Metadata), &task.Metadata); err != nil {
+			return nil, fmt.Errorf("反序列化任务元数据失败: %w", err)
+		}
+	}
+	return task, nil
 }

@@ -6,13 +6,14 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/glebarez/sqlite v1.11.0
 	github.com/go-git/go-git/v5 v5.17.0
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
+	gorm.io/gorm v1.31.1
 	go.uber.org/zap v1.27.1
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
-	modernc.org/sqlite v1.47.0
 )
 
 require (
