@@ -29,8 +29,8 @@ func newSnapshotListCommand(deps Dependencies) *spcobra.Command {
 	}
 
 	flags := command.Flags()
-	flags.IntVar(&limit, "limit", 0, "Max items")
-	flags.IntVar(&offset, "offset", 0, "Offset")
+	flags.IntVar(&limit, "limit", 0, "最多显示条数")
+	flags.IntVar(&offset, "offset", 0, "从第几条开始")
 
 	return command
 }

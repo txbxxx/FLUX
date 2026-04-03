@@ -10,7 +10,7 @@ func renderSnapshotsPage(m *Model) string {
 	builder.WriteString("快照列表\n\n")
 
 	if len(m.Snapshots) == 0 {
-		builder.WriteString("暂无本地快照\n")
+		builder.WriteString("还没有快照，返回首页创建一个吧\n")
 	} else {
 		for _, item := range m.Snapshots {
 			builder.WriteString(fmt.Sprintf("%s | %s\n", item.ID, item.Message))

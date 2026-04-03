@@ -446,7 +446,7 @@ func TestExecuteSnapshotCreateParsesFlags(t *testing.T) {
 	if workflow.createInput.Scope != models.ScopeGlobal || len(workflow.createInput.Tools) != 2 {
 		t.Fatalf("unexpected create input: %+v", workflow.createInput)
 	}
-	if !strings.Contains(stdout.String(), "snap-1") || !strings.Contains(stdout.String(), "files: 3") {
+	if !strings.Contains(stdout.String(), "snap-1") || !strings.Contains(stdout.String(), "文件数: 3") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 	if stderr.Len() != 0 {

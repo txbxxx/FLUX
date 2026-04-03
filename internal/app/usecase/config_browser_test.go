@@ -150,7 +150,7 @@ func TestConfigBrowserRejectsDirectoryEditMode(t *testing.T) {
 	if !errors.As(err, &userErr) {
 		t.Fatalf("expected UserError, got %T", err)
 	}
-	if userErr.Message != "编辑配置失败：目录不支持 --edit" {
+	if userErr.Message != "目录无法编辑，请指定文件" {
 		t.Fatalf("unexpected user message: %q", userErr.Message)
 	}
 }
@@ -234,7 +234,7 @@ func TestConfigBrowserSaveConfigMapsWriteErrors(t *testing.T) {
 	if !errors.As(err, &userErr) {
 		t.Fatalf("expected UserError, got %T", err)
 	}
-	if userErr.Message != "保存配置失败" {
+	if userErr.Message != "无法保存配置" {
 		t.Fatalf("unexpected user message: %q", userErr.Message)
 	}
 }

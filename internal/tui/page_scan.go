@@ -13,7 +13,7 @@ func renderScanPage(m *Model) string {
 	builder.WriteString("扫描结果\n\n")
 
 	if m.ScanResult == nil || len(m.ScanResult.Tools) == 0 {
-		builder.WriteString("暂无扫描结果\n")
+		builder.WriteString("未检测到可同步的工具，请确认已安装 Codex 或 Claude\n")
 	} else {
 		for _, item := range m.ScanResult.Tools {
 			builder.WriteString(fmt.Sprintf("%s\n", displayScanSummaryTitle(item)))

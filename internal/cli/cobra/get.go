@@ -27,7 +27,7 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 
 			if edit {
 				if deps.Editor == nil {
-					return errors.New("未配置编辑器")
+					return errors.New("编辑器未就绪，无法进入编辑模式")
 				}
 				return deps.Editor.Run(cmd.Context(), result, func(content string) error {
 					return deps.Workflow.SaveConfig(cmd.Context(), usecase.SaveConfigInput{

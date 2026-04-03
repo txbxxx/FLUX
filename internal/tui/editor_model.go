@@ -112,7 +112,7 @@ func newEditorModel(result *usecase.GetConfigResult, save func(string) error) *E
 		},
 		save:            save,
 		originalContent: result.Content,
-		statusMessage:   "编辑模式",
+		statusMessage:   "编辑中（Ctrl+S 保存 / Esc 退出）",
 		width:           80,
 		height:          24,
 	}
@@ -319,7 +319,7 @@ func (m *EditorModel) ensureViewport() {
 func (m *EditorModel) updateDirtyState() {
 	m.dirty = m.editor.Value() != m.originalContent
 	if m.dirty {
-		m.statusMessage = "已修改"
+		m.statusMessage = "已修改（未保存）"
 	}
 }
 

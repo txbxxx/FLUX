@@ -22,13 +22,13 @@ func (m *Model) View() string {
 func renderHomePage(m *Model) string {
 	var builder strings.Builder
 	builder.WriteString("AI Sync Manager\n")
-	builder.WriteString("data dir: " + m.DataDir + "\n\n")
+	builder.WriteString("数据目录: " + m.DataDir + "\n\n")
 
 	if m.ErrorMessage != "" {
-		builder.WriteString("error: " + m.ErrorMessage + "\n")
+		builder.WriteString("错误: " + m.ErrorMessage + "\n")
 	}
 	if m.StatusMessage != "" {
-		builder.WriteString("status: " + m.StatusMessage + "\n")
+		builder.WriteString("状态: " + m.StatusMessage + "\n")
 	}
 	if m.ErrorMessage != "" || m.StatusMessage != "" {
 		builder.WriteString("\n")
@@ -49,10 +49,10 @@ func renderHomePage(m *Model) string {
 func renderCreatePage(m *Model) string {
 	var builder strings.Builder
 	builder.WriteString("创建快照\n")
-	builder.WriteString("tab 切换字段，enter 下一项，esc 返回首页\n\n")
+	builder.WriteString("按 Tab 切换字段 / Enter 进入下一项 / Esc 返回首页\n\n")
 
 	if m.ErrorMessage != "" {
-		builder.WriteString("error: " + m.ErrorMessage + "\n\n")
+		builder.WriteString("错误: " + m.ErrorMessage + "\n\n")
 	}
 
 	builder.WriteString(renderField("tools", m.Form.Tools, m.FormFocus == formFocusTools, "codex,claude"))

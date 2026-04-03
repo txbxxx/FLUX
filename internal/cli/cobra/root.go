@@ -115,7 +115,7 @@ func errorWriter(w io.Writer) io.Writer {
 
 // printUsage 输出顶层简版帮助。
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "用法: ai-sync <scan|get|snapshot|tui>")
+	fmt.Fprintln(w, "请指定子命令，例如: ai-sync scan")
 }
 
 // printScanResult 负责把扫描结果整理成面向终端的分组文本。
@@ -203,10 +203,10 @@ func printScanRuleList(w io.Writer, result *usecase.ListScanRulesResult) {
 
 // 其余 print* 函数都是 cobra 层的纯展示逻辑，不承载业务判断。
 func printCreatedSnapshot(w io.Writer, result *usecase.SnapshotSummary) {
-	fmt.Fprintf(w, "created snapshot: %s\n", result.ID)
-	fmt.Fprintf(w, "name: %s\n", result.Name)
-	fmt.Fprintf(w, "files: %d\n", result.FileCount)
-	fmt.Fprintf(w, "size: %d bytes\n", result.Size)
+	fmt.Fprintf(w, "快照已创建: %s\n", result.ID)
+	fmt.Fprintf(w, "名称: %s\n", result.Name)
+	fmt.Fprintf(w, "文件数: %d\n", result.FileCount)
+	fmt.Fprintf(w, "大小: %d 字节\n", result.Size)
 }
 
 func printSnapshotList(w io.Writer, result *usecase.ListSnapshotsResult) {

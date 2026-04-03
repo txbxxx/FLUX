@@ -46,7 +46,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.Page = PageSnapshots
 		m.ErrorMessage = ""
-		m.StatusMessage = "已创建快照 " + msg.id
+		m.StatusMessage = "快照已创建 (ID: " + msg.id + ")"
 		return m, nil
 	}
 

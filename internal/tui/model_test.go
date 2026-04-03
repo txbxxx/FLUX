@@ -167,7 +167,7 @@ func TestSnapshotListViewShowsEmptyState(t *testing.T) {
 	model := NewModel(&stubWorkflow{}, "D:/data")
 	model.Page = PageSnapshots
 
-	if view := model.View(); !strings.Contains(view, "暂无本地快照") {
+	if view := model.View(); !strings.Contains(view, "还没有快照") {
 		t.Fatalf("expected empty state in view, got %q", view)
 	}
 }

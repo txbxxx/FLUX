@@ -209,8 +209,8 @@ func (w *LocalWorkflow) Scan(ctx context.Context, input ScanInput) (*ScanResult,
 	})
 	if err != nil {
 		return nil, &UserError{
-			Message:    "扫描工具失败",
-			Suggestion: "请检查本地配置目录权限后重试",
+			Message:    "扫描失败",
+			Suggestion: "请确认 ~/.codex 或 ~/.claude 目录存在且有访问权限",
 			Err:        err,
 		}
 	}
@@ -479,7 +479,7 @@ func buildToolSummary(installation *tool.ToolInstallation, toolType tool.ToolTyp
 		summary.ResultText = "可同步"
 	case tool.StatusPartial:
 		summary.ResultText = "暂不可同步"
-		summary.Reason = "找到了配置目录，但未识别到可同步的配置文件"
+		summary.Reason = "配置目录存在，但未发现可同步的文件"
 	case tool.StatusNotInstalled:
 		summary.ResultText = "不可同步"
 		summary.Reason = "未找到配置目录 " + tool.GetDefaultGlobalPath(toolType)
@@ -565,8 +565,8 @@ func filterScanSummaries(items []ToolSummary, filters []string) ([]ToolSummary, 
 
 		if !matched {
 			return nil, &UserError{
-				Message:    "未找到匹配的应用或项目：" + strings.TrimSpace(rawFilter),
-				Suggestion: "请使用 codex、claude 或已注册项目名重试",
+				Message:    "未找到 \"" + strings.TrimSpace(rawFilter) + "\"，支持的应用: codex、claude",
+				Suggestion: "可输入 codex 或 claude 查看对应工具，或使用已注册的项目名",
 			}
 		}
 	}
@@ -598,16 +598,16 @@ func resolveToolType(app string) (tool.ToolType, error) {
 		return tool.ToolTypeClaude, nil
 	default:
 		return "", &UserError{
-			Message:    "不支持的应用：" + strings.TrimSpace(app),
-			Suggestion: "当前只支持 codex 或 claude",
+			Message:    "不支持的应用 \"" + strings.TrimSpace(app) + "\"，目前支持: codex、claude",
+			Suggestion: "请输入 codex 或 claude 作为应用名",
 		}
 	}
 }
 
 func newRulesUnavailableError() error {
 	return &UserError{
-		Message:    "规则管理未初始化",
-		Suggestion: "请先在 runtime 中接入规则存储后再使用该命令",
+		Message:    "规则管理功能暂不可用",
+		Suggestion: "请重新启动程序，或检查数据目录是否正常",
 	}
 }
 
@@ -706,7 +706,7 @@ func (w *LocalWorkflow) ListSnapshots(_ context.Context, input ListSnapshotsInpu
 	snapshots, err := w.snapshots.ListSnapshots(limit, offset)
 	if err != nil {
 		return nil, &UserError{
-			Message:    "读取快照列表失败",
+			Message:    "无法读取快照列表",
 			Suggestion: "请检查本地数据库是否可访问",
 			Err:        err,
 		}
@@ -715,7 +715,7 @@ func (w *LocalWorkflow) ListSnapshots(_ context.Context, input ListSnapshotsInpu
 	total, err := w.snapshots.CountSnapshots()
 	if err != nil {
 		return nil, &UserError{
-			Message:    "读取快照统计失败",
+			Message:    "无法读取快照统计",
 			Suggestion: "请检查本地数据库是否可访问",
 			Err:        err,
 		}
