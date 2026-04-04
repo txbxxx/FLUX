@@ -367,93 +367,92 @@ Codex > skills\aiskills\README.md
 
 ## 8. `snapshot create`：创建本地快照
 
-### 7.1 最小用法
+### 8.1 最小用法
+
+必须指定 `--project`（项目名称）和 `--message`（备份说明）：
 
 ```powershell
-.\ai-sync.exe snapshot create --tools codex --message "backup before change"
+.\ai-sync.exe snapshot create --project codex-global --message “backup before change”
 ```
+
+> `--tools` 参数可以省略，系统会从项目名称自动推导工具类型。
 
 ### 8.2 完整示例
 
 ```powershell
 .\ai-sync.exe snapshot create `
+  --project codex-global `
   --tools codex,claude `
-  --message "backup before change" `
-  --name "Daily backup" `
-  --scope both
+  --message “backup before change” `
+  --name “Daily backup”
 ```
 
-### 7.3 参数说明
+### 8.3 参数说明
 
 `snapshot create --help` 当前输出的参数如下：
 
 ```text
---message string
---name string
---project-path string
---scope string
---tools string
+-t, --tools string     指定要备份的工具，多个用逗号分隔（如 codex,claude）
+-m, --message string   快照说明（必填）
+-n, --name string      快照名称（可选）
+-p, --project string   项目名称（必填，如 codex-global、claude-global 或用户注册的项目）
 ```
 
 含义说明：
 
-- `--tools`
-  逗号分隔的工具列表，例如 `codex`、`claude`
-- `--message`
-  本次快照说明，建议写明用途，例如“升级前备份”
-- `--name`
-  快照显示名称，可选
-- `--scope`
-  快照范围，默认是 `global`
-- `--project-path`
-  当前保留兼容；统一规则模式下，项目级快照以 `scan add --project` 已注册项目为准
+- `-p / --project`
+  项目名称（必填），指定要备份哪个项目的配置。可用项目包括：
+  - 全局项目：`codex-global`（~/.codex）、`claude-global`（~/.claude）
+  - 用户项目：通过 `scan add --project` 注册的项目
+- `-t / --tools`
+  逗号分隔的工具列表，例如 `codex`、`claude`。省略时从项目名称自动推导
+- `-m / --message`
+  本次快照说明，建议写明用途，例如”升级前备份”
+- `-n / --name`
+  快照显示名称，可选，不填则自动生成
 
-### 7.4 参数约束
+### 8.4 参数约束
 
-当前实现中，以下两个参数是业务层强校验：
+当前实现中，`--project` 是必填参数。`--tools` 可省略（从项目名自动推导）。
 
-- `--tools` 不能为空
-- `--message` 不能为空
-
-如果缺失，会返回用户可读错误。
-
-### 7.5 成功输出
+### 8.5 成功输出
 
 成功创建后，输出格式如下：
 
 ```text
-created snapshot: 12345678-1234-1234-1234-1234567890ab
-name: Daily backup
-files: 8
-size: 4096 bytes
+快照已创建: 12345678-1234-1234-1234-1234567890ab
+名称: Daily backup
+文件数: 8
+大小: 4096 字节
 ```
 
 字段说明：
 
-- `created snapshot`：新建快照 ID
-- `name`：快照名称
-- `files`：收集到的文件数量
-- `size`：快照总大小
+- `快照已创建`：新建快照 ID
+- `名称`：快照名称
+- `文件数`：收集到的文件数量
+- `大小`：快照总大小
 
-### 7.6 失败场景
+### 8.6 失败场景
 
 常见失败包括：
 
-- 工具列表为空
+- 未指定项目名称（`--project`）
 - `message` 为空
-- 目标工具存在，但没有可打包的配置文件
+- 目标项目存在，但没有可打包的配置文件
+- 项目名称不存在
 
-例如当 `scan` 输出“可同步项: 0 项”时，后续执行 `snapshot create` 很可能失败，因为当前统一规则下没有可归档内容。
+例如当 `scan` 输出”可同步项: 0 项”时，后续执行 `snapshot create` 很可能失败，因为当前统一规则下没有可归档内容。
 
 ## 9. `snapshot list`：列出本地快照
 
-### 8.1 基础用法
+### 9.1 基础用法
 
 ```powershell
 .\ai-sync.exe snapshot list
 ```
 
-### 8.2 分页参数
+### 9.2 分页参数
 
 ```powershell
 .\ai-sync.exe snapshot list --limit 20 --offset 0
@@ -462,18 +461,18 @@ size: 4096 bytes
 当前帮助输出如下：
 
 ```text
---limit int
---offset int
+-l, --limit int
+-o, --offset int
 ```
 
 参数含义：
 
-- `--limit`
+- `-l / --limit`
   最多返回多少条记录
-- `--offset`
+- `-o / --offset`
   从第几条之后开始返回
 
-### 8.3 有结果时的输出
+### 9.3 有结果时的输出
 
 ```text
 12345678-1234-1234-1234-1234567890ab | Daily backup | backup before change
@@ -485,7 +484,7 @@ size: 4096 bytes
 - 快照名称
 - 快照说明
 
-### 8.4 无结果时的输出
+### 9.4 无结果时的输出
 
 ```text
 暂无本地快照
@@ -495,13 +494,13 @@ size: 4096 bytes
 
 ## 10. `tui`：进入终端交互界面
 
-### 9.1 启动命令
+### 10.1 启动命令
 
 ```powershell
 .\ai-sync.exe tui
 ```
 
-### 9.2 当前界面结构
+### 10.2 当前界面结构
 
 当前 Bubble Tea TUI 包含以下页面：
 
@@ -510,7 +509,7 @@ size: 4096 bytes
 - 创建快照页
 - 快照列表页
 
-### 9.3 首页操作
+### 10.3 首页操作
 
 首页默认展示：
 
@@ -539,7 +538,7 @@ size: 4096 bytes
 - 不会显示 `EOF`
 - 不会把退出动作当成错误
 
-### 9.4 扫描结果页
+### 10.4 扫描结果页
 
 从首页选择“扫描工具”后，会进入扫描结果页。
 
@@ -558,16 +557,16 @@ size: 4096 bytes
 
 这些按键都会返回首页。
 
-### 9.5 创建快照页
+### 10.5 创建快照页
 
-从首页选择“创建快照”后，会进入创建表单页。
+从首页选择”创建快照”后，会进入创建表单页。
 
 当前表单字段包括：
 
+- `project`
 - `tools`
 - `message`
 - `name`
-- `project-path`
 - 提交创建
 
 当前交互方式：
@@ -585,7 +584,7 @@ size: 4096 bytes
 - 会跳转到“快照列表”页
 - 首页再次进入时会看到成功状态提示
 
-### 9.6 快照列表页
+### 10.6 快照列表页
 
 从首页选择“查看快照”后，会进入快照列表页。
 
@@ -600,7 +599,7 @@ size: 4096 bytes
 - `q`
 - `esc`
 
-### 9.7 TUI 的适用定位
+### 10.7 TUI 的适用定位
 
 当前 TUI 适合做这些事情：
 
@@ -652,15 +651,15 @@ size: 4096 bytes
 如果你第一次使用，建议按下面顺序操作：
 
 1. 先执行 `ai-sync scan`
-2. 如果要进一步看配置内容，执行 `ai-sync get <app> <path>`
-3. 如果要直接修改配置，执行 `ai-sync get <app> <path> --edit`
-4. 执行 `ai-sync snapshot create --tools ... --message "..."`
+2. 如果要进一步看配置内容，执行 `ai-sync get <project> [path]`
+3. 如果要直接修改配置，执行 `ai-sync get <project> <path> --edit`
+4. 执行 `ai-sync snapshot create -p <project> -m "..."`
 5. 执行 `ai-sync snapshot list`
 6. 如果希望交互式浏览，再执行 `ai-sync tui`
 
 ## 14. 常见问题
 
-### 13.1 提示“未检测到任何可同步工具”
+### 14.1 提示”未检测到任何可同步工具”
 
 优先检查：
 

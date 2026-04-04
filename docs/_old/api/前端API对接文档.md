@@ -1,3 +1,5 @@
+\n> **已废弃** — 项目已从 Wails GUI 重构为 CLI/TUI 终端应用，前端 TypeScript API 不再存在。
+
 # 前端 API 参考文档
 
 > 生成日期：2026-03-20 | Wails 版本：v2 | Go 版本：1.25+
