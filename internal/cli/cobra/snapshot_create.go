@@ -8,7 +8,20 @@ import (
 	"ai-sync-manager/internal/app/usecase"
 )
 
-// newSnapshotCreateCommand 把命令行参数映射成创建快照用例输入。
+// newSnapshotCreateCommand 创建 snapshot create 子命令。
+// 将命令行 flag 参数映射为 usecase.CreateSnapshotInput，调用 Workflow.CreateSnapshot 完成快照创建。
+//
+// 参数说明：
+//   - -t / --tools：      要备份的工具列表（可选），多个用逗号分隔。省略时从 -p 项目名自动推导。
+//   - -m / --message：    快照说明（必填），用于记录本次快照的目的。
+//   - -n / --name：       快照名称（可选），不填时由系统自动生成。
+//   - -p / --project：    项目名称（必填），指定要备份哪个项目的配置。
+//
+// 工具类型自动推导示例：
+//
+//	ai-sync snapshot create -m "备份" -p claude        → 自动推导 tools=["claude"]
+//	ai-sync snapshot create -m "备份" -p codex-global  → 自动推导 tools=["codex"]
+//	ai-sync snapshot create -m "备份" -p my-project    → 从数据库查找项目 → 取 ToolType
 func newSnapshotCreateCommand(deps Dependencies) *spcobra.Command {
 	var tools string
 	var message string
@@ -43,7 +56,9 @@ func newSnapshotCreateCommand(deps Dependencies) *spcobra.Command {
 	return command
 }
 
-// splitCSV 把 CLI 字符串参数规范化成模型层输入。
+// splitCSV 将逗号分隔的 CLI 字符串参数拆分为字符串切片。
+// 处理规则：去除每段的前后空格，跳过空段。
+// 例如 "codex, claude " → ["codex", "claude"]，"" → nil
 func splitCSV(value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return nil

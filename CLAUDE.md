@@ -362,6 +362,85 @@ logger.Info("操作开始",
 )
 ```
 
+### 代码注释
+
+所有导出类型和函数**必须**有 godoc 注释。注释应回答三个问题：**做什么**、**为什么**、**怎么做的**。
+
+#### 1. 包注释
+
+每个包的 `doc.go` 或首个文件顶部写一段包注释，说明包的职责边界：
+
+```go
+// Package snapshot 提供本地配置快照的创建、查询和恢复功能。
+// 它不关心配置文件的来源，只负责将文件收集、序列化并持久化到 SQLite。
+package snapshot
+```
+
+#### 2. 导出类型注释
+
+类型注释说明它**是什么**和**设计意图**：
+
+```go
+// LocalWorkflow 是 Workflow 接口的本地实现，编排扫描、快照、配置浏览等流程。
+// 它不直接访问数据库，而是通过 Detector、SnapshotManager 等接口协调工作。
+type LocalWorkflow struct { ... }
+
+// UserError 是面向用户的错误类型，包含可展示的 Message 和引导性的 Suggestion。
+// CLI/TUI 层捕获此错误后可直接展示给用户，Err 字段保留原始错误供日志记录。
+type UserError struct { ... }
+```
+
+#### 3. 导出函数注释
+
+函数注释必须包含**一句话摘要**（以函数名开头），复杂函数还需补充**设计决策说明**：
+
+```go
+// Scan 扫描本机所有已注册项目，返回每个项目的配置状态摘要。
+//
+// 统一项目模型：所有可同步的对象都是"项目"，包括自动注册的全局项目
+// （如 claude-global 指向 ~/.claude，codex-global 指向 ~/.codex）。
+// 不再区分"全局"和"项目"两种展示形态。
+//
+// 输出顺序：先 Codex 项目，再 Claude 项目，保持展示的一致性。
+func (w *LocalWorkflow) Scan(ctx context.Context, input ScanInput) (*ScanResult, error) {
+```
+
+#### 4. 函数内部注释
+
+函数内部使用**分阶段注释**，用 `// 第 X 阶段：` 标记逻辑块：
+
+```go
+func (w *LocalWorkflow) CreateSnapshot(ctx context.Context, input CreateSnapshotInput) (*SnapshotSummary, error) {
+    // 第一步：自动推导工具类型（当用户未指定 -t 时）
+    if len(input.Tools) == 0 { ... }
+
+    // 第二步：参数校验
+    if len(input.Tools) == 0 { ... }
+
+    // 第三步：调用 SnapshotManager 创建快照
+    pkg, err := w.snapshots.CreateSnapshot(...)
+
+    // 第四步：将服务层返回值转换为展示摘要
+    return &SnapshotSummary{...}, nil
+}
+```
+
+对于非显而易见的逻辑，用 `// 为什么这样写：` 注释说明设计决策：
+
+```go
+// 全局项目使用全局规则而不是项目规则。
+// 为什么：~/.claude 目录的布局是全局配置结构（settings.json、commands/ 等），
+// 用项目规则（.claude/、CLAUDE.md）只能扫到极少文件。
+rules = DefaultGlobalRules(toolType)
+```
+
+#### 5. 注释不要做的事
+
+- **不要翻译代码**：`i++` 不需要注释 "递增计数器"
+- **不要写创建日期和作者**：用 `git log` 查看
+- **不要用中文写 godoc**：godoc 遵循 Go 社区惯例使用英文（但内部注释和用户面向的描述使用中文）
+- **不要注释被删除/禁用的代码**：直接删除，用 git history 追溯
+
 ---
 
 ## 开发指南
@@ -460,12 +539,14 @@ git branch -d feat/xxx
 
 #### Commit Message 格式
 
+**语言要求：Commit Message 必须全部使用中文撰写**（type 前缀保留英文）。
+
 ```
-<type>: <简要描述>
+<type>: <中文简要描述>
 
-<正文：完成了什么功能、有什么作用、可能造成什么影响>
+<中文正文：完成了什么功能、有什么作用、可能造成什么影响>
 
-<测试用例表格>
+<中文测试用例表格>
 ```
 
 #### Type 规范

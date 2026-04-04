@@ -8,39 +8,45 @@ import (
 	"ai-sync-manager/internal/service/tool"
 )
 
+// ConfigTargetKind 表示配置目标的类型：文件或目录。
 type ConfigTargetKind string
 
 const (
-	ConfigTargetDirectory ConfigTargetKind = "directory"
-	ConfigTargetFile      ConfigTargetKind = "file"
+	ConfigTargetDirectory ConfigTargetKind = "directory" // 目录类型，可列出子条目
+	ConfigTargetFile      ConfigTargetKind = "file"      // 文件类型，可读取/编辑内容
 )
 
+// GetConfigInput 是 GetConfig 用例的输入参数。
 type GetConfigInput struct {
-	Tool string
-	Path string
-	Edit bool
+	Tool string // 工具类型名（codex / claude），必填
+	Path string // 相对于配置根目录的路径，空则返回根目录列表
+	Edit bool   // 是否进入编辑模式（仅文件有效）
 }
 
+// SaveConfigInput 是 SaveConfig 用例的输入参数。
 type SaveConfigInput struct {
-	Tool    string
-	Path    string
-	Content string
+	Tool    string // 工具类型名（codex / claude），必填
+	Path    string // 相对于配置根目录的文件路径，必填
+	Content string // 要写入的文件内容
 }
 
+// ConfigEntry 表示配置目录列表中的单个条目。
 type ConfigEntry struct {
-	Name         string
-	RelativePath string
-	IsDir        bool
+	Name         string // 文件或目录名（不含路径前缀）
+	RelativePath string // 相对于配置根目录的路径
+	IsDir        bool   // 是否为目录
 }
 
+// GetConfigResult 是 GetConfig 用例的返回值。
+// 目录类型时 Entries 有值；文件类型时 Content 和 Editable 有值。
 type GetConfigResult struct {
-	Tool         string
-	RelativePath string
-	AbsolutePath string
-	Kind         ConfigTargetKind
-	Entries      []ConfigEntry
-	Content      string
-	Editable     bool
+	Tool         string           // 工具类型名（codex / claude）
+	RelativePath string           // 相对于配置根目录的路径
+	AbsolutePath string           // 磁盘绝对路径
+	Kind         ConfigTargetKind // 目标类型：directory 或 file
+	Entries      []ConfigEntry    // 目录列表（Kind=directory 时有值）
+	Content      string           // 文件内容（Kind=file 时有值）
+	Editable     bool             // 是否可编辑（仅文件且路径在允许范围内时为 true）
 }
 
 func (w *LocalWorkflow) GetConfig(_ context.Context, input GetConfigInput) (*GetConfigResult, error) {

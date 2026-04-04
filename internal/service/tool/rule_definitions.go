@@ -3,12 +3,13 @@ package tool
 import "ai-sync-manager/pkg/config"
 
 // SyncRuleDefinition 表示统一规则层的单条规则定义。
+// 无论是内置默认规则还是从 YAML 配置加载的自定义规则，最终都统一为此结构体。
 type SyncRuleDefinition struct {
-	ToolType ToolType
-	Scope    ConfigScope
-	Path     string
-	Category ConfigCategory
-	IsDir    bool
+	ToolType ToolType        // 规则所属的工具类型（codex / claude）
+	Scope    ConfigScope     // 规则作用域：global（全局配置目录）或 project（项目目录）
+	Path     string          // 相对于配置根目录的路径，如 "config.toml"、"commands"
+	Category ConfigCategory  // 配置类别，用于分组展示和路由（如 skills、commands、plugins）
+	IsDir    bool            // 规则目标是否为目录；目录类型会递归扫描子文件
 }
 
 // DefaultGlobalRules 返回工具的默认全局规则。
