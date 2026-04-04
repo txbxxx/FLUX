@@ -49,7 +49,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 			})
 		},
 	}
-	addCommand.Flags().BoolVar(&addProjectMode, "project", false, "注册项目路径")
+	addCommand.Flags().BoolVarP(&addProjectMode, "project", "p", false, "注册项目路径")
 
 	var removeProjectMode bool
 	removeCommand := &spcobra.Command{
@@ -75,7 +75,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 			})
 		},
 	}
-	removeCommand.Flags().BoolVar(&removeProjectMode, "project", false, "删除已注册项目")
+	removeCommand.Flags().BoolVarP(&removeProjectMode, "project", "p", false, "删除已注册项目")
 
 	listCommand := &spcobra.Command{
 		Use:   "list [app-or-project...]",

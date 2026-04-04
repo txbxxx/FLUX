@@ -7,7 +7,6 @@ import (
 // CollectOptions 文件收集选项
 type CollectOptions struct {
 	Tools       []string              // 要收集的工具
-	Scope       models.SnapshotScope  // 快照范围
 	ProjectPath string                // 项目路径
 	Categories  []models.FileCategory // 要包含的文件类别
 	Excludes    []string              // 排除的文件模式

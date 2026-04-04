@@ -1,429 +1,319 @@
-# AI Configuration Sync Manager
+# AI Sync Manager
 
-> AI 工具配置同步管理器 - 基于 Wails 框架的桌面应用
+> **本地优先的 AI 工具配置管理器** — 纯终端形态的 CLI + TUI 应用
 >
-> **开发语言**：请使用中文进行交流和文档编写
+> **交流语言**：中文
+
+---
 
 ## 项目概述
 
-这是一个用于同步和管理多个 AI 编程工具（Codex、Claude、Cursor、Windsurf）配置文件的桌面应用程序。支持快照、版本控制、跨设备同步等功能。
+本地优先的 AI 工具配置管理器，聚焦于本地配置的扫描、快照、浏览和编辑。
 
-**技术栈：**
-- 后端：Go 1.25+ + Wails 框架
-- 前端：Vue 3 + TypeScript + Vite
-- 数据库：modernc.org/sqlite（纯 Go，无 CGO）
-- Git：go-git v5
+**当前能力**：扫描本机 AI 工具配置 · 创建/列出本地快照 · 浏览配置目录与文件 · 终端内直接编辑配置文件 · 自定义扫描规则
+
+**暂未覆盖**：远端仓库同步（push/pull/diff/apply/rollback）· 图形化凭证管理 · 快照应用（回滚）· 快照对比 · 大量文件收集可能较慢
+
+---
+
+## 技术栈与依赖
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+| 语言 | Go | 1.25+ | — |
+| CLI | Cobra | v1.9.1 | 命令行框架 |
+| TUI | Bubbletea + Lipgloss | v1.3.10 / v1.1.0 | 终端交互界面 |
+| 数据库 | SQLite (modernc.org/sqlite) | v1.47.0 | 本地持久化 |
+| Git | go-git | v5.17.0 | 仓库操作 |
+| 日志 | Zap | v1.27.1 | 结构化日志 |
+| 测试 | Testify | v1.10.0 | 断言 |
+| UUID | google/uuid | v1.6.0 | ID 生成 |
+
+---
 
 ## 项目结构
 
 ```
 ai-sync-manager/
-├── main.go                 # Wails 应用入口
-├── app.go                  # Wails 绑定层主应用
-├── wails.json             # Wails 配置
-├── go.mod/go.sum          # Go 依赖
+├── cmd/ai-sync/                    # CLI 入口
+│   ├── main.go                     # 组装依赖、启动 CLI/TUI
+│   └── main_test.go
 │
-├── internal/              # 内部包（不对外暴露）
-│   ├── models/            # 数据模型 + DAO（Active Record 模式）
-│   │   ├── snapshot.go   # Snapshot 模型 + SnapshotDAO
-│   │   ├── sync_task.go  # SyncTask 模型 + SyncTaskDAO
-│   │   ├── remote_config.go # RemoteConfig 模型 + RemoteConfigDAO
-│   │   └── app_config.go # 应用配置模型
+├── internal/
+│   ├── app/
+│   │   ├── runtime/runtime.go      # 运行时：日志、数据库、服务初始化
+│   │   └── usecase/
+│   │       ├── local_workflow.go   # 本地工作流：快照、扫描、浏览编排
+│   │       └── config_browser.go   # 配置浏览器：目录浏览、文件读写
 │   │
-│   ├── service/          # 业务逻辑层
-│   │   ├── tool/         # 工具检测模块
-│   │   │   ├── detector.go   # 工具检测器
-│   │   │   ├── paths.go      # 路径解析
-│   │   │   └── types.go      # 类型定义
-│   │   │
-│   │   ├── git/          # Git 操作模块
-│   │   │   ├── client.go     # Git 客户端
-│   │   │   ├── auth.go       # 认证处理
-│   │   │   └── types.go      # 类型定义
-│   │   │
-│   │   ├── snapshot/     # 快照管理模块
-│   │   │   ├── service.go    # 快照服务
-│   │   │   ├── collector.go  # 文件收集器
-│   │   │   ├── applier.go    # 快照应用器
-│   │   │   ├── comparator.go # 快照比较器
-│   │   │   └── types.go      # 类型定义
-│   │   │
-│   │   └── sync/         # 同步模块
-│   │       ├── sync.go       # 同步服务
-│   │       ├── packager.go   # 快照打包器
-│   │       └── types.go      # 类型定义
+│   ├── cli/cobra/                  # Cobra 命令定义
+│   │   ├── root.go                 # 根命令 + Workflow 接口
+│   │   ├── scan.go                 # scan 命令 + add/remove/list/rules 子命令
+│   │   ├── get.go                  # get 命令（浏览/编辑配置）
+│   │   ├── snapshot.go             # snapshot 命令组
+│   │   ├── snapshot_create.go      # snapshot create
+│   │   ├── snapshot_list.go        # snapshot list
+│   │   └── tui.go                  # tui 命令
 │   │
-│   └── handler/          # 处理层（如有）
-│       └── *.go          # HTTP/gRPC 处理器
+│   ├── tui/                        # Bubbletea TUI
+│   │   ├── app.go                  # Program 启动
+│   │   ├── model.go                # 页面枚举、状态字段
+│   │   ├── update.go               # 事件调度中心
+│   │   ├── view.go                 # 首页 + 创建页渲染
+│   │   ├── page_scan.go            # 扫描结果页
+│   │   ├── page_snapshots.go       # 快照列表页
+│   │   ├── form_create.go          # 创建快照表单
+│   │   ├── editor.go               # 配置编辑器启动器
+│   │   └── editor_model.go         # 编辑器状态模型
+│   │
+│   ├── service/
+│   │   ├── tool/                   # 工具检测
+│   │   │   ├── detector.go         # 检测器：扫描配置目录
+│   │   │   ├── accessor.go         # 访问器：读取文件内容
+│   │   │   ├── paths.go            # 默认路径定义
+│   │   │   ├── rule_definitions.go # 内置规则定义
+│   │   │   ├── rule_manager.go     # 自定义规则 CRUD
+│   │   │   ├── rule_resolver.go    # 规则解析（合并默认+自定义+项目）
+│   │   │   ├── rule_store.go       # 规则持久化
+│   │   │   └── types.go            # 类型定义
+│   │   ├── snapshot/               # 快照管理
+│   │   │   ├── service.go          # 快照 CRUD、导出、备份、校验
+│   │   │   ├── collector.go        # 文件收集（规则匹配→遍历→哈希→分类→去重）
+│   │   │   ├── applier.go          # 快照应用（预留）
+│   │   │   ├── comparator.go       # 快照对比（预留）
+│   │   │   └── types.go            # 类型定义
+│   │   ├── git/                    # Git 操作（预留）
+│   │   ├── sync/                   # 同步服务（预留）
+│   │   └── crypto/                 # AES-256-GCM 加密
+│   │
+│   └── models/                     # 数据模型 + DAO（同文件）
+│       ├── snapshot.go             # Snapshot + SnapshotDAO
+│       ├── registered_project.go   # RegisteredProject + DAO
+│       ├── custom_sync_rule.go     # CustomSyncRule + DAO
+│       ├── sync_task.go            # SyncTask（预留）
+│       ├── remote_config.go        # RemoteConfig（预留）
+│       ├── app_config.go           # 应用配置/统计模型
+│       └── utils.go                # 工具函数
 │
-├── pkg/                  # 公共包（可被外部引用）
-│   ├── database/         # 通用数据库工具
-│   │   └── db.go         # 连接、迁移、事务管理
-│   ├── errors/           # 错误处理
-│   ├── logger/           # 日志系统（基于 zap）
-│   └── utils/            # 工具函数
+├── pkg/
+│   ├── config/                     # YAML 配置（嵌入默认值 → 用户覆盖）
+│   ├── database/db.go              # SQLite 连接、迁移、事务
+│   ├── errors/                     # 错误码与包装
+│   ├── logger/                     # Zap 日志
+│   └── utils/                      # 字符串/文件/转换工具
 │
-├── frontend/             # Vue 3 前端
-│   ├── src/
-│   │   ├── components/   # Vue 组件
-│   │   ├── assets/       # 静态资源
-│   │   └── main.ts       # 入口文件
-│   └── wailsjs/          # Wails 生成的绑定
-│
-├── docs/协作文档/       # 协作文档
-│   ├── 接口文档/         # 接口文档
-│   └── 阶段总结/         # 各阶段总结
-│
-└── build/                # 构建输出目录
+├── configs/default.yaml            # 配置模板（与 pkg/config/default.yaml 同步）
+├── docs/                           # 文档（使用指南/架构设计/_old 存档）
+├── go.mod · go.sum · Makefile · .golangci.yml · README.md
 ```
 
 ---
 
-## 开发规范
+## 架构规范
 
-### 1. Models 层规范（数据模型 + DAO）
+### 分层调用链
 
-#### 命名规范
-- **结构体命名**：以数据库表名为主，使用驼峰命名
-- **DAO 命名**：结构体名 + DAO，例如 `SnapshotDAO`、`SyncTaskDAO`
-
-#### DAO 函数规范
-- **返回值**：只能返回 `models` 中定义的结构体，不允许返回 `map`、`interface{}`
-- **单一职责**：每个函数只能操作一个数据库表，不允许一个函数操作多个表
-- **不做转换**：不对返回的响应结构体进行 convert 操作，直接返回数据库映射的结构体
-
-```go
-// ✅ 正确示例
-type SnapshotDAO struct {
-    db *database.DB
-}
-
-// 返回明确的 Snapshot 结构体
-func (dao *SnapshotDAO) GetByID(id string) (*models.Snapshot, error) {
-    // ...
-    return snapshot, nil
-}
-
-// ❌ 错误示例
-func (dao *SnapshotDAO) GetByID(id string) (map[string]interface{}, error) {
-    // 不要返回 map
-}
-
-func (dao *SnapshotDAO) GetByID(id string) (*SomeOtherType, error) {
-    // 不要转换成其他类型
-}
-
-func (dao *SnapshotDAO) GetWithFiles(id string) (*SnapshotWithFiles, error) {
-    // 不要一个函数操作多个表（snapshots + snapshot_files）
-}
+```
+CLI/TUI 层  →  UseCase 层  →  Service 层  →  DAO（models 内）
+   ↓              ↓              ↓              ↓
+ 仅解析参数     流程编排       单领域逻辑     数据库 CRUD
+ 仅渲染输出     错误翻译       可调 DAO       只操作一个表
+ 不含业务逻辑   跨服务协调     不调其他服务    返回明确结构体
 ```
 
-#### 文件组织
-- 每个 DAO 与其对应的数据模型放在同一个文件中
-- 例如：`SnapshotDAO` 放在 `internal/models/snapshot.go`
+**绝对禁止**：CLI/TUI 直接调用 Service 或 DAO。
+
+### Models 层规则
+
+- **结构体 + DAO 同文件**：`snapshot.go` 包含 `Snapshot` 结构体和 `SnapshotDAO`
+- **DAO 返回值**：只返回 models 中定义的结构体，禁止返回 `map`、`interface{}`
+- **单一职责**：每个 DAO 函数只操作一个数据库表
+- **不做转换**：DAO 不做响应结构体的 convert
 
 ```go
-// internal/models/snapshot.go
+// internal/models/xxx.go — 标准文件结构
 package models
 
-// 数据模型
-type Snapshot struct {
-    ID   string `json:"id" db:"id"`
-    Name string `json:"name" db:"name"`
-    // ...
-}
-
-// DAO
-type SnapshotDAO struct {
-    db *database.DB
-}
-
-// DAO 方法
-func (dao *SnapshotDAO) Create(snapshot *Snapshot) error { ... }
-func (dao *SnapshotDAO) GetByID(id string) (*Snapshot, error) { ... }
-```
-
-### 2. Service 层规范（业务逻辑层）
-
-#### 职责
-- **调用 DAO**：从数据库获取数据或操作数据库
-- **业务处理**：对数据库返回的数据进行业务逻辑处理
-- **数据组装**：组合多个数据源的结果
-
-```go
-// ✅ 正确示例
-func (s *Service) GetSnapshotWithStats(id string) (*SnapshotStats, error) {
-    // 1. 调用 DAO 获取数据
-    snapshotDAO := models.NewSnapshotDAO(s.db)
-    snapshot, err := snapshotDAO.GetByID(id)
-    if err != nil {
-        return nil, err
-    }
-
-    // 2. 业务逻辑处理
-    stats := &SnapshotStats{
-        Snapshot: snapshot,
-        FileCount: len(snapshot.Files),
-        TotalSize: calculateTotalSize(snapshot.Files),
-    }
-
-    return stats, nil
-}
-```
-
-### 3. Handler 层规范（处理层）
-
-#### 职责
-- **仅调用 Service**：handler 的作用就是调用 service 层
-- **不做数据操作**：不允许直接操作数据库或调用 DAO
-- **请求解析**：解析 HTTP/gRPC 请求
-- **响应封装**：封装响应格式
-
-```go
-// ✅ 正确示例
-func (h *Handler) GetSnapshot(c *gin.Context) {
-    id := c.Param("id")
-
-    // 仅调用 Service
-    snapshot, err := h.service.GetSnapshot(id)
-    if err != nil {
-        c.JSON(500, gin.H{"error": err.Error()})
-        return
-    }
-
-    c.JSON(200, snapshot)
-}
-
-// ❌ 错误示例
-func (h *Handler) GetSnapshot(c *gin.Context) {
-    id := c.Param("id")
-
-    // 不要直接调用 DAO
-    snapshotDAO := models.NewSnapshotDAO(h.db)
-    snapshot, err := snapshotDAO.GetByID(id)
-
-    // ...
-}
-```
-
----
-
-## 代码规范
-
-### 文件命名
-- Go 文件：使用 `snake_case` 命名（如 `snapshot_service.go`）
-- 测试文件：添加 `_test.go` 后缀
-
-### 包命名
-- 包名使用小写单词，避免下划线
-- 包名应简短且有意义
-
-### 结构体方法
-```go
-// 好的示例：receiver 使用小写缩写
-func (s *Service) CreateSnapshot() error { }
-func (c *Collector) Collect() error { }
-func (dao *SnapshotDAO) GetByID(id string) (*Snapshot, error) { }
-
-// 避免使用 this、self 等命名
-```
-
-### 错误处理
-```go
-// 使用 pkg/errors 包装错误
-import "ai-sync-manager/pkg/errors"
-
-return errors.Wrap(err, "创建快照失败")
-```
-
-### 日志记录
-```go
-import "ai-sync-manager/pkg/logger"
-
-logger.Info("操作开始",
-    zap.String("snapshot_id", snapshot.ID),
-    zap.Int("file_count", len(snapshot.Files)),
-)
-```
-
----
-
-## 开发指南
-
-### 添加新功能
-1. 在 `internal/models/` 中定义数据模型和 DAO
-2. 在 `internal/service/` 中实现业务逻辑
-3. 在 `internal/handler/` 中添加处理器（如需要）
-4. 编写单元测试（目标覆盖率 > 30%）
-5. 在 `docs/协作文档/` 中更新文档
-
-### 测试
-```bash
-# 运行所有测试
-go test ./... -v
-
-# 运行特定包的测试
-go test ./internal/service/snapshot/... -v -cover
-
-# 查看覆盖率
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-```
-
-### 构建
-```bash
-# 开发模式（热重载）
-wails dev
-
-# 生产构建
-wails build
-
-# 清理
-wails build -clean
-```
-
----
-
-## 关键模块说明
-
-### 1. 通用数据库工具 (`pkg/database`)
-- **DB**: 数据库连接管理
-- **迁移**: 自动执行表结构迁移
-- **事务**: 提供事务处理接口
-- 无业务逻辑，可被其他项目复用
-
-### 2. 数据模型层 (`internal/models`)
-- **Snapshot**: 快照模型 + SnapshotDAO
-- **SyncTask**: 同步任务模型 + SyncTaskDAO
-- **RemoteConfig**: 远端配置模型 + RemoteConfigDAO
-- Active Record 模式：模型与 DAO 在同一文件
-
-### 3. 工具检测模块 (`internal/service/tool`)
-- **Detector**: 检测已安装的 AI 工具
-- **Paths**: 获取工具配置文件路径
-- 支持工具：Codex、Claude、Cursor、Windsurf
-
-### 4. Git 操作模块 (`internal/service/git`)
-- **GitClient**: 封装 go-git 操作
-- 支持：clone、pull、push、commit、status
-- 认证：SSH、Token、Basic Auth
-
-### 5. 快照管理模块 (`internal/service/snapshot`)
-- **Service**: 快照 CRUD 操作
-- **Collector**: 收集配置文件
-- **Applier**: 应用快照到文件系统
-- **Comparator**: 比较快照差异
-
-### 6. 同步模块 (`internal/service/sync`)
-- **Service**: 推送/拉取快照到 Git
-- **Packager**: 打包快照为 Git 提交
-- 支持远程仓库同步
-
-### 7. 加密模块 (`internal/service/crypto`)
-- **Service**: AES-256-GCM 加密服务
-- 支持：密码、Token、SSH 密钥加密
-- 密钥来源：环境变量、密钥文件、自动生成
-- **便捷方法**: EncryptPassword, EncryptToken, EncryptSSHKey
-
----
-
-## 数据库
-
-使用 SQLite，通过 `modernc.org/sqlite` 驱动（无 CGO 依赖）。
-
-**DAO 使用模式：**
-```go
-// Service 层使用
-import (
-    "ai-sync-manager/internal/models"
-    "ai-sync-manager/pkg/database"
-)
-
-func (s *Service) GetSnapshot(id string) (*models.Snapshot, error) {
-    // 创建 DAO
-    snapshotDAO := models.NewSnapshotDAO(s.db)
-
-    // 调用 DAO 方法
-    return snapshotDAO.GetByID(id)
-}
-```
-
----
-
-## 常见任务
-
-### 添加新的数据模型和 DAO
-```go
-// 1. 在 internal/models/ 中创建文件
-// internal/models/example.go
-
-package models
-
-// 数据模型（对应数据库表）
 type Example struct {
     ID   string `json:"id" db:"id"`
     Name string `json:"name" db:"name"`
 }
 
-// DAO
-type ExampleDAO struct {
-    db *database.DB
-}
+type ExampleDAO struct { db *database.DB }
 
-func NewExampleDAO(db *database.DB) *ExampleDAO {
-    return &ExampleDAO{db: db}
-}
-
-// DAO 方法（返回明确的 Example 结构体）
-func (dao *ExampleDAO) Create(example *Example) error { ... }
-func (dao *ExampleDAO) GetByID(id string) (*Example, error) { ... }
+func NewExampleDAO(db *database.DB) *ExampleDAO { return &ExampleDAO{db: db} }
+func (dao *ExampleDAO) Create(e *Example) error { /* ... */ }
+func (dao *ExampleDAO) GetByID(id string) (*Example, error) { /* ... */ }
 ```
 
-### 添加新的数据库表
-1. 在 `pkg/database/db.go` 的 `createTables()` 中添加表定义
-2. 在 `internal/models/` 中定义 Go 结构体和 DAO
-3. 编写测试验证
+### Service 层规则
 
-### 扩展快照文件类别
+- 调用 DAO 获取数据，执行业务逻辑，组装结果
+- 可组合多个 DAO 的返回值
+
+### UseCase 层规则
+
+- 编排多个 Service 完成完整业务流程
+- 将底层技术性错误翻译为用户可读错误（`UserError`）
+- 决定对外返回的数据结构
+
+---
+
+## 代码规范
+
+### 命名
+
+- Go 文件：`snake_case`，测试文件加 `_test.go`
+- 包名：小写单词，无下划线
+- Receiver：小写缩写（`w *LocalWorkflow`、`dao *SnapshotDAO`），禁止 `this`/`self`
+
+### 注释
+
+- **导出类型/函数**：必须有 godoc 注释（英文），说明做什么、为什么
+- **函数内部**：用 `// 第 X 步：` 标记逻辑块；非显而易见的逻辑用 `// 为什么：` 说明设计决策
+- **不要**：翻译代码、写创建日期/作者、注释被删除的代码
+
 ```go
-// 在 internal/models/snapshot.go 中添加
-const (
-    CategoryConfig FileCategory = "config"
-    // ...
-    CategoryNewType FileCategory = "newtype"
-)
+// Scan scans all registered projects and returns a status summary for each.
+//
+// 统一项目模型：所有可同步的对象都是"项目"（包括自动注册的全局项目如 claude-global）。
+func (w *LocalWorkflow) Scan(ctx context.Context, input ScanInput) (*ScanResult, error) {
+    // 第一步：自动推导工具类型
+    // 第二步：参数校验
+    // 第三步：调用 SnapshotManager
+
+    // 全局项目使用全局规则而不是项目规则。
+    // 为什么：~/.claude 的布局是全局配置结构，用项目规则只能扫到极少文件。
+    rules = DefaultGlobalRules(toolType)
+```
+
+### 错误处理
+
+```go
+import "ai-sync-manager/pkg/errors"
+return errors.Wrap(err, "创建快照失败")
+```
+
+### 日志
+
+```go
+import "ai-sync-manager/pkg/logger"
+logger.Info("操作开始", zap.String("snapshot_id", id), zap.Int("file_count", n))
 ```
 
 ---
 
-## 依赖项
+## 开发工作流
 
-主要 Go 依赖：
-- `github.com/wailsapp/wails/v2` - Wails 框架
-- `github.com/go-git/go-git/v5` - Git 操作
-- `modernc.org/sqlite` - SQLite 驱动
-- `go.uber.org/zap` - 结构化日志
-- `github.com/stretchr/testify` - 测试断言
+### 分支开发（必须使用 worktree）
+
+禁止直接在 `master` 编码。每次从 `master` 切出 worktree：
+
+```bash
+git checkout master && git pull origin master
+git worktree add ../AToSync-feat-xxx feat/xxx
+# ... 在 worktree 中开发 ...
+git push -u origin feat/xxx
+git checkout master && git merge feat/xxx && git push origin master
+git worktree remove ../AToSync-feat-xxx && git branch -d feat/xxx
+```
+
+**分支前缀**：`feat/` `fix/` `refactor/` `docs/` `test/` `chore/` `perf/` `style/`
+
+### 文档同步检查
+
+每次提交后检查：
+
+| 检查项 | 何时更新 |
+|--------|----------|
+| CLAUDE.md 项目结构 | 新增/删除文件、架构变更 |
+| `docs/使用指南/` | 新命令、参数变化、行为变化 |
+| `docs/架构设计/` | 模块新增/重构、数据流变化 |
+| `docs/文档索引.md` | 新增或删除任何文档 |
 
 ---
 
-## 已知限制
+## 提交规范
 
-1. **Windows Git 路径**: 某些 Git 操作在 Windows 上可能需要特殊处理
-2. **SSH 密钥**: 需要用户配置 SSH 密钥路径
-3. **大文件**: 大量文件收集可能较慢
+**语言**：Commit Message 全部使用中文（type 前缀保留英文）。
+
+**格式**：
+
+```
+<type>: <中文简要描述>
+
+完成了什么：
+有什么作用：
+可能的影响：（无则省略）
+
+| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
+|----------|-----------|----------|----------|
+| xxx      | xxx       | xxx      | 通过     |
+```
+
+**Type 列表**：`feat` `fix` `refactor` `docs` `test` `chore` `perf` `style`
+
+**示例**：
+
+```
+feat: get 命令支持省略 path 参数
+
+完成了什么：
+- get 命令参数从 ExactArgs(2) 改为 MinimumNArgs(1)
+- accessor 支持空路径时返回根目录
+
+有什么作用：
+- 用户执行 "ai-sync get claude" 即可查看根目录
+
+| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
+|----------|-----------|----------|----------|
+| 省略 path | ai-sync get claude | 列出根目录 | 通过 |
+| 指定 path | ai-sync get claude settings.json | 显示文件内容 | 通过 |
+| 编辑模式 | ai-sync get claude settings.json -e | 进入编辑器 | 通过 |
+| go test | go test ./... | 全部通过 | 通过 |
+```
 
 ---
 
-## 开发进度
+## CLI 命令速查
 
-- ✅ Phase 0: 项目基础设施
-- ✅ Phase 1: 工具检测模块
-- ✅ Phase 2: Git 操作模块
-- ✅ Phase 3: 数据模型层
-- ✅ Phase 4: 数据库持久化（已重构：DAO 与 Model 合并）
-- ✅ Phase 5: 快照管理模块
-- ✅ Phase 6: Git 集成模块
-- ✅ Phase 7: 加密模块（已完成）
-- ⏸️ Phase 8: 前端界面（暂缓）
-- ✅ 前端 API 文档（见 `docs/协作文档/接口文档/前端API对接文档.md`）
+| 命令 | 用法 | 关键 flag |
+|------|------|-----------|
+| scan | `ai-sync scan [app-or-project...]` | — |
+| scan add | `ai-sync scan add <app> <path>` | `--project/-p` 注册项目 |
+| scan remove | `ai-sync scan remove <app> <path>` | `--project/-p` 删除项目 |
+| scan list | `ai-sync scan list [app-or-project]` | — |
+| scan rules | `ai-sync scan rules [app-or-project]` | — |
+| get | `ai-sync get <project> [path]` | `--edit/-e` 编辑模式 |
+| snapshot create | `ai-sync snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
+| snapshot list | `ai-sync snapshot list` | `-l` 条数 `-o` 偏移 |
+| tui | `ai-sync tui` | — |
+
+---
+
+## 常用命令
+
+```bash
+make build                          # 构建 bin/ai-sync.exe
+make build CLI_NAME=my-tool         # 自定义名称
+make run                            # 构建并运行
+make run ARGS=scan                  # 带参数运行
+make fmt                            # 格式化
+make clean                          # 清理
+
+go test ./...                       # 全部测试
+go test ./internal/service/snapshot/... -v -cover  # 特定包
+go test -coverprofile=coverage.out ./...            # 覆盖率
+go run -buildvcs=false ./cmd/ai-sync <command>      # 直接运行
+```
+
+---
+
+## 文档索引
+
+- [文档索引](docs/文档索引.md)
+- [命令行与终端界面 MVP 使用指南](docs/使用指南/命令行与终端界面MVP使用指南.md)
+- [快照功能使用指南](docs/使用指南/快照功能使用指南.md)
+- [终端架构详解](docs/架构设计/终端架构详解.md)
+- [快照系统技术架构](docs/架构设计/快照系统技术架构.md)
+- [历史存档](docs/_old/README.md) — 已废弃的 Wails GUI 时代文档

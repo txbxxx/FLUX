@@ -31,6 +31,7 @@ type editorBuffer struct {
 	lines           []string
 	width           int
 	height          int
+	lineEnding      string // 保留原始换行符风格（\r\n 或 \n）
 }
 
 // newEditorBuffer 创建带默认尺寸的编辑缓冲。
@@ -46,6 +47,10 @@ func newEditorBuffer(content string) editorBuffer {
 
 // SetValue 会先统一换行符，再拆成按行编辑的内部结构。
 func (b *editorBuffer) SetValue(content string) {
+	b.lineEnding = "\n"
+	if strings.Contains(content, "\r\n") {
+		b.lineEnding = "\r\n"
+	}
 	normalized := strings.ReplaceAll(content, "\r\n", "\n")
 	b.lines = strings.Split(normalized, "\n")
 	if len(b.lines) == 0 {
@@ -53,9 +58,9 @@ func (b *editorBuffer) SetValue(content string) {
 	}
 }
 
-// Value 把当前缓冲重新拼成完整文本。
+// Value 把当前缓冲重新拼成完整文本，保留原始换行符风格。
 func (b editorBuffer) Value() string {
-	return strings.Join(b.lines, "\n")
+	return strings.Join(b.lines, b.lineEnding)
 }
 
 func (b *editorBuffer) SetWidth(width int) {

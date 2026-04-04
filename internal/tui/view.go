@@ -58,7 +58,7 @@ func renderCreatePage(m *Model) string {
 	builder.WriteString(renderField("tools", m.Form.Tools, m.FormFocus == formFocusTools, "codex,claude"))
 	builder.WriteString(renderField("message", m.Form.Message, m.FormFocus == formFocusMessage, "本次快照说明"))
 	builder.WriteString(renderField("name", m.Form.Name, m.FormFocus == formFocusName, "可选快照名称"))
-	builder.WriteString(renderField("project-path", m.Form.ProjectPath, m.FormFocus == formFocusProjectPath, "可选项目路径"))
+	builder.WriteString(renderField("project-path", m.Form.ProjectName, m.FormFocus == formFocusProjectName, "可选项目路径"))
 
 	submitPrefix := " "
 	if m.FormFocus == formFocusSubmit {

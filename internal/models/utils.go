@@ -9,7 +9,7 @@ import (
 )
 
 // NewSnapshot 创建一个带默认时间和基础元数据的快照对象。
-func NewSnapshot(message string, tools []string, scope SnapshotScope) *Snapshot {
+func NewSnapshot(message string, tools []string, projectName string) *Snapshot {
 	return &Snapshot{
 		ID:          generateID("snap"),
 		Name:        generateSnapshotName(message),
@@ -18,7 +18,7 @@ func NewSnapshot(message string, tools []string, scope SnapshotScope) *Snapshot 
 		CreatedAt:   time.Now(),
 		Tools:       tools,
 		Metadata: SnapshotMetadata{
-			Scope: scope,
+			ProjectPath: projectName, // 使用项目名称标识来源
 		},
 		Files: []SnapshotFile{},
 		Tags:  []string{},

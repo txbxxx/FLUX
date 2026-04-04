@@ -82,12 +82,13 @@ type ToolInstallation struct {
 	DetectedAt   time.Time          `json:"detected_at"`             // 检测时间
 }
 
-// ToolDetectionResult 检测结果（内部使用）
+// ToolDetectionResult 检测结果，包含全局安装信息和项目级别安装信息。
+// 内部使用：Codex/Claude 字段仅用于全局扫描兼容，Scan 用例层只消费 ProjectInstallations。
 type ToolDetectionResult struct {
-	Codex                *ToolInstallation   `json:"codex,omitempty"`
-	Claude               *ToolInstallation   `json:"claude,omitempty"`
-	ProjectInstallations []*ToolInstallation `json:"project_installations,omitempty"`
-	Projects             []ProjectInfo       `json:"projects,omitempty"`
+	Codex                *ToolInstallation   // Codex 全局安装检测结果（仅内部使用）
+	Claude               *ToolInstallation   // Claude 全局安装检测结果（仅内部使用）
+	ProjectInstallations []*ToolInstallation // 所有已注册项目（含全局项目）的扫描结果
+	Projects             []ProjectInfo       // 兼容旧格式的项目信息列表
 }
 
 // ToInstallations 转换为 ToolInstallation 列表（过滤未安装的）

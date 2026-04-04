@@ -6,34 +6,37 @@ import (
 	"time"
 )
 
+// ResolvedRuleMatch 表示一条规则在文件系统上的实际命中结果。
+// 将规则定义与磁盘真实文件/目录关联起来，包含文件大小、修改时间等运行时信息。
 type ResolvedRuleMatch struct {
-	ToolType     ToolType
-	Scope        ConfigScope
-	RelativePath string
-	AbsolutePath string
-	Category     ConfigCategory
-	IsDir        bool
-	Size         int64
-	ModifiedAt   time.Time
+	ToolType     ToolType        // 命中文件所属的工具类型（codex / claude）
+	Scope        ConfigScope     // 规则作用域：global 或 project
+	RelativePath string          // 相对于配置根目录的路径（如 "skills/xxx.md"）
+	AbsolutePath string          // 文件/目录在磁盘上的绝对路径
+	Category     ConfigCategory  // 配置类别（skills / commands / plugins 等）
+	IsDir        bool            // 是否为目录
+	Size         int64           // 文件大小（字节），目录时为 0
+	ModifiedAt   time.Time       // 最后修改时间
 }
 
 // ResolvedProjectMatch 记录某个已注册项目命中的全部规则结果。
 type ResolvedProjectMatch struct {
-	ProjectName string
-	ProjectPath string
-	Matches     []ResolvedRuleMatch
+	ProjectName string              // 项目名称（如 "demo"、"ai-sync-manager"）
+	ProjectPath string              // 项目根目录的绝对路径
+	Matches     []ResolvedRuleMatch // 该项目下所有命中的配置文件/目录
 }
 
-// ToolRuleReport 是某个工具在当前机器上的完整规则解析结果。
+// ToolRuleReport 是某个工具在当前机器上的完整规则解析报告。
+// 包含全局扫描结果、自定义规则命中、已注册项目扫描结果，以及缺失的关键路径。
 type ToolRuleReport struct {
-	ToolType             ToolType
-	GlobalPath           string
-	Status               InstallationStatus
-	MissingRequiredPaths []string
-	DefaultMatches       []ResolvedRuleMatch
-	CustomMatches        []ResolvedRuleMatch
-	MissingCustomRules   []ResolvedRuleMatch
-	ProjectMatches       []ResolvedProjectMatch
+	ToolType             ToolType              // 工具类型（codex / claude）
+	GlobalPath           string                // 全局配置根目录的绝对路径（如 ~/.codex）
+	Status               InstallationStatus    // 综合安装状态（installed / partial / not_installed）
+	MissingRequiredPaths []string              // 缺失的关键文件列表（如 config.toml 不存在时记录于此）
+	DefaultMatches       []ResolvedRuleMatch   // 内置默认规则命中的文件列表
+	CustomMatches        []ResolvedRuleMatch   // 用户自定义规则命中的文件列表
+	MissingCustomRules   []ResolvedRuleMatch   // 用户自定义规则中路径在磁盘上不存在的条目
+	ProjectMatches       []ResolvedProjectMatch // 所有已注册项目的扫描结果
 }
 
 // RuleResolver 负责把默认规则、项目模板和自定义规则解析成当前命中结果。

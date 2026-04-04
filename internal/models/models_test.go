@@ -11,15 +11,15 @@ import (
 func TestNewSnapshot(t *testing.T) {
 	message := "Test snapshot"
 	tools := []string{"codex", "claude"}
-	scope := ScopeGlobal
+	projectName := "codex-global"
 
-	snapshot := NewSnapshot(message, tools, scope)
+	snapshot := NewSnapshot(message, tools, projectName)
 
 	assert.NotNil(t, snapshot)
 	assert.NotEmpty(t, snapshot.ID)
 	assert.Equal(t, message, snapshot.Message)
 	assert.Equal(t, tools, snapshot.Tools)
-	assert.Equal(t, scope, snapshot.Metadata.Scope)
+	assert.Equal(t, projectName, snapshot.Metadata.ProjectPath)
 	assert.False(t, snapshot.CreatedAt.IsZero())
 }
 

@@ -9,18 +9,21 @@ import (
 	"strings"
 )
 
+// ConfigTarget 表示一个已通过规则校验的配置文件或目录目标。
+// 由 ConfigAccessor.Resolve 返回，所有路径均经过符号链接解析和越界检查。
 type ConfigTarget struct {
-	ToolType     ToolType
-	RootPath     string
-	RelativePath string
-	AbsolutePath string
-	IsDir        bool
+	ToolType     ToolType // 所属工具类型（codex / claude）
+	RootPath     string   // 配置根目录的绝对路径（全局目录或项目根目录）
+	RelativePath string   // 相对于 RootPath 的路径，根目录时为 "."
+	AbsolutePath string   // 文件/目录在磁盘上的绝对路径（已解析符号链接）
+	IsDir        bool     // 是否为目录
 }
 
+// ConfigEntry 表示目录列表中的单个条目，用于 ListDir 的返回结果。
 type ConfigEntry struct {
-	Name         string
-	RelativePath string
-	IsDir        bool
+	Name         string // 文件或目录名（不含路径前缀）
+	RelativePath string // 相对于配置根目录的路径
+	IsDir        bool   // 是否为目录
 }
 
 // ConfigAccessor 只允许访问统一规则源已经放行的目标。
@@ -65,7 +68,20 @@ func (a *ConfigAccessor) resolveRelativeTarget(toolType ToolType, report *ToolRu
 
 	cleanRelativePath := filepath.Clean(requestPath)
 	if cleanRelativePath == "." || cleanRelativePath == "" {
-		return nil, errors.New("请求路径不能为空")
+		resolvedRootPath, err := filepath.EvalSymlinks(report.GlobalPath)
+		if err != nil {
+			resolvedRootPath, err = filepath.Abs(report.GlobalPath)
+			if err != nil {
+				return nil, fmt.Errorf("解析配置目录失败: %w", err)
+			}
+		}
+		return &ConfigTarget{
+			ToolType:     toolType,
+			RootPath:     resolvedRootPath,
+			RelativePath: ".",
+			AbsolutePath: resolvedRootPath,
+			IsDir:        true,
+		}, nil
 	}
 	if filepath.IsAbs(cleanRelativePath) {
 		return nil, fmt.Errorf("请求路径超出允许范围：%s", cleanRelativePath)

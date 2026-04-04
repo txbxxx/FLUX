@@ -12,13 +12,17 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 	var edit bool
 
 	command := &spcobra.Command{
-		Use:   "get <app> <path>",
+		Use:   "get <project> [path]",
 		Short: "查看或编辑指定 AI 工具配置",
-		Args:  spcobra.ExactArgs(2),
+		Args:  spcobra.MinimumNArgs(1),
 		RunE: func(cmd *spcobra.Command, args []string) error {
+			path := ""
+			if len(args) > 1 {
+				path = args[1]
+			}
 			result, err := deps.Workflow.GetConfig(cmd.Context(), usecase.GetConfigInput{
 				Tool: args[0],
-				Path: args[1],
+				Path: path,
 				Edit: edit,
 			})
 			if err != nil {
@@ -32,7 +36,7 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 				return deps.Editor.Run(cmd.Context(), result, func(content string) error {
 					return deps.Workflow.SaveConfig(cmd.Context(), usecase.SaveConfigInput{
 						Tool:    args[0],
-						Path:    args[1],
+						Path:    path,
 						Content: content,
 					})
 				})
@@ -49,6 +53,6 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 		},
 	}
 
-	command.Flags().BoolVar(&edit, "edit", false, "Open file in terminal editor")
+	command.Flags().BoolVarP(&edit, "edit", "e", false, "Open file in terminal editor")
 	return command
 }

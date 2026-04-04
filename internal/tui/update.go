@@ -141,8 +141,8 @@ func (m *Model) updateCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.Form.Message = m.updateFocusedField(m.Form.Message, msg)
 	case formFocusName:
 		m.Form.Name = m.updateFocusedField(m.Form.Name, msg)
-	case formFocusProjectPath:
-		m.Form.ProjectPath = m.updateFocusedField(m.Form.ProjectPath, msg)
+	case formFocusProjectName:
+		m.Form.ProjectName = m.updateFocusedField(m.Form.ProjectName, msg)
 	}
 
 	return m, cmd
