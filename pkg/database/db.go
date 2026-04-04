@@ -71,6 +71,77 @@ func InitDB(dataDir string) (*DB, error) {
 	return instance, nil
 }
 
+// InitDBWithConfig 使用外部配置初始化数据库单例。
+// cfg 为 nil 时使用默认值。config 包通过 DatabaseConfig 接口解耦。
+func InitDBWithConfig(dataDir string, cfg DatabaseConfig) (*DB, error) {
+	if cfg == nil {
+		return InitDB(dataDir)
+	}
+
+	var initErr error
+	once.Do(func() {
+		if err := os.MkdirAll(dataDir, 0755); err != nil {
+			initErr = fmt.Errorf("创建数据目录失败: %w", err)
+			return
+		}
+
+		dbPath := filepath.Join(dataDir, cfg.GetFilename())
+		instance = &DB{
+			path:   dbPath,
+			closed: false,
+		}
+
+		conn, err := openGormDB(dbPath)
+		if err != nil {
+			initErr = fmt.Errorf("打开数据库失败: %w", err)
+			return
+		}
+		instance.conn = conn
+
+		sqlDB, err := conn.DB()
+		if err != nil {
+			initErr = fmt.Errorf("获取底层 sql.DB 失败: %w", err)
+			return
+		}
+
+		if n := cfg.GetMaxOpenConns(); n > 0 {
+			sqlDB.SetMaxOpenConns(n)
+		}
+		if n := cfg.GetMaxIdleConns(); n > 0 {
+			sqlDB.SetMaxIdleConns(n)
+		}
+		if d := cfg.GetConnMaxLifetime(); d > 0 {
+			sqlDB.SetConnMaxLifetime(d)
+		}
+
+		if err := conn.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+			initErr = fmt.Errorf("设置 PRAGMA 失败: %w", err)
+			return
+		}
+
+		if err := instance.migrate(); err != nil {
+			initErr = fmt.Errorf("数据库迁移失败: %w", err)
+			return
+		}
+
+		logger.Info("数据库初始化成功", zap.String("path", dbPath))
+	})
+
+	if initErr != nil {
+		return nil, initErr
+	}
+
+	return instance, nil
+}
+
+// DatabaseConfig 数据库配置接口（避免直接依赖 config 包）。
+type DatabaseConfig interface {
+	GetFilename() string
+	GetMaxOpenConns() int
+	GetMaxIdleConns() int
+	GetConnMaxLifetime() time.Duration
+}
+
 func openGormDB(dbPath string) (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),

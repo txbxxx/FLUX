@@ -172,7 +172,7 @@ func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
 			return err
 		}
 		if len(row.Files) > 0 {
-			if err := tx.Create(&row.Files).Error; err != nil {
+					if err := tx.Omit("id").Create(&row.Files).Error; err != nil {
 				return err
 			}
 		}
