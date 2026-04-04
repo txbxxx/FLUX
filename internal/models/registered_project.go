@@ -9,12 +9,12 @@ import (
 
 // RegisteredProject 表示用户登记参与扫描的项目。
 type RegisteredProject struct {
-	ID          string    `json:"id" db:"id"`
-	ToolType    string    `json:"tool_type" db:"tool_type"`
-	ProjectName string    `json:"project_name" db:"project_name"`
-	ProjectPath string    `json:"project_path" db:"project_path"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	ID          string    `json:"id" db:"id" gorm:"column:id;primaryKey"`
+	ToolType    string    `json:"tool_type" db:"tool_type" gorm:"column:tool_type;not null"`
+	ProjectName string    `json:"project_name" db:"project_name" gorm:"column:project_name;not null"`
+	ProjectPath string    `json:"project_path" db:"project_path" gorm:"column:project_path;not null"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
 }
 
 // RegisteredProjectDAO 已注册项目数据访问对象。
@@ -29,61 +29,18 @@ func NewRegisteredProjectDAO(db *database.DB) *RegisteredProjectDAO {
 
 // Create 创建已注册项目。
 func (dao *RegisteredProjectDAO) Create(project *RegisteredProject) error {
-	conn := dao.db.GetConn()
-
-	query := `
-		INSERT INTO registered_projects (id, tool_type, project_name, project_path, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := conn.Exec(
-		query,
-		project.ID,
-		project.ToolType,
-		project.ProjectName,
-		project.ProjectPath,
-		project.CreatedAt.Unix(),
-		project.UpdatedAt.Unix(),
-	)
-	return err
+	return dao.db.GetConn().Create(project).Error
 }
 
 // ListByTool 按工具列出已注册项目。
 func (dao *RegisteredProjectDAO) ListByTool(toolType string) ([]*RegisteredProject, error) {
-	conn := dao.db.GetConn()
-
-	query := `
-		SELECT id, tool_type, project_name, project_path, created_at, updated_at
-		FROM registered_projects
-		WHERE tool_type = ?
-		ORDER BY created_at DESC
-	`
-
-	rows, err := conn.Query(query, toolType)
+	var projects []*RegisteredProject
+	err := dao.db.GetConn().
+		Where("tool_type = ?", toolType).
+		Order("created_at DESC").
+		Find(&projects).Error
 	if err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var projects []*RegisteredProject
-	for rows.Next() {
-		var (
-			id, loadedToolType, projectName, projectPath string
-			createdAt, updatedAt                         int64
-		)
-
-		if err := rows.Scan(&id, &loadedToolType, &projectName, &projectPath, &createdAt, &updatedAt); err != nil {
-			return nil, err
-		}
-
-		projects = append(projects, &RegisteredProject{
-			ID:          id,
-			ToolType:    loadedToolType,
-			ProjectName: projectName,
-			ProjectPath: projectPath,
-			CreatedAt:   time.Unix(createdAt, 0),
-			UpdatedAt:   time.Unix(updatedAt, 0),
-		})
 	}
 
 	return projects, nil
@@ -104,7 +61,7 @@ func (dao *RegisteredProjectDAO) GetByToolAndName(toolType, projectName string) 
 
 	var (
 		id, loadedToolType, foundProjectName, projectPath string
-		createdAt, updatedAt                                int64
+		createdAt, updatedAt                              int64
 	)
 
 	err := row.Scan(&id, &loadedToolType, &foundProjectName, &projectPath, &createdAt, &updatedAt)
@@ -124,24 +81,19 @@ func (dao *RegisteredProjectDAO) GetByToolAndName(toolType, projectName string) 
 
 // DeleteByToolAndPath 删除指定工具与路径的已注册项目。
 func (dao *RegisteredProjectDAO) DeleteByToolAndPath(toolType, projectPath string) error {
-	conn := dao.db.GetConn()
-
-	result, err := conn.Exec(
-		"DELETE FROM registered_projects WHERE tool_type = ? AND project_path = ?",
-		toolType,
-		projectPath,
-	)
-	if err != nil {
-		return err
+	result := dao.db.GetConn().
+		Where("tool_type = ? AND project_path = ?", toolType, projectPath).
+		Delete(&RegisteredProject{})
+	if result.Error != nil {
+		return result.Error
 	}
-
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
+	if result.RowsAffected == 0 {
 		return fmt.Errorf("未找到已注册项目")
 	}
 
 	return nil
+}
+
+func (RegisteredProject) TableName() string {
+	return "registered_projects"
 }

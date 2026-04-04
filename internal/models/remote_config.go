@@ -1,11 +1,13 @@
 package models
 
 import (
-	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"ai-sync-manager/pkg/database"
+
+	"gorm.io/gorm"
 )
 
 // RemoteConfig 远端仓库配置
@@ -167,215 +169,136 @@ func NewRemoteConfigDAO(db *database.DB) *RemoteConfigDAO {
 
 // Create 创建远端配置
 func (dao *RemoteConfigDAO) Create(config *RemoteConfig) error {
-	conn := dao.db.GetConn()
-
-	query := `
-		INSERT INTO remote_configs (id, name, url, auth_type, auth_username, auth_password,
-			auth_ssh_key, auth_passphrase, branch, is_default, created_at, updated_at, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := conn.Exec(query,
-		config.ID,
-		config.Name,
-		config.URL,
-		string(config.Auth.Type),
-		config.Auth.Username,
-		config.Auth.Password,
-		config.Auth.SSHKey,
-		config.Auth.Passphrase,
-		config.Branch,
-		boolToInt(config.IsDefault),
-		config.CreatedAt.Unix(),
-		config.UpdatedAt.Unix(),
-		string(config.Status),
-	)
-
-	return err
+	row := remoteConfigToRow(config)
+	return dao.db.GetConn().Create(&row).Error
 }
 
 // GetDefault 获取默认配置
 func (dao *RemoteConfigDAO) GetDefault() (*RemoteConfig, error) {
-	conn := dao.db.GetConn()
-
-	query := `
-		SELECT id, name, url, auth_type, auth_username, auth_password, auth_ssh_key, auth_passphrase,
-			branch, is_default, created_at, updated_at, last_synced, status
-		FROM remote_configs
-		WHERE is_default = 1
-		LIMIT 1
-	`
-
-	row := conn.QueryRow(query)
-
-	var (
-		id, name, url, authType, username, password, sshKey, passphrase, branch, status string
-		isDefault                                                                       int
-		createdAt, updatedAt                                                            int64
-		lastSynced                                                                      sql.NullInt64
-	)
-
-	err := row.Scan(
-		&id, &name, &url, &authType, &username, &password, &sshKey, &passphrase,
-		&branch, &isDefault, &createdAt, &updatedAt, &lastSynced, &status,
-	)
-	if err == sql.ErrNoRows {
+	var row remoteConfigRow
+	err := dao.db.GetConn().
+		Where("is_default = ?", true).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("未找到默认配置")
 	}
 	if err != nil {
 		return nil, err
 	}
-
-	config := &RemoteConfig{
-		ID:        id,
-		Name:      name,
-		URL:       url,
-		Branch:    branch,
-		IsDefault: intToBool(isDefault),
-		CreatedAt: time.Unix(createdAt, 0),
-		UpdatedAt: time.Unix(updatedAt, 0),
-		Status:    ConfigStatus(status),
-		Auth: AuthConfig{
-			Type:       AuthType(authType),
-			Username:   username,
-			Password:   password,
-			SSHKey:     sshKey,
-			Passphrase: passphrase,
-		},
-	}
-
-	if lastSynced.Valid {
-		t := time.Unix(lastSynced.Int64, 0)
-		config.LastSynced = &t
-	}
-
-	return config, nil
+	config := row.toModel()
+	return &config, nil
 }
 
 // List 列出所有远端配置
 func (dao *RemoteConfigDAO) List() ([]*RemoteConfig, error) {
-	conn := dao.db.GetConn()
-
-	query := `
-		SELECT id, name, url, auth_type, auth_username, auth_password, auth_ssh_key, auth_passphrase,
-			branch, is_default, created_at, updated_at, last_synced, status
-		FROM remote_configs
-		ORDER BY created_at DESC
-	`
-
-	rows, err := conn.Query(query)
-	if err != nil {
+	var rows []remoteConfigRow
+	if err := dao.db.GetConn().Order("created_at DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var configs []*RemoteConfig
-	for rows.Next() {
-		var (
-			id, name, url, authType, username, password, sshKey, passphrase, branch, status string
-			isDefault                                                                       int
-			createdAt, updatedAt                                                            int64
-			lastSynced                                                                      sql.NullInt64
-		)
-
-		if err := rows.Scan(
-			&id, &name, &url, &authType, &username, &password, &sshKey, &passphrase,
-			&branch, &isDefault, &createdAt, &updatedAt, &lastSynced, &status,
-		); err != nil {
-			return nil, err
-		}
-
-		config := &RemoteConfig{
-			ID:        id,
-			Name:      name,
-			URL:       url,
-			Branch:    branch,
-			IsDefault: intToBool(isDefault),
-			CreatedAt: time.Unix(createdAt, 0),
-			UpdatedAt: time.Unix(updatedAt, 0),
-			Status:    ConfigStatus(status),
-			Auth: AuthConfig{
-				Type:       AuthType(authType),
-				Username:   username,
-				Password:   password,
-				SSHKey:     sshKey,
-				Passphrase: passphrase,
-			},
-		}
-
-		if lastSynced.Valid {
-			t := time.Unix(lastSynced.Int64, 0)
-			config.LastSynced = &t
-		}
-
-		configs = append(configs, config)
+	configs := make([]*RemoteConfig, 0, len(rows))
+	for _, row := range rows {
+		config := row.toModel()
+		configs = append(configs, &config)
 	}
-
 	return configs, nil
 }
 
 // Update 更新远端配置
 func (dao *RemoteConfigDAO) Update(config *RemoteConfig) error {
-	conn := dao.db.GetConn()
+	row := remoteConfigToRow(config)
+	row.UpdatedAt = time.Now()
 
-	query := `
-		UPDATE remote_configs
-		SET name = ?, url = ?, auth_type = ?, auth_username = ?, auth_password = ?,
-			auth_ssh_key = ?, auth_passphrase = ?, branch = ?, updated_at = ?, status = ?
-		WHERE id = ?
-	`
-
-	now := time.Now()
-	config.UpdatedAt = now
-
-	_, err := conn.Exec(query,
-		config.Name,
-		config.URL,
-		string(config.Auth.Type),
-		config.Auth.Username,
-		config.Auth.Password,
-		config.Auth.SSHKey,
-		config.Auth.Passphrase,
-		config.Branch,
-		now.Unix(),
-		string(config.Status),
-		config.ID,
-	)
-
-	return err
+	return dao.db.GetConn().
+		Model(&remoteConfigRow{}).
+		Where("id = ?", config.ID).
+		Updates(map[string]interface{}{
+			"name":            row.Name,
+			"url":             row.URL,
+			"auth_type":       row.AuthType,
+			"auth_username":   row.AuthUsername,
+			"auth_password":   row.AuthPassword,
+			"auth_ssh_key":    row.AuthSSHKey,
+			"auth_passphrase": row.AuthPassphrase,
+			"branch":          row.Branch,
+			"updated_at":      row.UpdatedAt,
+			"status":          row.Status,
+			"last_synced":     row.LastSynced,
+		}).Error
 }
 
 // SetDefault 设置默认配置
 func (dao *RemoteConfigDAO) SetDefault(id string) error {
-	conn := dao.db.GetConn()
-
-	// 取消所有默认
-	_, err := conn.Exec("UPDATE remote_configs SET is_default = 0")
-	if err != nil {
-		return err
-	}
-
-	// 设置新的默认
-	_, err = conn.Exec("UPDATE remote_configs SET is_default = 1 WHERE id = ?", id)
-	return err
+	return dao.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&remoteConfigRow{}).Where("1 = 1").Update("is_default", false).Error; err != nil {
+			return err
+		}
+		return tx.Model(&remoteConfigRow{}).Where("id = ?", id).Update("is_default", true).Error
+	})
 }
 
 // Delete 删除远端配置
 func (dao *RemoteConfigDAO) Delete(id string) error {
-	conn := dao.db.GetConn()
-
-	_, err := conn.Exec("DELETE FROM remote_configs WHERE id = ?", id)
-	return err
+	return dao.db.GetConn().Delete(&remoteConfigRow{}, "id = ?", id).Error
 }
 
-// 辅助函数
-func boolToInt(b bool) int {
-	if b {
-		return 1
+type remoteConfigRow struct {
+	ID             string     `gorm:"column:id;primaryKey"`
+	Name           string     `gorm:"column:name"`
+	URL            string     `gorm:"column:url"`
+	AuthType       string     `gorm:"column:auth_type"`
+	AuthUsername   string     `gorm:"column:auth_username"`
+	AuthPassword   string     `gorm:"column:auth_password"`
+	AuthSSHKey     string     `gorm:"column:auth_ssh_key"`
+	AuthPassphrase string     `gorm:"column:auth_passphrase"`
+	Branch         string     `gorm:"column:branch"`
+	IsDefault      bool       `gorm:"column:is_default"`
+	CreatedAt      time.Time  `gorm:"column:created_at"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at"`
+	LastSynced     *time.Time `gorm:"column:last_synced"`
+	Status         string     `gorm:"column:status"`
+}
+
+func (remoteConfigRow) TableName() string {
+	return "remote_configs"
+}
+
+func remoteConfigToRow(config *RemoteConfig) remoteConfigRow {
+	return remoteConfigRow{
+		ID:             config.ID,
+		Name:           config.Name,
+		URL:            config.URL,
+		AuthType:       string(config.Auth.Type),
+		AuthUsername:   config.Auth.Username,
+		AuthPassword:   config.Auth.Password,
+		AuthSSHKey:     config.Auth.SSHKey,
+		AuthPassphrase: config.Auth.Passphrase,
+		Branch:         config.Branch,
+		IsDefault:      config.IsDefault,
+		CreatedAt:      config.CreatedAt,
+		UpdatedAt:      config.UpdatedAt,
+		LastSynced:     config.LastSynced,
+		Status:         string(config.Status),
 	}
-	return 0
 }
 
-func intToBool(i int) bool {
-	return i != 0
+func (row remoteConfigRow) toModel() RemoteConfig {
+	return RemoteConfig{
+		ID:         row.ID,
+		Name:       row.Name,
+		URL:        row.URL,
+		Branch:     row.Branch,
+		IsDefault:  row.IsDefault,
+		CreatedAt:  row.CreatedAt,
+		UpdatedAt:  row.UpdatedAt,
+		LastSynced: row.LastSynced,
+		Status:     ConfigStatus(row.Status),
+		Auth: AuthConfig{
+			Type:       AuthType(row.AuthType),
+			Username:   row.AuthUsername,
+			Password:   row.AuthPassword,
+			SSHKey:     row.AuthSSHKey,
+			Passphrase: row.AuthPassphrase,
+		},
+	}
 }

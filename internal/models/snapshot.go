@@ -1,12 +1,14 @@
 package models
 
 import (
-	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"ai-sync-manager/pkg/database"
+
+	"gorm.io/gorm"
 )
 
 // Snapshot 配置快照
@@ -158,206 +160,232 @@ func NewSnapshotDAO(db *database.DB) *SnapshotDAO {
 	return &SnapshotDAO{db: db}
 }
 
-// Create 写入快照主记录。
-// 当前文件内容不在这里落库，调用方如需明细需走独立流程。
+// Create 写入快照主记录和关联文件。
 func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
-	conn := dao.db.GetConn()
-
-	// 序列化工具列表
-	toolsJSON, err := json.Marshal(snapshot.Tools)
+	row, err := snapshotToRow(snapshot)
 	if err != nil {
-		return fmt.Errorf("序列化工具列表失败: %w", err)
+		return err
 	}
 
-	// 序列化标签
-	tagsJSON, err := json.Marshal(snapshot.Tags)
-	if err != nil {
-		return fmt.Errorf("序列化标签失败: %w", err)
-	}
-
-	// 序列化元数据
-	metadataJSON, err := json.Marshal(snapshot.Metadata)
-	if err != nil {
-		return fmt.Errorf("序列化元数据失败: %w", err)
-	}
-
-	query := `
-		INSERT INTO snapshots (id, name, description, message, created_at, tools, metadata, tags, commit_hash, file_count, total_size)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err = conn.Exec(query,
-		snapshot.ID,
-		snapshot.Name,
-		snapshot.Description,
-		snapshot.Message,
-		snapshot.CreatedAt.Unix(),
-		string(toolsJSON),
-		string(metadataJSON),
-		string(tagsJSON),
-		snapshot.CommitHash,
-		len(snapshot.Files),
-		calculateTotalSize(snapshot.Files),
-	)
-
-	return err
+	return dao.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		if len(row.Files) > 0 {
+			if err := tx.Create(&row.Files).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // GetByID 根据 ID 获取快照，并反序列化 JSON 字段。
 func (dao *SnapshotDAO) GetByID(id string) (*Snapshot, error) {
-	conn := dao.db.GetConn()
-
-	query := `
-		SELECT id, name, description, message, created_at, tools, metadata, tags, commit_hash, file_count, total_size
-		FROM snapshots
-		WHERE id = ?
-	`
-
-	row := conn.QueryRow(query, id)
-
-	var (
-		name, description, message, toolsJSON, metadataJSON, tagsJSON, commitHash string
-		createdAt                                                                 int64
-		fileCount, totalSize                                                      int
-	)
-
-	err := row.Scan(
-		&id, &name, &description, &message, &createdAt, &toolsJSON, &metadataJSON, &tagsJSON, &commitHash, &fileCount, &totalSize,
-	)
-	if err == sql.ErrNoRows {
+	var row snapshotRow
+	err := dao.db.GetConn().
+		Preload("Files").
+		First(&row, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("快照不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	snapshot := &Snapshot{
-		ID:          id,
-		Name:        name,
-		Description: description,
-		Message:     message,
-		CreatedAt:   time.Unix(createdAt, 0),
-		CommitHash:  commitHash,
+	snapshot, err := row.toModel()
+	if err != nil {
+		return nil, err
 	}
-
-	// 数据库存的是 JSON 文本，这里恢复成内存结构。
-	if err := json.Unmarshal([]byte(toolsJSON), &snapshot.Tools); err != nil {
-		return nil, fmt.Errorf("反序列化工具列表失败: %w", err)
-	}
-
-	// 反序列化标签
-	if err := json.Unmarshal([]byte(tagsJSON), &snapshot.Tags); err != nil {
-		return nil, fmt.Errorf("反序列化标签失败: %w", err)
-	}
-
-	// 反序列化元数据
-	if err := json.Unmarshal([]byte(metadataJSON), &snapshot.Metadata); err != nil {
-		return nil, fmt.Errorf("反序列化元数据失败: %w", err)
-	}
-
 	return snapshot, nil
 }
 
 // List 按创建时间倒序返回快照列表。
 func (dao *SnapshotDAO) List(limit, offset int) ([]*Snapshot, error) {
-	conn := dao.db.GetConn()
-
-	query := `
-		SELECT id, name, description, message, created_at, tools, metadata, tags, commit_hash, file_count, total_size
-		FROM snapshots
-		ORDER BY created_at DESC
-	`
-
+	query := dao.db.GetConn().Model(&snapshotRow{}).Preload("Files").Order("created_at DESC")
 	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", limit)
+		query = query.Limit(limit)
 	}
 	if offset > 0 {
-		query += fmt.Sprintf(" OFFSET %d", offset)
+		query = query.Offset(offset)
 	}
 
-	rows, err := conn.Query(query)
-	if err != nil {
+	var rows []snapshotRow
+	if err := query.Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var snapshots []*Snapshot
-	for rows.Next() {
-		var (
-			id, name, description, message, toolsJSON, metadataJSON, tagsJSON, commitHash string
-			createdAt                                                                     int64
-			fileCount, totalSize                                                          int
-		)
-
-		if err := rows.Scan(
-			&id, &name, &description, &message, &createdAt, &toolsJSON, &metadataJSON, &tagsJSON, &commitHash, &fileCount, &totalSize,
-		); err != nil {
+	snapshots := make([]*Snapshot, 0, len(rows))
+	for _, row := range rows {
+		snapshot, err := row.toModel()
+		if err != nil {
 			return nil, err
 		}
-
-		snapshot := &Snapshot{
-			ID:          id,
-			Name:        name,
-			Description: description,
-			Message:     message,
-			CreatedAt:   time.Unix(createdAt, 0),
-			CommitHash:  commitHash,
-		}
-
-		// 列表场景下忽略单条 JSON 反序列化失败，尽量返回其余记录。
-		_ = json.Unmarshal([]byte(toolsJSON), &snapshot.Tools)
-		_ = json.Unmarshal([]byte(tagsJSON), &snapshot.Tags)
-		_ = json.Unmarshal([]byte(metadataJSON), &snapshot.Metadata)
-
 		snapshots = append(snapshots, snapshot)
 	}
-
 	return snapshots, nil
 }
 
 // Update 更新快照主记录中的可变字段。
 func (dao *SnapshotDAO) Update(snapshot *Snapshot) error {
-	conn := dao.db.GetConn()
+	row, err := snapshotToRow(snapshot)
+	if err != nil {
+		return err
+	}
 
-	toolsJSON, _ := json.Marshal(snapshot.Tools)
-	tagsJSON, _ := json.Marshal(snapshot.Tags)
-	metadataJSON, _ := json.Marshal(snapshot.Metadata)
-
-	query := `
-		UPDATE snapshots
-		SET name = ?, description = ?, message = ?, tools = ?, metadata = ?, tags = ?, commit_hash = ?
-		WHERE id = ?
-	`
-
-	_, err := conn.Exec(query,
-		snapshot.Name,
-		snapshot.Description,
-		snapshot.Message,
-		string(toolsJSON),
-		string(metadataJSON),
-		string(tagsJSON),
-		snapshot.CommitHash,
-		snapshot.ID,
-	)
-
-	return err
+	return dao.db.GetConn().
+		Model(&snapshotRow{}).
+		Where("id = ?", snapshot.ID).
+		Updates(map[string]interface{}{
+			"name":        row.Name,
+			"description": row.Description,
+			"message":     row.Message,
+			"tools":       row.Tools,
+			"metadata":    row.Metadata,
+			"tags":        row.Tags,
+			"commit_hash": row.CommitHash,
+			"file_count":  row.FileCount,
+			"total_size":  row.TotalSize,
+		}).Error
 }
 
 // Delete 删除快照记录。
 func (dao *SnapshotDAO) Delete(id string) error {
-	conn := dao.db.GetConn()
-
-	_, err := conn.Exec("DELETE FROM snapshots WHERE id = ?", id)
-	return err
+	return dao.db.GetConn().Delete(&snapshotRow{}, "id = ?", id).Error
 }
 
 // Count 返回当前快照总数。
 func (dao *SnapshotDAO) Count() (int, error) {
-	conn := dao.db.GetConn()
+	var count int64
+	err := dao.db.GetConn().Model(&snapshotRow{}).Count(&count).Error
+	return int(count), err
+}
 
-	var count int
-	err := conn.QueryRow("SELECT COUNT(*) FROM snapshots").Scan(&count)
-	return count, err
+type snapshotRow struct {
+	ID          string            `gorm:"column:id;primaryKey"`
+	Name        string            `gorm:"column:name"`
+	Description string            `gorm:"column:description"`
+	Message     string            `gorm:"column:message"`
+	CreatedAt   time.Time         `gorm:"column:created_at"`
+	Tools       string            `gorm:"column:tools"`
+	Metadata    string            `gorm:"column:metadata"`
+	CommitHash  string            `gorm:"column:commit_hash"`
+	Tags        string            `gorm:"column:tags"`
+	FileCount   int               `gorm:"column:file_count"`
+	TotalSize   int64             `gorm:"column:total_size"`
+	Files       []snapshotFileRow `gorm:"foreignKey:SnapshotID;references:ID;constraint:OnDelete:CASCADE"`
+}
+
+func (snapshotRow) TableName() string {
+	return "snapshots"
+}
+
+type snapshotFileRow struct {
+	ID           uint      `gorm:"column:id;primaryKey;autoIncrement"`
+	SnapshotID   string    `gorm:"column:snapshot_id"`
+	Path         string    `gorm:"column:path"`
+	OriginalPath string    `gorm:"column:original_path"`
+	Size         int64     `gorm:"column:size"`
+	Hash         string    `gorm:"column:hash"`
+	ModifiedAt   time.Time `gorm:"column:modified_at"`
+	Content      []byte    `gorm:"column:content"`
+	ToolType     string    `gorm:"column:tool_type"`
+	Category     string    `gorm:"column:category"`
+	IsBinary     bool      `gorm:"column:is_binary"`
+}
+
+func (snapshotFileRow) TableName() string {
+	return "snapshot_files"
+}
+
+func snapshotToRow(snapshot *Snapshot) (snapshotRow, error) {
+	toolsJSON, err := json.Marshal(snapshot.Tools)
+	if err != nil {
+		return snapshotRow{}, fmt.Errorf("序列化工具列表失败: %w", err)
+	}
+	tagsJSON, err := json.Marshal(snapshot.Tags)
+	if err != nil {
+		return snapshotRow{}, fmt.Errorf("序列化标签失败: %w", err)
+	}
+	metadataJSON, err := json.Marshal(snapshot.Metadata)
+	if err != nil {
+		return snapshotRow{}, fmt.Errorf("序列化元数据失败: %w", err)
+	}
+
+	files := make([]snapshotFileRow, 0, len(snapshot.Files))
+	for _, file := range snapshot.Files {
+		files = append(files, snapshotFileRow{
+			SnapshotID:   snapshot.ID,
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Size:         file.Size,
+			Hash:         file.Hash,
+			ModifiedAt:   file.ModifiedAt,
+			Content:      file.Content,
+			ToolType:     file.ToolType,
+			Category:     string(file.Category),
+			IsBinary:     file.IsBinary,
+		})
+	}
+
+	return snapshotRow{
+		ID:          snapshot.ID,
+		Name:        snapshot.Name,
+		Description: snapshot.Description,
+		Message:     snapshot.Message,
+		CreatedAt:   snapshot.CreatedAt,
+		Tools:       string(toolsJSON),
+		Metadata:    string(metadataJSON),
+		CommitHash:  snapshot.CommitHash,
+		Tags:        string(tagsJSON),
+		FileCount:   len(snapshot.Files),
+		TotalSize:   calculateTotalSize(snapshot.Files),
+		Files:       files,
+	}, nil
+}
+
+func (row snapshotRow) toModel() (*Snapshot, error) {
+	snapshot := &Snapshot{
+		ID:          row.ID,
+		Name:        row.Name,
+		Description: row.Description,
+		Message:     row.Message,
+		CreatedAt:   row.CreatedAt,
+		CommitHash:  row.CommitHash,
+		Files:       make([]SnapshotFile, 0, len(row.Files)),
+	}
+
+	if row.Tools != "" {
+		if err := json.Unmarshal([]byte(row.Tools), &snapshot.Tools); err != nil {
+			return nil, fmt.Errorf("反序列化工具列表失败: %w", err)
+		}
+	}
+	if row.Tags != "" {
+		if err := json.Unmarshal([]byte(row.Tags), &snapshot.Tags); err != nil {
+			return nil, fmt.Errorf("反序列化标签失败: %w", err)
+		}
+	}
+	if row.Metadata != "" {
+		if err := json.Unmarshal([]byte(row.Metadata), &snapshot.Metadata); err != nil {
+			return nil, fmt.Errorf("反序列化元数据失败: %w", err)
+		}
+	}
+
+	for _, file := range row.Files {
+		snapshot.Files = append(snapshot.Files, SnapshotFile{
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Size:         file.Size,
+			Hash:         file.Hash,
+			ModifiedAt:   file.ModifiedAt,
+			Content:      file.Content,
+			ToolType:     file.ToolType,
+			Category:     FileCategory(file.Category),
+			IsBinary:     file.IsBinary,
+		})
+	}
+
+	return snapshot, nil
 }
 
 // calculateTotalSize 汇总快照文件总大小。
