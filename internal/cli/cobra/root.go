@@ -28,6 +28,11 @@ type Workflow interface {
 	ListSnapshots(ctx context.Context, input usecase.ListSnapshotsInput) (*usecase.ListSnapshotsResult, error)
 	GetConfig(ctx context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error)
 	SaveConfig(ctx context.Context, input usecase.SaveConfigInput) error
+	CreateAISetting(ctx context.Context, input usecase.CreateAISettingInput) (*usecase.CreateAISettingResult, error)
+	ListAISettings(ctx context.Context, input usecase.ListAISettingsInput) (*usecase.ListAISettingsResult, error)
+	GetAISetting(ctx context.Context, input usecase.GetAISettingInput) (*usecase.GetAISettingResult, error)
+	DeleteAISetting(ctx context.Context, input usecase.DeleteAISettingInput) error
+	SwitchAISetting(ctx context.Context, input usecase.SwitchAISettingInput) (*usecase.SwitchAISettingResult, error)
 }
 
 // TUIRunner / EditorRunner 抽象终端交互能力，避免 cobra 直接依赖具体实现。
@@ -71,6 +76,7 @@ func NewRootCommand(deps Dependencies) *spcobra.Command {
 		newSnapshotCommand(deps),
 		newTUICommand(deps),
 		newGetCommand(deps),
+		newSettingCommand(deps),
 	)
 
 	return root

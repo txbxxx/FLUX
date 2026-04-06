@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/snapshot"
 	"ai-sync-manager/internal/service/tool"
 	"ai-sync-manager/pkg/config"
@@ -20,14 +21,15 @@ type Options struct {
 
 // Runtime 聚合命令行入口需要复用的基础依赖。
 type Runtime struct {
-	Version         string
-	DataDir         string
-	Config          *config.Config
-	DB              *database.DB
-	Detector        *tool.ToolDetector
-	RuleResolver    *tool.RuleResolver
-	RuleManager     *tool.RuleManager
-	SnapshotService *snapshot.Service
+	Version          string
+	DataDir          string
+	Config           *config.Config
+	DB               *database.DB
+	Detector         *tool.ToolDetector
+	RuleResolver     *tool.RuleResolver
+	RuleManager      *tool.RuleManager
+	SnapshotService  *snapshot.Service
+	AISettingDAO    *models.AISettingDAO
 }
 
 // New 按"配置 -> 日志 -> 数据库 -> 规则 -> 业务服务"的顺序构建运行时。
@@ -88,14 +90,15 @@ func New(options Options) (*Runtime, error) {
 	detector := tool.NewToolDetectorWithResolver(resolver)
 
 	return &Runtime{
-		Version:         version,
-		DataDir:         dataDir,
-		Config:          cfg,
-		DB:              db,
-		Detector:        detector,
-		RuleResolver:    resolver,
-		RuleManager:     ruleManager,
-		SnapshotService: snapshot.NewService(db, resolver, ruleManager),
+		Version:          version,
+		DataDir:          dataDir,
+		Config:           cfg,
+		DB:               db,
+		Detector:         detector,
+		RuleResolver:     resolver,
+		RuleManager:      ruleManager,
+		SnapshotService:  snapshot.NewService(db, resolver, ruleManager),
+		AISettingDAO:    models.NewAISettingDAO(db),
 	}, nil
 }
 

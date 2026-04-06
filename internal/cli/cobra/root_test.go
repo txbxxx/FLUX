@@ -37,6 +37,20 @@ type stubWorkflow struct {
 	getErr             error
 	saveInput          usecase.SaveConfigInput
 	saveErr            error
+	createAISettingInput   usecase.CreateAISettingInput
+	createAISettingResult  *usecase.CreateAISettingResult
+	createAISettingErr    error
+	listAISettingsInput  usecase.ListAISettingsInput
+	listAISettingsResult *usecase.ListAISettingsResult
+	listAISettingsErr    error
+	getAISettingInput    usecase.GetAISettingInput
+	getAISettingResult  *usecase.GetAISettingResult
+	getAISettingErr      error
+	deleteAISettingInput usecase.DeleteAISettingInput
+	deleteAISettingErr   error
+	switchAISettingInput usecase.SwitchAISettingInput
+	switchAISettingResult *usecase.SwitchAISettingResult
+	switchAISettingErr   error
 }
 
 func (s *stubWorkflow) Scan(_ context.Context, input usecase.ScanInput) (*usecase.ScanResult, error) {
@@ -87,6 +101,31 @@ func (s *stubWorkflow) GetConfig(_ context.Context, input usecase.GetConfigInput
 func (s *stubWorkflow) SaveConfig(_ context.Context, input usecase.SaveConfigInput) error {
 	s.saveInput = input
 	return s.saveErr
+}
+
+func (s *stubWorkflow) CreateAISetting(_ context.Context, input usecase.CreateAISettingInput) (*usecase.CreateAISettingResult, error) {
+	s.createAISettingInput = input
+	return s.createAISettingResult, s.createAISettingErr
+}
+
+func (s *stubWorkflow) ListAISettings(_ context.Context, input usecase.ListAISettingsInput) (*usecase.ListAISettingsResult, error) {
+	s.listAISettingsInput = input
+	return s.listAISettingsResult, s.listAISettingsErr
+}
+
+func (s *stubWorkflow) GetAISetting(_ context.Context, input usecase.GetAISettingInput) (*usecase.GetAISettingResult, error) {
+	s.getAISettingInput = input
+	return s.getAISettingResult, s.getAISettingErr
+}
+
+func (s *stubWorkflow) DeleteAISetting(_ context.Context, input usecase.DeleteAISettingInput) error {
+	s.deleteAISettingInput = input
+	return s.deleteAISettingErr
+}
+
+func (s *stubWorkflow) SwitchAISetting(_ context.Context, input usecase.SwitchAISettingInput) (*usecase.SwitchAISettingResult, error) {
+	s.switchAISettingInput = input
+	return s.switchAISettingResult, s.switchAISettingErr
 }
 
 type stubTUIRunner struct {
