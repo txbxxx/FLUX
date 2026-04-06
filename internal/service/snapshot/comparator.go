@@ -11,6 +11,8 @@ import (
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/pkg/logger"
 
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+
 	"go.uber.org/zap"
 )
 
@@ -27,13 +29,13 @@ func NewComparator(collector *Collector) *Comparator {
 }
 
 // CompareSnapshots 比较两个快照的差异
-func (c *Comparator) CompareSnapshots(source, target *models.Snapshot) (*models.ChangeSummary, error) {
+func (c *Comparator) CompareSnapshots(source, target *models.Snapshot) (*typesSnapshot.ChangeSummary, error) {
 	logger.Info("比较快照",
 		zap.String("source_id", source.ID),
 		zap.String("target_id", target.ID),
 	)
 
-	summary := &models.ChangeSummary{
+	summary := &typesSnapshot.ChangeSummary{
 		FilesByTool:     make(map[string]int),
 		FilesByCategory: make(map[string]int),
 	}
@@ -91,13 +93,13 @@ func (c *Comparator) CompareSnapshots(source, target *models.Snapshot) (*models.
 func (c *Comparator) CompareWithFileSystem(
 	snapshot *models.Snapshot,
 	projectPath string,
-) (*models.ChangeSummary, error) {
+) (*typesSnapshot.ChangeSummary, error) {
 	logger.Info("比较快照与文件系统",
 		zap.String("snapshot_id", snapshot.ID),
 		zap.String("project_path", projectPath),
 	)
 
-	summary := &models.ChangeSummary{
+	summary := &typesSnapshot.ChangeSummary{
 		FilesByTool:     make(map[string]int),
 		FilesByCategory: make(map[string]int),
 	}
@@ -206,13 +208,13 @@ func (c *Comparator) CompareFiles(path1, path2 string) (*FileComparison, error) 
 func (c *Comparator) DetectConflicts(
 	snapshot *models.Snapshot,
 	force bool,
-) ([]models.ApplyError, error) {
+) ([]typesSnapshot.ApplyError, error) {
 	logger.Info("检测冲突",
 		zap.String("snapshot_id", snapshot.ID),
 		zap.Bool("force", force),
 	)
 
-	conflicts := make([]models.ApplyError, 0)
+	conflicts := make([]typesSnapshot.ApplyError, 0)
 
 	for _, file := range snapshot.Files {
 		// 检查文件是否存在
@@ -221,7 +223,7 @@ func (c *Comparator) DetectConflicts(
 			if os.IsNotExist(err) {
 				continue // 文件不存在，无冲突
 			}
-			conflicts = append(conflicts, models.ApplyError{
+			conflicts = append(conflicts, typesSnapshot.ApplyError{
 				Path:    file.OriginalPath,
 				Message: err.Error(),
 			})
@@ -230,7 +232,7 @@ func (c *Comparator) DetectConflicts(
 
 		// 跳过目录
 		if info.IsDir() {
-			conflicts = append(conflicts, models.ApplyError{
+			conflicts = append(conflicts, typesSnapshot.ApplyError{
 				Path:    file.OriginalPath,
 				Message: "路径是目录，无法应用文件",
 			})
@@ -240,7 +242,7 @@ func (c *Comparator) DetectConflicts(
 		// 读取现有文件
 		existingContent, err := os.ReadFile(file.OriginalPath)
 		if err != nil {
-			conflicts = append(conflicts, models.ApplyError{
+			conflicts = append(conflicts, typesSnapshot.ApplyError{
 				Path:    file.OriginalPath,
 				Message: err.Error(),
 			})
@@ -252,7 +254,7 @@ func (c *Comparator) DetectConflicts(
 
 		// 检查是否冲突
 		if existingHash != file.Hash && !force {
-			conflicts = append(conflicts, models.ApplyError{
+			conflicts = append(conflicts, typesSnapshot.ApplyError{
 				Path:    file.OriginalPath,
 				Message: "文件内容不同且未启用强制覆盖",
 			})

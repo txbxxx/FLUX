@@ -9,6 +9,7 @@ import (
 
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
 // DefaultListLimit 快照列表默认分页大小。
@@ -33,7 +34,7 @@ type ScanRuleManager interface {
 
 // SnapshotManager 快照持久化接口，屏蔽底层数据库细节。
 type SnapshotManager interface {
-	CreateSnapshot(options models.CreateSnapshotOptions) (*models.SnapshotPackage, error)
+	CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*typesSnapshot.SnapshotPackage, error)
 	ListSnapshots(limit, offset int) ([]*models.Snapshot, error)
 	CountSnapshots() (int, error)
 }
@@ -508,7 +509,7 @@ func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotIn
 	}
 
 	// 第三步：调用 SnapshotManager 创建快照
-	pkg, err := w.snapshots.CreateSnapshot(models.CreateSnapshotOptions{
+	pkg, err := w.snapshots.CreateSnapshot(typesSnapshot.CreateSnapshotOptions{
 		Message:     strings.TrimSpace(input.Message),
 		Tools:       input.Tools,
 		Name:        strings.TrimSpace(input.Name),

@@ -9,6 +9,7 @@ import (
 
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 	"ai-sync-manager/pkg/database"
 	"ai-sync-manager/pkg/logger"
 
@@ -36,7 +37,7 @@ func NewService(db *database.DB, resolver *tool.RuleResolver, ruleManager *tool.
 
 // CreateSnapshot 创建配置快照。
 // 它先按规则收集文件，再生成快照记录和可导出的快照包。
-func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.SnapshotPackage, error) {
+func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*typesSnapshot.SnapshotPackage, error) {
 	logger.Info("开始创建快照",
 		zap.Strings("tools", options.Tools),
 		zap.String("project", options.ProjectName),
@@ -99,7 +100,7 @@ func (s *Service) CreateSnapshot(options models.CreateSnapshotOptions) (*models.
 	}
 
 	// 创建快照包
-	pkg := &models.SnapshotPackage{
+	pkg := &typesSnapshot.SnapshotPackage{
 		Snapshot:    snapshot,
 		ProjectPath: projectPath,
 		CreatedAt:   time.Now(),

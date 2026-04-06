@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"ai-sync-manager/internal/models"
+	"ai-sync-manager/internal/types/common"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -149,11 +150,11 @@ func TestService_EncryptSensitiveData(t *testing.T) {
 
 	// 加密 Token
 	sensitiveData, err := svc.EncryptSensitiveData(
-		models.SensitiveTypeToken,
+		common.SensitiveTypeToken,
 		"test-token-value",
 	)
 	require.NoError(t, err)
-	assert.Equal(t, models.SensitiveTypeToken, sensitiveData.Type)
+	assert.Equal(t, common.SensitiveTypeToken, sensitiveData.Type)
 	assert.NotEmpty(t, sensitiveData.Content)
 
 	// 解密

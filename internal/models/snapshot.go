@@ -72,84 +72,6 @@ const (
 	CategoryOther    FileCategory = "other"    // 其他文件
 )
 
-// SnapshotPackage 快照包（包含多个快照）
-type SnapshotPackage struct {
-	Snapshot    *Snapshot `json:"snapshot"`     // 主快照
-	ProjectPath string    `json:"project_path"` // 项目路径
-	CreatedAt   time.Time `json:"created_at"`   // 创建时间
-	Size        int64     `json:"size"`         // 总大小（字节）
-	FileCount   int       `json:"file_count"`   // 文件数量
-	Checksum    string    `json:"checksum"`     // 校验和
-}
-
-// SnapshotInfo 快照简要信息
-type SnapshotInfo struct {
-	ID          string    `json:"id"`          // 快照 ID
-	Name        string    `json:"name"`        // 快照名称
-	Description string    `json:"description"` // 快照描述
-	CreatedAt   time.Time `json:"created_at"`  // 创建时间
-	Tools       []string  `json:"tools"`       // 包含的工具
-	CommitHash  string    `json:"commit_hash"` // 提交哈希
-	IsRemote    bool      `json:"is_remote"`   // 是否已推送到远端
-}
-
-// ApplyOptions 应用快照选项
-type ApplyOptions struct {
-	CreateBackup bool   `json:"create_backup"` // 是否创建备份
-	BackupPath   string `json:"backup_path"`   // 备份路径
-	Force        bool   `json:"force"`         // 是否强制覆盖
-	DryRun       bool   `json:"dry_run"`       // 是否仅预览
-}
-
-// ApplyResult 应用结果
-type ApplyResult struct {
-	Success      bool          `json:"success"`       // 是否成功
-	AppliedFiles []AppliedFile `json:"applied_files"` // 应用的文件列表
-	SkippedFiles []SkippedFile `json:"skipped_files"` // 跳过的文件列表
-	Errors       []ApplyError  `json:"errors"`        // 错误列表
-	BackupPath   string        `json:"backup_path"`   // 备份路径
-	Summary      ChangeSummary `json:"summary"`       // 变更摘要
-}
-
-// AppliedFile 已应用的文件
-type AppliedFile struct {
-	Path         string `json:"path"`          // 文件路径
-	OriginalPath string `json:"original_path"` // 原始路径
-	Action       string `json:"action"`        // 操作类型（created/updated/replaced）
-}
-
-// SkippedFile 跳过的文件
-type SkippedFile struct {
-	Path   string `json:"path"`   // 文件路径
-	Reason string `json:"reason"` // 跳过原因
-}
-
-// ApplyError 应用错误
-type ApplyError struct {
-	Path    string `json:"path"`    // 文件路径
-	Message string `json:"message"` // 错误消息
-}
-
-// ChangeSummary 变更摘要
-type ChangeSummary struct {
-	TotalFiles      int            `json:"total_files"`       // 总文件数
-	Created         int            `json:"created"`           // 新建文件数
-	Updated         int            `json:"updated"`           // 更新文件数
-	Deleted         int            `json:"deleted"`           // 删除文件数
-	Skipped         int            `json:"skipped"`           // 跳过文件数
-	FilesByTool     map[string]int `json:"files_by_tool"`     // 按工具分组的文件数
-	FilesByCategory map[string]int `json:"files_by_category"` // 按类别分组的文件数
-}
-
-// CreateSnapshotOptions 创建快照选项
-type CreateSnapshotOptions struct {
-	Message     string   `json:"message"`      // 快照描述/提交消息
-	Tools       []string `json:"tools"`        // 包含的工具 [codex, claude]
-	Name        string   `json:"name"`         // 快照名称（可选）
-	Tags        []string `json:"tags"`         // 标签（可选）
-	ProjectName string   `json:"project_name"` // 项目名称（必填）
-}
-
 // SnapshotDAO 快照数据访问对象
 type SnapshotDAO struct {
 	db *database.DB
@@ -168,11 +90,12 @@ func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
 	}
 
 	return dao.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&row).Error; err != nil {
+		// Omit("Files"): 禁止 GORM 级联写入关联文件，避免与下方手动插入重复。
+		if err := tx.Omit("Files").Create(&row).Error; err != nil {
 			return err
 		}
 		if len(row.Files) > 0 {
-					if err := tx.Omit("id").Create(&row.Files).Error; err != nil {
+			if err := tx.Omit("id").Create(&row.Files).Error; err != nil {
 				return err
 			}
 		}
@@ -273,7 +196,7 @@ type snapshotRow struct {
 	Tags        string            `gorm:"column:tags"`
 	FileCount   int               `gorm:"column:file_count"`
 	TotalSize   int64             `gorm:"column:total_size"`
-	Files       []snapshotFileRow `gorm:"foreignKey:SnapshotID;references:ID;constraint:OnDelete:CASCADE"`
+	Files       []snapshotFileRow `gorm:"foreignKey:SnapshotID;references:ID"`
 }
 
 func (snapshotRow) TableName() string {

@@ -9,6 +9,7 @@ import (
 
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 	"ai-sync-manager/pkg/database"
 
 	"github.com/stretchr/testify/assert"
@@ -60,7 +61,7 @@ func TestService_CreateSnapshot(t *testing.T) {
 	ruleManager := tool.NewRuleManager(db)
 	ruleManager.EnsureGlobalProjectsRegistered()
 
-	options := models.CreateSnapshotOptions{
+	options := typesSnapshot.CreateSnapshotOptions{
 		Message:     "Test snapshot",
 		Tools:       []string{"codex"},
 		ProjectName: "codex-global",
@@ -390,7 +391,7 @@ func TestApplier_ApplySnapshot(t *testing.T) {
 	}
 
 	// 应用快照（干运行）
-	options := models.ApplyOptions{
+	options := typesSnapshot.ApplyOptions{
 		DryRun: true,
 	}
 
@@ -590,7 +591,7 @@ func TestServiceCreateSnapshotIncludesRegisteredProjectAndCustomRule(t *testing.
 	require.NoError(t, manager.AddProject(tool.ToolTypeCodex, "demo", projectPath))
 
 	service := NewService(db, tool.NewRuleResolver(manager.Store()), manager)
-	pkg, err := service.CreateSnapshot(models.CreateSnapshotOptions{
+	pkg, err := service.CreateSnapshot(typesSnapshot.CreateSnapshotOptions{
 		Message:     "test snapshot",
 		Tools:       []string{"claude", "codex"},
 		ProjectName: "demo",

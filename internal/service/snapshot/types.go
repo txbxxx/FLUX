@@ -2,6 +2,8 @@ package snapshot
 
 import (
 	"ai-sync-manager/internal/models"
+
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
 // CollectOptions 文件收集选项
@@ -27,7 +29,7 @@ type CollectError struct {
 
 // ApplyContext 应用上下文
 type ApplyContext struct {
-	Options       models.ApplyOptions // 应用选项
+	Options       typesSnapshot.ApplyOptions // 应用选项
 	BackupPath    string              // 备份路径
 	ExistingFiles []string            // 已存在的文件列表
 }

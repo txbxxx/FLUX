@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"ai-sync-manager/internal/models"
+	"ai-sync-manager/internal/types/common"
 	"ai-sync-manager/pkg/logger"
 
 	"go.uber.org/zap"
@@ -58,9 +59,9 @@ func NewService(config *models.EncryptionConfig) (*Service, error) {
 }
 
 // Encrypt 使用 AES-GCM 加密文本，并返回 Base64 编码结果。
-func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
+func (s *Service) Encrypt(plaintext string) (*common.EncryptionResult, error) {
 	if !s.config.Enabled {
-		return &models.EncryptionResult{
+		return &common.EncryptionResult{
 			Success:   true,
 			Data:      plaintext, // 未启用加密，直接返回原文
 			Algorithm: "none",
@@ -68,7 +69,7 @@ func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
 	}
 
 	if len(s.key) == 0 {
-		return &models.EncryptionResult{
+		return &common.EncryptionResult{
 			Success: false,
 			Error:   "加密密钥未初始化",
 		}, fmt.Errorf("加密密钥未初始化")
@@ -77,7 +78,7 @@ func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
 	// 创建 AES cipher
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
-		return &models.EncryptionResult{
+		return &common.EncryptionResult{
 			Success: false,
 			Error:   fmt.Sprintf("创建 cipher 失败: %v", err),
 		}, err
@@ -86,7 +87,7 @@ func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
 	// 使用 GCM 模式
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return &models.EncryptionResult{
+		return &common.EncryptionResult{
 			Success: false,
 			Error:   fmt.Sprintf("创建 GCM 失败: %v", err),
 		}, err
@@ -95,7 +96,7 @@ func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
 	// 生成随机 nonce
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return &models.EncryptionResult{
+		return &common.EncryptionResult{
 			Success: false,
 			Error:   fmt.Sprintf("生成 nonce 失败: %v", err),
 		}, err
@@ -112,7 +113,7 @@ func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
 		zap.Int("encrypted_len", len(encrypted)),
 	)
 
-	return &models.EncryptionResult{
+	return &common.EncryptionResult{
 		Success:   true,
 		Data:      encrypted,
 		Algorithm: s.config.Algorithm,
@@ -120,16 +121,16 @@ func (s *Service) Encrypt(plaintext string) (*models.EncryptionResult, error) {
 }
 
 // Decrypt 解密由 Encrypt 产生的 Base64 密文。
-func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
+func (s *Service) Decrypt(ciphertext string) (*common.DecryptionResult, error) {
 	if !s.config.Enabled {
-		return &models.DecryptionResult{
+		return &common.DecryptionResult{
 			Success: true,
 			Data:    ciphertext, // 未启用加密，直接返回
 		}, nil
 	}
 
 	if len(s.key) == 0 {
-		return &models.DecryptionResult{
+		return &common.DecryptionResult{
 			Success: false,
 			Error:   "解密密钥未初始化",
 		}, nil
@@ -138,7 +139,7 @@ func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
 	// Base64 解码
 	data, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
-		return &models.DecryptionResult{
+		return &common.DecryptionResult{
 			Success: false,
 			Error:   fmt.Sprintf("Base64 解码失败: %v", err),
 		}, nil
@@ -147,7 +148,7 @@ func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
 	// 创建 AES cipher
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
-		return &models.DecryptionResult{
+		return &common.DecryptionResult{
 			Success: false,
 			Error:   fmt.Sprintf("创建 cipher 失败: %v", err),
 		}, nil
@@ -156,7 +157,7 @@ func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
 	// 使用 GCM 模式
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return &models.DecryptionResult{
+		return &common.DecryptionResult{
 			Success: false,
 			Error:   fmt.Sprintf("创建 GCM 失败: %v", err),
 		}, nil
@@ -164,7 +165,7 @@ func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
 
 	nonceSize := gcm.NonceSize()
 	if len(data) < nonceSize {
-		return &models.DecryptionResult{
+		return &common.DecryptionResult{
 			Success: false,
 			Error:   "密文长度不足",
 		}, nil
@@ -176,7 +177,7 @@ func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
 	// 解密数据
 	plaintext, err := gcm.Open(nil, nonce, cipherData, nil)
 	if err != nil {
-		return &models.DecryptionResult{
+		return &common.DecryptionResult{
 			Success: false,
 			Error:   fmt.Sprintf("解密失败: %v", err),
 		}, nil
@@ -187,27 +188,27 @@ func (s *Service) Decrypt(ciphertext string) (*models.DecryptionResult, error) {
 		zap.Int("plain_len", len(plaintext)),
 	)
 
-	return &models.DecryptionResult{
+	return &common.DecryptionResult{
 		Success: true,
 		Data:    string(plaintext),
 	}, nil
 }
 
 // EncryptSensitiveData 把敏感值包装成带类型标识的结构。
-func (s *Service) EncryptSensitiveData(dataType models.SensitiveType, value string) (*models.SensitiveData, error) {
+func (s *Service) EncryptSensitiveData(dataType common.SensitiveType, value string) (*common.SensitiveData, error) {
 	result, err := s.Encrypt(value)
 	if err != nil {
 		return nil, err
 	}
 
-	return &models.SensitiveData{
+	return &common.SensitiveData{
 		Type:    dataType,
 		Content: result.Data,
 	}, nil
 }
 
 // DecryptSensitiveData 解密并返回敏感数据原文。
-func (s *Service) DecryptSensitiveData(data *models.SensitiveData) (string, error) {
+func (s *Service) DecryptSensitiveData(data *common.SensitiveData) (string, error) {
 	result, err := s.Decrypt(data.Content)
 	if err != nil {
 		return "", err

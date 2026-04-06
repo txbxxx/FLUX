@@ -366,36 +366,8 @@ func TestCloneSnapshot(t *testing.T) {
 }
 
 // TestMergeSummary 测试合并变更摘要
-func TestMergeSummary(t *testing.T) {
-	sum1 := ChangeSummary{
-		TotalFiles:      10,
-		Created:         5,
-		Updated:         3,
-		Deleted:         2,
-		FilesByTool:     map[string]int{"codex": 7, "claude": 3},
-		FilesByCategory: map[string]int{"config": 4, "skills": 6},
-	}
-
-	sum2 := ChangeSummary{
-		TotalFiles:      5,
-		Created:         2,
-		Updated:         3,
-		FilesByTool:     map[string]int{"codex": 5},
-		FilesByCategory: map[string]int{"config": 2, "docs": 3},
-	}
-
-	result := MergeSummary(sum1, sum2)
-
-	assert.Equal(t, 15, result.TotalFiles)
-	assert.Equal(t, 7, result.Created)
-	assert.Equal(t, 6, result.Updated)
-	assert.Equal(t, 2, result.Deleted)
-	assert.Equal(t, 12, result.FilesByTool["codex"])
-	assert.Equal(t, 3, result.FilesByTool["claude"])
-	assert.Equal(t, 6, result.FilesByCategory["config"])
-	assert.Equal(t, 6, result.FilesByCategory["skills"])
-	assert.Equal(t, 3, result.FilesByCategory["docs"])
-}
+// 已迁移到 types/snapshot 包
+// func TestMergeSummary(t *testing.T) { ... }
 
 // TestNewTaskProgress 测试创建任务进度
 func TestNewTaskProgress(t *testing.T) {
@@ -438,81 +410,6 @@ func TestTaskProgress_IsCompleted(t *testing.T) {
 
 	progress.Current = 10
 	assert.True(t, progress.IsCompleted())
-}
-
-// TestNewErrorResponse 测试创建错误响应
-func TestNewErrorResponse(t *testing.T) {
-	response := NewErrorResponse("ERR001", "Error message", "Error details")
-
-	assert.False(t, response.Success)
-	assert.NotNil(t, response.Error)
-	assert.Equal(t, "ERR001", response.Error.Code)
-	assert.Equal(t, "Error message", response.Error.Message)
-	assert.Equal(t, "Error details", response.Error.Details)
-}
-
-// TestNewSuccessResponse 测试创建成功响应
-func TestNewSuccessResponse(t *testing.T) {
-	data := map[string]string{"key": "value"}
-	response := NewSuccessResponse(data)
-
-	assert.True(t, response.Success)
-	assert.Equal(t, data, response.Data)
-	assert.Nil(t, response.Error)
-}
-
-// TestValidatePageRequest 测试验证分页请求
-func TestValidatePageRequest(t *testing.T) {
-	tests := []struct {
-		name         string
-		req          *PageRequest
-		expectedPage int
-		expectedSize int
-	}{
-		{
-			name:         "有效请求",
-			req:          &PageRequest{Page: 2, PageSize: 20},
-			expectedPage: 2,
-			expectedSize: 20,
-		},
-		{
-			name:         "页码小于1",
-			req:          &PageRequest{Page: 0, PageSize: 20},
-			expectedPage: 1,
-			expectedSize: 20,
-		},
-		{
-			name:         "页面大小小于1",
-			req:          &PageRequest{Page: 1, PageSize: 0},
-			expectedPage: 1,
-			expectedSize: 10,
-		},
-		{
-			name:         "页面大小超过100",
-			req:          &PageRequest{Page: 1, PageSize: 200},
-			expectedPage: 1,
-			expectedSize: 100,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_ = ValidatePageRequest(tt.req)
-			assert.Equal(t, tt.expectedPage, tt.req.Page)
-			assert.Equal(t, tt.expectedSize, tt.req.PageSize)
-		})
-	}
-}
-
-// TestNewPageResponse 测试创建分页响应
-func TestNewPageResponse(t *testing.T) {
-	response := NewPageResponse(100, 2, 20)
-
-	assert.Equal(t, int64(100), response.Total)
-	assert.Equal(t, 2, response.Page)
-	assert.Equal(t, 20, response.PageSize)
-	assert.Equal(t, 5, response.PageCount)
-	assert.True(t, response.HasNext)
 }
 
 // Table驱动测试：文件类别

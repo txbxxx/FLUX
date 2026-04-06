@@ -259,32 +259,6 @@ func CloneSnapshot(snapshot *Snapshot) *Snapshot {
 	return &clone
 }
 
-// MergeSummary 合并多个变更摘要。
-func MergeSummary(summaries ...ChangeSummary) ChangeSummary {
-	result := ChangeSummary{
-		FilesByTool:     make(map[string]int),
-		FilesByCategory: make(map[string]int),
-	}
-
-	for _, summary := range summaries {
-		result.TotalFiles += summary.TotalFiles
-		result.Created += summary.Created
-		result.Updated += summary.Updated
-		result.Deleted += summary.Deleted
-		result.Skipped += summary.Skipped
-
-		for tool, count := range summary.FilesByTool {
-			result.FilesByTool[tool] += count
-		}
-
-		for category, count := range summary.FilesByCategory {
-			result.FilesByCategory[category] += count
-		}
-	}
-
-	return result
-}
-
 // NewTaskProgress 根据当前值和总量创建进度对象。
 func NewTaskProgress(current, total int, message string) TaskProgress {
 	percentage := 0
@@ -321,54 +295,4 @@ func (p *TaskProgress) UpdateProgress(current, total int, message string) {
 // IsCompleted 判断任务是否到达完成状态。
 func (p *TaskProgress) IsCompleted() bool {
 	return p.Current >= p.Total && p.Total > 0
-}
-
-// NewErrorResponse 创建统一错误响应。
-func NewErrorResponse(code, message, details string) *Response {
-	return &Response{
-		Success: false,
-		Error: &ErrorDetail{
-			Code:    code,
-			Message: message,
-			Details: details,
-		},
-	}
-}
-
-// NewSuccessResponse 创建统一成功响应。
-func NewSuccessResponse(data interface{}) *Response {
-	return &Response{
-		Success: true,
-		Data:    data,
-	}
-}
-
-// ValidatePageRequest 规范化分页参数到合理范围。
-func ValidatePageRequest(req *PageRequest) error {
-	if req.Page < 1 {
-		req.Page = 1
-	}
-	if req.PageSize < 1 {
-		req.PageSize = 10
-	}
-	if req.PageSize > 100 {
-		req.PageSize = 100
-	}
-	return nil
-}
-
-// NewPageResponse 根据总量和页参数构建分页结果。
-func NewPageResponse(total int64, page, pageSize int) *PageResponse {
-	pageCount := int(total) / pageSize
-	if int(total)%pageSize > 0 {
-		pageCount++
-	}
-
-	return &PageResponse{
-		Total:     total,
-		Page:      page,
-		PageSize:  pageSize,
-		PageCount: pageCount,
-		HasNext:   page < pageCount,
-	}
 }

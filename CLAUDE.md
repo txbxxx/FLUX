@@ -86,7 +86,7 @@ ai-sync-manager/
 │   │   ├── sync/                   # 同步服务（预留）
 │   │   └── crypto/                 # AES-256-GCM 加密
 │   │
-│   └── models/                     # 数据模型 + DAO（同文件）
+│   └── models/                     # 数据模型 + DAO（同文件，仅表结构+CRUD）
 │       ├── snapshot.go             # Snapshot + SnapshotDAO
 │       ├── registered_project.go   # RegisteredProject + DAO
 │       ├── custom_sync_rule.go     # CustomSyncRule + DAO
@@ -94,6 +94,12 @@ ai-sync-manager/
 │       ├── remote_config.go        # RemoteConfig（预留）
 │       ├── app_config.go           # 应用配置/统计模型
 │       └── utils.go                # 工具函数
+│
+│   └── types/                      # 对外返回结构体（按功能分子目录）
+│       ├── snapshot/               # 快照相关返回结构体
+│       ├── scan/                   # 扫描相关返回结构体
+│       ├── config/                 # 配置浏览相关返回结构体
+│       └── common/                 # 通用/共享返回结构体
 │
 ├── pkg/
 │   ├── config/                     # YAML 配置（嵌入默认值 → 用户覆盖）
@@ -126,14 +132,17 @@ CLI/TUI 层  →  UseCase 层  →  Service 层  →  DAO（models 内）
 ### Models 层规则
 
 - **结构体 + DAO 同文件**：`snapshot.go` 包含 `Snapshot` 结构体和 `SnapshotDAO`
-- **DAO 返回值**：只返回 models 中定义的结构体，禁止返回 `map`、`interface{}`
+- **DAO 返回值**：只返回 models 中定义的数据库结构体，禁止返回 `map`、`interface{}`
 - **单一职责**：每个 DAO 函数只操作一个数据库表
 - **不做转换**：DAO 不做响应结构体的 convert
+- **禁止外键**：表结构不定义外键（FOREIGN KEY）、级联删除等数据库级关联特性。表间关系由 Service 层在应用代码中维护
+- **纯数据定义**：Models 层只负责数据库表结构定义和 CRUD 操作，不包含任何业务逻辑
 
 ```go
 // internal/models/xxx.go — 标准文件结构
 package models
 
+// Example 数据库表结构，无外键定义
 type Example struct {
     ID   string `json:"id" db:"id"`
     Name string `json:"name" db:"name"`
@@ -146,16 +155,51 @@ func (dao *ExampleDAO) Create(e *Example) error { /* ... */ }
 func (dao *ExampleDAO) GetByID(id string) (*Example, error) { /* ... */ }
 ```
 
+### Types 层规则
+
+所有对调用方（CLI/TUI/UseCase）返回的结构体统一定义在 `internal/types/` 包中，按功能模块分子目录组织。
+
+- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/config/`、`types/common/`
+- **与 Models 区分**：Models 是数据库表映射，Types 是面向调用方的响应结构体
+- **Service/UseCase 负责 convert**：从 DAO 拿到 Models 结构体后，转换为 Types 结构体返回
+- **命名规范**：目录名即包名，结构体命名语义清晰，如 `types/snapshot.SnapshotDetail`
+
+```go
+// internal/types/snapshot/detail.go
+package snapshot
+
+// SnapshotDetail is the response struct for snapshot details returned to callers.
+type SnapshotDetail struct {
+    ID        string    `json:"id"`
+    Name      string    `json:"name"`
+    FileCount int       `json:"file_count"`
+    CreatedAt time.Time `json:"created_at"`
+}
+```
+
+```go
+// internal/types/common/pagination.go
+package common
+
+// Pagination holds pagination metadata for list responses.
+type Pagination struct {
+    Total  int `json:"total"`
+    Offset int `json:"offset"`
+    Limit  int `json:"limit"`
+}
+```
+
 ### Service 层规则
 
 - 调用 DAO 获取数据，执行业务逻辑，组装结果
 - 可组合多个 DAO 的返回值
+- **转换职责**：将 Models 结构体转换为 `internal/types/` 中定义的响应结构体返回给调用方
 
 ### UseCase 层规则
 
 - 编排多个 Service 完成完整业务流程
 - 将底层技术性错误翻译为用户可读错误（`UserError`）
-- 决定对外返回的数据结构
+- 决定对外返回的数据结构（定义在 `internal/types/` 中）
 
 ---
 

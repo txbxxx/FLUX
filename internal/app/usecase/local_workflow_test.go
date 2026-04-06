@@ -8,6 +8,7 @@ import (
 
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
 type stubDetector struct {
@@ -102,8 +103,8 @@ func (s *stubScanRuleManager) ListRegisteredProjects(toolType *tool.ToolType) ([
 }
 
 type stubSnapshotService struct {
-	createInput  models.CreateSnapshotOptions
-	createResult *models.SnapshotPackage
+	createInput  typesSnapshot.CreateSnapshotOptions
+	createResult *typesSnapshot.SnapshotPackage
 	createErr    error
 	listLimit    int
 	listOffset   int
@@ -113,7 +114,7 @@ type stubSnapshotService struct {
 	countErr     error
 }
 
-func (s *stubSnapshotService) CreateSnapshot(input models.CreateSnapshotOptions) (*models.SnapshotPackage, error) {
+func (s *stubSnapshotService) CreateSnapshot(input typesSnapshot.CreateSnapshotOptions) (*typesSnapshot.SnapshotPackage, error) {
 	s.createInput = input
 	return s.createResult, s.createErr
 }
@@ -228,7 +229,7 @@ func TestLocalWorkflowScanExplainsWhyToolIsNotSyncable(t *testing.T) {
 func TestLocalWorkflowCreateSnapshotMapsServiceResult(t *testing.T) {
 	now := time.Date(2026, 3, 23, 10, 0, 0, 0, time.UTC)
 	service := &stubSnapshotService{
-		createResult: &models.SnapshotPackage{
+		createResult: &typesSnapshot.SnapshotPackage{
 			Snapshot: &models.Snapshot{
 				ID:        "snap-123",
 				Name:      "Daily backup",

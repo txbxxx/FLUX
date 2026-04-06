@@ -10,6 +10,8 @@ import (
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/pkg/logger"
 
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+
 	"go.uber.org/zap"
 )
 
@@ -28,8 +30,8 @@ func NewApplier(collector *Collector) *Applier {
 // ApplySnapshot 应用快照到本地
 func (a *Applier) ApplySnapshot(
 	snapshot *models.Snapshot,
-	options models.ApplyOptions,
-) (*models.ApplyResult, error) {
+	options typesSnapshot.ApplyOptions,
+) (*typesSnapshot.ApplyResult, error) {
 	logger.Info("开始应用快照",
 		zap.String("id", snapshot.ID),
 		zap.String("name", snapshot.Name),
@@ -38,12 +40,12 @@ func (a *Applier) ApplySnapshot(
 		zap.Bool("dry_run", options.DryRun),
 	)
 
-	result := &models.ApplyResult{
+	result := &typesSnapshot.ApplyResult{
 		Success:      true,
-		AppliedFiles: make([]models.AppliedFile, 0),
-		SkippedFiles: make([]models.SkippedFile, 0),
-		Errors:       make([]models.ApplyError, 0),
-		Summary:      models.ChangeSummary{},
+		AppliedFiles: make([]typesSnapshot.AppliedFile, 0),
+		SkippedFiles: make([]typesSnapshot.SkippedFile, 0),
+		Errors:       make([]typesSnapshot.ApplyError, 0),
+		Summary:      typesSnapshot.ChangeSummary{},
 	}
 
 	// 创建备份
@@ -64,7 +66,7 @@ func (a *Applier) ApplySnapshot(
 		applied, skipped, err := a.applyFile(file, options)
 		if err != nil {
 			result.Success = false
-			result.Errors = append(result.Errors, models.ApplyError{
+			result.Errors = append(result.Errors, typesSnapshot.ApplyError{
 				Path:    file.OriginalPath,
 				Message: err.Error(),
 			})
@@ -105,8 +107,8 @@ func (a *Applier) ApplySnapshot(
 // applyFile 应用单个文件
 func (a *Applier) applyFile(
 	file models.SnapshotFile,
-	options models.ApplyOptions,
-) (*models.AppliedFile, *models.SkippedFile, error) {
+	options typesSnapshot.ApplyOptions,
+) (*typesSnapshot.AppliedFile, *typesSnapshot.SkippedFile, error) {
 	targetPath := file.OriginalPath
 
 	// 检查文件是否已存在
@@ -115,7 +117,7 @@ func (a *Applier) applyFile(
 	if exists && !options.Force {
 		// 检查内容是否相同
 		if a.contentMatches(targetPath, file.Content) {
-			return nil, &models.SkippedFile{
+			return nil, &typesSnapshot.SkippedFile{
 				Path:   targetPath,
 				Reason: "内容相同",
 			}, nil
@@ -128,7 +130,7 @@ func (a *Applier) applyFile(
 		if exists {
 			action = "updated"
 		}
-		return &models.AppliedFile{
+		return &typesSnapshot.AppliedFile{
 			Path:         targetPath,
 			OriginalPath: file.OriginalPath,
 			Action:       action,
@@ -151,7 +153,7 @@ func (a *Applier) applyFile(
 		action = "updated"
 	}
 
-	return &models.AppliedFile{
+	return &typesSnapshot.AppliedFile{
 		Path:         targetPath,
 		OriginalPath: file.OriginalPath,
 		Action:       action,
