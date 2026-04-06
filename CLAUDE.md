@@ -279,7 +279,7 @@ git worktree remove ../AToSync-feat-xxx && git branch -d feat/xxx
 
 ## 提交规范
 
-**语言**：Commit Message 全部使用中文（type 前缀保留英文）。
+**语言**：Commit Message **全部使用中文**（仅 type 前缀如 `feat:` `fix:` 保留英文），描述、说明、测试表格等内容必须为中文。禁止使用英文描述。
 
 **格式**：
 
