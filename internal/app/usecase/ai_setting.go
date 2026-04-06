@@ -1,0 +1,530 @@
+package usecase
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"ai-sync-manager/internal/models"
+	typesSetting "ai-sync-manager/internal/types/setting"
+)
+
+// AISettingManager AI 配置管理接口。
+type AISettingManager interface {
+	Create(setting *models.AISetting) error
+	GetByName(name string) (*models.AISetting, error)
+	List() ([]*models.AISetting, error)
+	Delete(name string) error
+}
+
+// CreateAISettingInput 创建 AI 配置的输入。
+type CreateAISettingInput struct {
+	Name        string // 配置名称，必填
+	Token       string // Auth token，必填
+	BaseURL     string // API base URL，必填
+	OpusModel   string // Opus 模型，可选
+	SonnetModel string // Sonnet 模型，可选
+}
+
+// CreateAISettingResult 创建配置的返回值。
+type CreateAISettingResult typesSetting.AISettingCreateResult
+
+// ListAISettingsInput 列出配置的输入。
+type ListAISettingsInput struct {
+	Limit  int // 分页大小，<=0 时返回全部
+	Offset int // 偏移量
+}
+
+// ListAISettingsResult 列出配置的返回值。
+type ListAISettingsResult typesSetting.AISettingListResult
+
+// GetAISettingInput 获取配置详情的输入。
+type GetAISettingInput struct {
+	Name string // 配置名称，必填
+}
+
+// GetAISettingResult 获取配置详情的返回值。
+type GetAISettingResult struct {
+	typesSetting.AISettingDetail
+	IsCurrent bool // 是否为当前生效配置
+}
+
+// DeleteAISettingInput 删除配置的输入。
+type DeleteAISettingInput struct {
+	Name string // 配置名称，必填
+}
+
+// SwitchAISettingInput 切换配置的输入。
+type SwitchAISettingInput struct {
+	Name string // 要切换到的配置名称，必填
+}
+
+// SwitchAISettingResult 切换配置的返回值。
+type SwitchAISettingResult typesSetting.AISwitchResult
+
+// ClaudeSettingsFile Claude settings.json 文件路径。
+const ClaudeSettingsFile = ".claude/settings.json"
+
+// CreateAISetting 创建 AI 配置并保存到数据库。
+func (w *LocalWorkflow) CreateAISetting(_ context.Context, input CreateAISettingInput) (*CreateAISettingResult, error) {
+	// 参数校验
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, &UserError{
+			Message:    "创建配置失败：名称不能为空",
+			Suggestion: "请通过 --name 参数指定配置名称",
+			Err:        errors.New("empty name"),
+		}
+	}
+
+	token := strings.TrimSpace(input.Token)
+	if token == "" {
+		return nil, &UserError{
+			Message:    "创建配置失败：token 不能为空",
+			Suggestion: "请通过 --token 参数指定认证 token",
+			Err:        errors.New("empty token"),
+		}
+	}
+
+	baseURL := strings.TrimSpace(input.BaseURL)
+	if baseURL == "" {
+		return nil, &UserError{
+			Message:    "创建配置失败：base_url 不能为空",
+			Suggestion: "请通过 --api 参数指定 API 地址",
+			Err:        errors.New("empty base_url"),
+		}
+	}
+
+	// 校验 baseURL 格式：必须以 http:// 或 https:// 开头
+	// 为什么：离线场景也需可用，因此只做格式校验，不验证域名可达性
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		return nil, &UserError{
+			Message:    "创建配置失败：API 地址格式不正确",
+			Suggestion: "API 地址必须以 http:// 或 https:// 开头，例如 https://api.anthropic.com",
+			Err:        errors.New("invalid base_url format"),
+		}
+	}
+
+	// 校验模型：至少填一个
+	opusModel := strings.TrimSpace(input.OpusModel)
+	sonnetModel := strings.TrimSpace(input.SonnetModel)
+	if opusModel == "" && sonnetModel == "" {
+		return nil, &UserError{
+			Message:    "创建配置失败：至少需要指定一个模型",
+			Suggestion: "请通过 --opus-model 或 --sonnet-model 参数指定至少一个模型",
+			Err:        errors.New("no model specified"),
+		}
+	}
+
+	// 检查配置是否已存在
+	if w.aiSettingManager != nil {
+		existing, err := w.aiSettingManager.GetByName(name)
+		if err == nil && existing != nil {
+			return nil, &UserError{
+				Message:    "创建配置失败：配置名称已存在",
+				Suggestion: fmt.Sprintf("配置 %q 已存在，请使用其他名称或先删除现有配置", name),
+				Err:        errors.New("duplicate name"),
+			}
+		}
+	}
+
+	// 创建配置
+	setting := &models.AISetting{
+		ID:          generateUUID(),
+		Name:        name,
+		Token:       token,
+		BaseURL:     baseURL,
+		OpusModel:   opusModel,
+		SonnetModel: sonnetModel,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if w.aiSettingManager == nil {
+		return nil, &UserError{
+			Message:    "创建配置失败：数据库未初始化",
+			Suggestion: "请检查应用数据目录是否正常",
+			Err:        errors.New("ai setting manager not initialized"),
+		}
+	}
+
+	if err := w.aiSettingManager.Create(setting); err != nil {
+		return nil, &UserError{
+			Message:    "创建配置失败",
+			Suggestion: "请检查数据库连接后重试",
+			Err:        err,
+		}
+	}
+
+	return &CreateAISettingResult{ID: setting.ID}, nil
+}
+
+// ListAISettings 列出所有已保存的 AI 配置。
+func (w *LocalWorkflow) ListAISettings(_ context.Context, input ListAISettingsInput) (*ListAISettingsResult, error) {
+	if w.aiSettingManager == nil {
+		return nil, &UserError{
+			Message:    "读取配置列表失败：数据库未初始化",
+			Suggestion: "请检查应用数据目录是否正常",
+			Err:        errors.New("ai setting manager not initialized"),
+		}
+	}
+
+	settings, err := w.aiSettingManager.List()
+	if err != nil {
+		return nil, &UserError{
+			Message:    "读取配置列表失败",
+			Suggestion: "请检查数据库连接后重试",
+			Err:        err,
+		}
+	}
+
+	// 获取当前生效配置的 token + base URL，用于和数据库中的配置逐一匹配
+	currentInfo, _ := w.getCurrentSettingInfo()
+
+	var currentMatchedName string
+	limit := input.Limit
+	if limit <= 0 {
+		limit = len(settings)
+	}
+	offset := input.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	// 转换为返回结构体
+	items := make([]typesSetting.AISettingListItem, 0, limit)
+	for i, setting := range settings {
+		if i < offset {
+			continue
+		}
+		if len(items) >= limit {
+			break
+		}
+
+		isCurrent := currentInfo != nil && setting.Token == currentInfo.Token && setting.BaseURL == currentInfo.BaseURL
+		if isCurrent {
+			currentMatchedName = setting.Name
+		}
+
+		items = append(items, typesSetting.AISettingListItem{
+			ID:          setting.ID,
+			Name:        setting.Name,
+			BaseURL:     setting.BaseURL,
+			OpusModel:   setting.OpusModel,
+			SonnetModel: setting.SonnetModel,
+			IsCurrent:    isCurrent,
+		})
+	}
+
+	return &ListAISettingsResult{
+		Items:   items,
+		Total:   len(settings),
+		Current: currentMatchedName,
+	}, nil
+}
+
+// GetAISetting 获取指定配置的详情。
+func (w *LocalWorkflow) GetAISetting(_ context.Context, input GetAISettingInput) (*GetAISettingResult, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, &UserError{
+			Message:    "获取配置失败：名称不能为空",
+			Suggestion: "请指定配置名称",
+			Err:        errors.New("empty name"),
+		}
+	}
+
+	if w.aiSettingManager == nil {
+		return nil, &UserError{
+			Message:    "获取配置失败：数据库未初始化",
+			Suggestion: "请检查应用数据目录是否正常",
+			Err:        errors.New("ai setting manager not initialized"),
+		}
+	}
+
+	setting, err := w.aiSettingManager.GetByName(name)
+	if err != nil {
+		return nil, &UserError{
+			Message:    "获取配置失败：配置不存在",
+			Suggestion: "请检查配置名称是否正确",
+			Err:        err,
+		}
+	}
+
+	// 判断是否为当前配置（通过 token + base URL 匹配）
+	currentInfo, _ := w.getCurrentSettingInfo()
+	isCurrent := currentInfo != nil && setting.Token == currentInfo.Token && setting.BaseURL == currentInfo.BaseURL
+
+	return &GetAISettingResult{
+		AISettingDetail: typesSetting.AISettingDetail{
+			ID:          setting.ID,
+			Name:        setting.Name,
+			Token:        setting.Token,
+			BaseURL:      setting.BaseURL,
+			OpusModel:    setting.OpusModel,
+			SonnetModel:  setting.SonnetModel,
+			CreatedAt:    setting.CreatedAt,
+			UpdatedAt:    setting.UpdatedAt,
+		},
+		IsCurrent: isCurrent,
+	}, nil
+}
+
+// DeleteAISetting 删除指定的 AI 配置。
+func (w *LocalWorkflow) DeleteAISetting(_ context.Context, input DeleteAISettingInput) error {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return &UserError{
+			Message:    "删除配置失败：名称不能为空",
+			Suggestion: "请指定配置名称",
+			Err:        errors.New("empty name"),
+		}
+	}
+
+	if w.aiSettingManager == nil {
+		return &UserError{
+			Message:    "删除配置失败：数据库未初始化",
+			Suggestion: "请检查应用数据目录是否正常",
+			Err:        errors.New("ai setting manager not initialized"),
+		}
+	}
+
+	if err := w.aiSettingManager.Delete(name); err != nil {
+		if errors.Is(err, models.ErrRecordNotFound) {
+			return &UserError{
+				Message:    "删除配置失败：配置不存在",
+				Suggestion: "请检查配置名称是否正确",
+			}
+		}
+		return &UserError{
+			Message:    "删除配置失败",
+			Suggestion: "请检查数据库连接后重试",
+			Err:        err,
+		}
+	}
+
+	return nil
+}
+
+// SwitchAISetting 切换到指定的 AI 配置。
+// 过程：1. 备份当前 settings.json 为 .json.ats；2. 从数据库读取新配置；3. 写入 settings.json。
+func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISettingInput) (*SwitchAISettingResult, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, &UserError{
+			Message:    "切换配置失败：名称不能为空",
+			Suggestion: "请指定配置名称",
+			Err:        errors.New("empty name"),
+		}
+	}
+
+	if w.aiSettingManager == nil {
+		return nil, &UserError{
+			Message:    "切换配置失败：数据库未初始化",
+			Suggestion: "请检查应用数据目录是否正常",
+			Err:        errors.New("ai setting manager not initialized"),
+		}
+	}
+
+	// 第一步：获取目标配置
+	target, err := w.aiSettingManager.GetByName(name)
+	if err != nil {
+		return nil, &UserError{
+			Message:    "切换配置失败：配置不存在",
+			Suggestion: "请检查配置名称是否正确",
+			Err:        err,
+		}
+	}
+
+	// 第二步：读取当前配置（用于返回 previous_name）
+	settingsPath, err := w.getClaudeSettingsPath()
+	if err != nil {
+		return nil, &UserError{
+			Message:    "切换配置失败：无法定位 settings.json",
+			Suggestion: "请确认 Claude 配置目录存在",
+			Err:        err,
+		}
+	}
+
+	// 通过 token + base URL 匹配找到之前的配置名称
+	previousName := w.matchCurrentSettingName()
+
+	// 第三步：备份当前 settings.json
+	backupPath := settingsPath + ".ats"
+	if err := backupSettingsFile(settingsPath, backupPath); err != nil {
+		return nil, &UserError{
+			Message:    "切换配置失败：备份失败",
+			Suggestion: "请检查文件写入权限",
+			Err:        err,
+		}
+	}
+
+	// 第四步：构建新的 settings.json 内容
+	newSettings := map[string]any{
+		"env": map[string]string{
+			"ANTHROPIC_AUTH_TOKEN":         target.Token,
+			"ANTHROPIC_BASE_URL":           target.BaseURL,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   target.OpusModel,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": target.SonnetModel,
+		},
+	}
+
+	// 第五步：读取现有配置并保留其他字段
+	if content, err := os.ReadFile(settingsPath); err == nil {
+		var existing map[string]any
+		if err := json.Unmarshal(content, &existing); err == nil {
+			// 合并 env 字段
+			if env, ok := existing["env"].(map[string]any); ok {
+				for k, v := range env {
+					if _, exists := newSettings["env"].(map[string]string)[k]; !exists {
+						newSettings["env"].(map[string]string)[k] = fmt.Sprint(v)
+					}
+				}
+			}
+			// 保留其他字段（如 enabledPlugins, language 等）
+			for k, v := range existing {
+				if k != "env" {
+					newSettings[k] = v
+				}
+			}
+		}
+	}
+
+	// 第六步：写入新配置
+	newContent, err := json.MarshalIndent(newSettings, "", "  ")
+	if err != nil {
+		return nil, &UserError{
+			Message:    "切换配置失败：生成配置内容失败",
+			Suggestion: "请检查配置数据是否有效",
+			Err:        err,
+		}
+	}
+
+	if err := os.WriteFile(settingsPath, newContent, 0644); err != nil {
+		return nil, &UserError{
+			Message:    "切换配置失败：写入配置文件失败",
+			Suggestion: "请检查文件写入权限",
+			Err:        err,
+		}
+	}
+
+	return &SwitchAISettingResult{
+		PreviousName: previousName,
+		NewName:     target.Name,
+		BackupPath:  backupPath,
+	}, nil
+}
+
+// WithAISettingManager 以链式方式补充 AI 配置管理依赖。
+func (w *LocalWorkflow) WithAISettingManager(manager AISettingManager) *LocalWorkflow {
+	w.aiSettingManager = manager
+	return w
+}
+
+// getClaudeSettingsPath 获取 Claude settings.json 文件的绝对路径。
+func (w *LocalWorkflow) getClaudeSettingsPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("获取用户主目录失败: %w", err)
+	}
+
+	settingsPath := filepath.Join(homeDir, ClaudeSettingsFile)
+	return settingsPath, nil
+}
+
+// currentSettingInfo holds the token and base URL read from the active settings.json.
+type currentSettingInfo struct {
+	Token   string
+	BaseURL string
+}
+
+// getCurrentSettingInfo reads the active settings.json and extracts token + base URL.
+func (w *LocalWorkflow) getCurrentSettingInfo() (*currentSettingInfo, error) {
+	settingsPath, err := w.getClaudeSettingsPath()
+	if err != nil {
+		return nil, err
+	}
+
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseCurrentSettingInfo(content)
+}
+
+// parseCurrentSettingInfo extracts token and base URL from settings.json content.
+func parseCurrentSettingInfo(content []byte) (*currentSettingInfo, error) {
+	var settings map[string]any
+	if err := json.Unmarshal(content, &settings); err != nil {
+		return nil, err
+	}
+
+	env, ok := settings["env"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+
+	info := &currentSettingInfo{}
+	if token, ok := env["ANTHROPIC_AUTH_TOKEN"].(string); ok {
+		info.Token = token
+	}
+	if baseURL, ok := env["ANTHROPIC_BASE_URL"].(string); ok {
+		info.BaseURL = baseURL
+	}
+
+	if info.Token == "" {
+		return nil, nil
+	}
+
+	return info, nil
+}
+
+// matchCurrentSettingName reads settings.json and finds the matching config name from DB.
+func (w *LocalWorkflow) matchCurrentSettingName() string {
+	info, err := w.getCurrentSettingInfo()
+	if err != nil || info == nil {
+		return ""
+	}
+
+	settings, err := w.aiSettingManager.List()
+	if err != nil {
+		return ""
+	}
+
+	for _, s := range settings {
+		if s.Token == info.Token && s.BaseURL == info.BaseURL {
+			return s.Name
+		}
+	}
+
+	return ""
+}
+
+// backupSettingsFile 备份 settings.json 文件。
+func backupSettingsFile(src, dst string) error {
+	// 如果源文件不存在，不报错（首次切换时可能没有）
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	content, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(dst, content, 0644)
+}
+
+// generateUUID 生成 UUID（简化版，实际应使用 google/uuid）。
+func generateUUID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
+}

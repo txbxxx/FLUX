@@ -65,10 +65,11 @@ type Workflow interface {
 // LocalWorkflow 是 Workflow 的本地实现，编排本地扫描、快照、配置浏览等流程。
 // 它不直接访问数据库，而是通过 Detector、SnapshotManager、ScanRuleManager 等接口协调工作。
 type LocalWorkflow struct {
-	detector  Detector         // 工具检测器，负责扫描本机配置
-	snapshots SnapshotManager  // 快照管理器，负责快照的持久化
-	accessor  ConfigAccessor   // 配置访问器，负责文件的读写浏览
-	rules     ScanRuleManager  // 规则管理器，负责持久化规则和项目的增删查（可选依赖）
+	detector         Detector         // 工具检测器，负责扫描本机配置
+	snapshots        SnapshotManager  // 快照管理器，负责快照的持久化
+	accessor         ConfigAccessor   // 配置访问器，负责文件的读写浏览
+	rules            ScanRuleManager  // 规则管理器，负责持久化规则和项目的增删查（可选依赖）
+	aiSettingManager AISettingManager // AI 配置管理器（可选依赖）
 }
 
 // --- 数据结构定义 ---

@@ -230,6 +230,7 @@ func (db *DB) createTables(tx *gorm.DB) error {
 		&registeredProjectRecord{},
 		&backupRecord{},
 		&syncHistoryRecord{},
+		&aiSettingRecord{},
 	)
 }
 
@@ -539,3 +540,16 @@ type syncHistoryRecord struct {
 }
 
 func (syncHistoryRecord) TableName() string { return "sync_history" }
+
+type aiSettingRecord struct {
+	ID        string    `gorm:"column:id;primaryKey"`
+	Name      string    `gorm:"column:name;not null;uniqueIndex"`
+	Token     string    `gorm:"column:token;not null"`
+	BaseURL   string    `gorm:"column:base_url"`
+	OpusModel string    `gorm:"column:opus_model"`
+	SonnetModel string `gorm:"column:sonnet_model"`
+	CreatedAt time.Time `gorm:"column:created_at;not null"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
+}
+
+func (aiSettingRecord) TableName() string { return "ai_settings" }
