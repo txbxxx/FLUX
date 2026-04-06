@@ -33,6 +33,9 @@ type Workflow interface {
 	GetAISetting(ctx context.Context, input usecase.GetAISettingInput) (*usecase.GetAISettingResult, error)
 	DeleteAISetting(ctx context.Context, input usecase.DeleteAISettingInput) error
 	SwitchAISetting(ctx context.Context, input usecase.SwitchAISettingInput) (*usecase.SwitchAISettingResult, error)
+	// 新增批量方法
+	GetAISettingsBatch(ctx context.Context, input usecase.GetAISettingsBatchInput) (*usecase.GetAISettingsBatchResult, error)
+	DeleteAISettingsBatch(ctx context.Context, input usecase.DeleteAISettingsBatchInput) (*usecase.DeleteAISettingsBatchResult, error)
 }
 
 // TUIRunner / EditorRunner 抽象终端交互能力，避免 cobra 直接依赖具体实现。

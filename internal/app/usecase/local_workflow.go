@@ -60,6 +60,15 @@ type Workflow interface {
 	ListSnapshots(ctx context.Context, input ListSnapshotsInput) (*ListSnapshotsResult, error)
 	GetConfig(ctx context.Context, input GetConfigInput) (*GetConfigResult, error)
 	SaveConfig(ctx context.Context, input SaveConfigInput) error
+	// AI setting 相关方法
+	CreateAISetting(ctx context.Context, input CreateAISettingInput) (*CreateAISettingResult, error)
+	ListAISettings(ctx context.Context, input ListAISettingsInput) (*ListAISettingsResult, error)
+	GetAISetting(ctx context.Context, input GetAISettingInput) (*GetAISettingResult, error)
+	DeleteAISetting(ctx context.Context, input DeleteAISettingInput) error
+	SwitchAISetting(ctx context.Context, input SwitchAISettingInput) (*SwitchAISettingResult, error)
+	// 新增批量方法
+	GetAISettingsBatch(ctx context.Context, input GetAISettingsBatchInput) (*GetAISettingsBatchResult, error)
+	DeleteAISettingsBatch(ctx context.Context, input DeleteAISettingsBatchInput) (*DeleteAISettingsBatchResult, error)
 }
 
 // LocalWorkflow 是 Workflow 的本地实现，编排本地扫描、快照、配置浏览等流程。
