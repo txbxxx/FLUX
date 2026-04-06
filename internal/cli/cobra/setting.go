@@ -79,10 +79,25 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	listCommand.Flags().IntP("offset", "o", 0, "偏移量")
 
 	getCommand := &spcobra.Command{
-		Use:   "get <name>",
+		Use:   "get <name> [name...]",
 		Short: "获取指定配置的详情",
-		Args:  spcobra.ExactArgs(1),
+		Args:  spcobra.MinimumNArgs(1),
 		RunE: func(cmd *spcobra.Command, args []string) error {
+			// 判断是否为批量操作
+			if len(args) > 1 {
+				// 批量获取
+				batchResult, err := deps.Workflow.GetAISettingsBatch(cmd.Context(), usecase.GetAISettingsBatchInput{
+					Names: args,
+				})
+				if err != nil {
+					return err
+				}
+
+				printBatchSettingDetails(cmd.OutOrStdout(), batchResult)
+				return nil
+			}
+
+			// 单个获取（保持原有逻辑）
 			result, err := deps.Workflow.GetAISetting(cmd.Context(), usecase.GetAISettingInput{
 				Name: args[0],
 			})
@@ -96,10 +111,39 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	}
 
 	deleteCommand := &spcobra.Command{
-		Use:   "delete <name>",
+		Use:   "delete <name> [name...]",
 		Short: "删除指定的配置",
-		Args:  spcobra.ExactArgs(1),
+		Args:  spcobra.MinimumNArgs(1),
 		RunE: func(cmd *spcobra.Command, args []string) error {
+			// 判断是否为批量操作
+			if len(args) > 1 {
+				// 批量删除：先确认，再执行
+				fmt.Fprintln(cmd.OutOrStdout(), "将删除以下配置：")
+				for _, name := range args {
+					fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", name)
+				}
+
+				// 确认删除
+				fmt.Fprint(cmd.OutOrStderr(), "确认删除？(y/yes): ")
+				var confirm string
+				fmt.Scanln(&confirm)
+				if confirm != "y" && confirm != "yes" {
+					fmt.Fprintln(cmd.OutOrStdout(), "已取消删除")
+					return nil
+				}
+
+				batchResult, err := deps.Workflow.DeleteAISettingsBatch(cmd.Context(), usecase.DeleteAISettingsBatchInput{
+					Names: args,
+				})
+				if err != nil {
+					return err
+				}
+
+				printBatchDeleteResult(cmd.OutOrStdout(), batchResult)
+				return nil
+			}
+
+			// 单个删除（保持原有逻辑）
 			if err := deps.Workflow.DeleteAISetting(cmd.Context(), usecase.DeleteAISettingInput{
 				Name: args[0],
 			}); err != nil {
@@ -219,4 +263,53 @@ func printSwitchResult(w io.Writer, result *usecase.SwitchAISettingResult) {
 // printSettingUsage 输出简版帮助。
 func printSettingUsage(w io.Writer) {
 	fmt.Fprintln(w, "请指定子命令，例如: ai-sync setting list")
+}
+
+// printBatchSettingDetails 输出批量获取配置的结果。
+func printBatchSettingDetails(w io.Writer, result *usecase.GetAISettingsBatchResult) {
+	for i, item := range result.Items {
+		if i > 0 {
+			fmt.Fprintln(w, "---")
+		}
+		fmt.Fprintf(w, "配置: %s\n", item.Name)
+		printSettingDetail(w, item)
+	}
+
+	// 输出失败汇总
+	if len(result.Failed) > 0 {
+		fmt.Fprintf(w, "\n获取失败的配置: %s\n", joinStrings(result.Failed, ", "))
+	}
+
+	// 输出总汇总
+	total := len(result.Items) + len(result.Failed)
+	fmt.Fprintf(w, "\n汇总：成功 %d 个，失败 %d 个（共 %d 个）\n",
+		len(result.Items), len(result.Failed), total)
+}
+
+// joinStrings 连接字符串切片，用于兼容性。
+func joinStrings(items []string, sep string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	result := items[0]
+	for i := 1; i < len(items); i++ {
+		result += sep + items[i]
+	}
+	return result
+}
+
+// printBatchDeleteResult 输出批量删除配置的结果。
+func printBatchDeleteResult(w io.Writer, result *usecase.DeleteAISettingsBatchResult) {
+	if len(result.Deleted) > 0 {
+		fmt.Fprintf(w, "已删除: %s\n", joinStrings(result.Deleted, ", "))
+	}
+
+	if len(result.Failed) > 0 {
+		fmt.Fprintf(w, "删除失败: %s\n", joinStrings(result.Failed, ", "))
+	}
+
+	// 输出总汇总
+	total := len(result.Deleted) + len(result.Failed)
+	fmt.Fprintf(w, "汇总：成功 %d 个，失败 %d 个（共 %d 个）\n",
+		len(result.Deleted), len(result.Failed), total)
 }

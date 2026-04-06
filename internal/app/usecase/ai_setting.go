@@ -528,3 +528,115 @@ func backupSettingsFile(src, dst string) error {
 func generateUUID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
+
+// GetAISettingsBatchInput 批量获取配置的输入。
+type GetAISettingsBatchInput struct {
+	Names []string // 配置名称列表，至少一个
+}
+
+// GetAISettingsBatchResult 批量获取配置的返回值。
+type GetAISettingsBatchResult struct {
+	Items   []*GetAISettingResult // 成功获取的配置列表
+	Failed  []string               // 获取失败的配置名称列表
+}
+
+// DeleteAISettingsBatchInput 批量删除配置的输入。
+type DeleteAISettingsBatchInput struct {
+	Names []string // 配置名称列表，至少一个
+}
+
+// DeleteAISettingsBatchResult 批量删除配置的返回值。
+type DeleteAISettingsBatchResult struct {
+	Deleted []string // 成功删除的配置名称列表
+	Failed  []string // 删除失败的配置名称列表（含原因）
+}
+
+// GetAISettingsBatch 批量获取多个配置的详情。
+// 循环调用 GetAISetting，收集成功和失败的结果。
+func (w *LocalWorkflow) GetAISettingsBatch(_ context.Context, input GetAISettingsBatchInput) (*GetAISettingsBatchResult, error) {
+	// 参数校验：至少一个名称
+	if len(input.Names) == 0 {
+		return nil, &UserError{
+			Message:    "批量获取配置失败：至少需要指定一个配置名称",
+			Suggestion: "请提供至少一个配置名称",
+			Err:        errors.New("empty names"),
+		}
+	}
+
+	// 去重
+	nameMap := make(map[string]bool)
+	for _, name := range input.Names {
+		nameMap[name] = true
+	}
+	uniqueNames := make([]string, 0, len(nameMap))
+	for name := range nameMap {
+		uniqueNames = append(uniqueNames, name)
+	}
+
+	result := &GetAISettingsBatchResult{
+		Items:  make([]*GetAISettingResult, 0),
+		Failed: make([]string, 0),
+	}
+
+	for _, name := range uniqueNames {
+		singleResult, err := w.GetAISetting(context.Background(), GetAISettingInput{Name: name})
+		if err != nil {
+			result.Failed = append(result.Failed, name)
+			continue
+		}
+		result.Items = append(result.Items, singleResult)
+	}
+
+	return result, nil
+}
+
+// DeleteAISettingsBatch 批量删除多个配置。
+// 循环调用 DeleteAISetting，收集成功和失败的结果。
+func (w *LocalWorkflow) DeleteAISettingsBatch(_ context.Context, input DeleteAISettingsBatchInput) (*DeleteAISettingsBatchResult, error) {
+	// 参数校验：至少一个名称
+	if len(input.Names) == 0 {
+		return nil, &UserError{
+			Message:    "批量删除配置失败：至少需要指定一个配置名称",
+			Suggestion: "请提供至少一个配置名称",
+			Err:        errors.New("empty names"),
+		}
+	}
+
+	// 去重
+	nameMap := make(map[string]bool)
+	for _, name := range input.Names {
+		nameMap[name] = true
+	}
+	uniqueNames := make([]string, 0, len(nameMap))
+	for name := range nameMap {
+		uniqueNames = append(uniqueNames, name)
+	}
+
+	result := &DeleteAISettingsBatchResult{
+		Deleted: make([]string, 0),
+		Failed:  make([]string, 0),
+	}
+
+	for _, name := range uniqueNames {
+		err := w.DeleteAISetting(context.Background(), DeleteAISettingInput{Name: name})
+		if err != nil {
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: %s", name, extractErrorMessage(err)))
+			continue
+		}
+		result.Deleted = append(result.Deleted, name)
+	}
+
+	return result, nil
+}
+
+// extractErrorMessage 从错误中提取用户可读的错误信息
+func extractErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	var userErr *UserError
+	if errors.As(err, &userErr) {
+		return userErr.Message
+	}
+	return err.Error()
+}
