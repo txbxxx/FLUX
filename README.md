@@ -94,6 +94,25 @@ ai-sync get codex skills\README.md
 ai-sync get codex skills\README.md --edit
 ```
 
+管理 AI 配置（setting 命令）：
+
+```powershell
+# 创建配置
+ai-sync setting create --name "claude-api" --token "sk-xxxx" --api "https://api.anthropic.com"
+
+# 列出配置
+ai-sync setting list
+
+# 获取配置详情
+ai-sync setting get claude-api
+
+# 删除配置
+ai-sync setting delete claude-api
+
+# 切换生效配置
+ai-sync setting switch claude-api
+```
+
 启动轻量 TUI：
 
 ```powershell
