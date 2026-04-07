@@ -7,7 +7,9 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(./bin/ai-sync.exe get:*)",
       "Bash(./bin/ai-sync.exe snapshot:*)",
-      "Bash(./bin/ai-sync.exe completion:*)"
+      "Bash(./bin/ai-sync.exe completion:*)",
+      "Bash(git commit:*)",
+      "Bash(git worktree:*)"
     ]
   }
 }
