@@ -592,7 +592,7 @@ type DeleteAISettingsBatchResult struct {
 
 // GetAISettingsBatch 批量获取多个配置的详情。
 // 循环调用 GetAISetting，收集成功和失败的结果。
-func (w *LocalWorkflow) GetAISettingsBatch(_ context.Context, input GetAISettingsBatchInput) (*GetAISettingsBatchResult, error) {
+func (w *LocalWorkflow) GetAISettingsBatch(ctx context.Context, input GetAISettingsBatchInput) (*GetAISettingsBatchResult, error) {
 	// 参数校验：至少一个名称
 	if len(input.Names) == 0 {
 		return nil, &UserError{
@@ -618,7 +618,7 @@ func (w *LocalWorkflow) GetAISettingsBatch(_ context.Context, input GetAISetting
 	}
 
 	for _, name := range uniqueNames {
-		singleResult, err := w.GetAISetting(context.Background(), GetAISettingInput{Name: name})
+		singleResult, err := w.GetAISetting(ctx, GetAISettingInput{Name: name})
 		if err != nil {
 			result.Failed = append(result.Failed, name)
 			continue
@@ -631,7 +631,7 @@ func (w *LocalWorkflow) GetAISettingsBatch(_ context.Context, input GetAISetting
 
 // DeleteAISettingsBatch 批量删除多个配置。
 // 循环调用 DeleteAISetting，收集成功和失败的结果。
-func (w *LocalWorkflow) DeleteAISettingsBatch(_ context.Context, input DeleteAISettingsBatchInput) (*DeleteAISettingsBatchResult, error) {
+func (w *LocalWorkflow) DeleteAISettingsBatch(ctx context.Context, input DeleteAISettingsBatchInput) (*DeleteAISettingsBatchResult, error) {
 	// 参数校验：至少一个名称
 	if len(input.Names) == 0 {
 		return nil, &UserError{
@@ -657,7 +657,7 @@ func (w *LocalWorkflow) DeleteAISettingsBatch(_ context.Context, input DeleteAIS
 	}
 
 	for _, name := range uniqueNames {
-		err := w.DeleteAISetting(context.Background(), DeleteAISettingInput{Name: name})
+		err := w.DeleteAISetting(ctx, DeleteAISettingInput{Name: name})
 		if err != nil {
 			result.Failed = append(result.Failed, fmt.Sprintf("%s: %s", name, extractErrorMessage(err)))
 			continue
