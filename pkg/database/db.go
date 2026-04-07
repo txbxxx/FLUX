@@ -26,111 +26,104 @@ type DB struct {
 
 var (
 	instance *DB
-	once     sync.Once
+	mu       sync.Mutex
 )
 
 // InitDB 初始化数据库单例，并完成首次迁移。
+// 为什么：使用 mutex 替代 sync.Once，首次失败后可重试。
 func InitDB(dataDir string) (*DB, error) {
-	var initErr error
-	once.Do(func() {
-		if err := os.MkdirAll(dataDir, 0755); err != nil {
-			initErr = fmt.Errorf("创建数据目录失败: %w", err)
-			return
-		}
+	mu.Lock()
+	defer mu.Unlock()
 
-		dbPath := filepath.Join(dataDir, "ai-sync-manager.db")
-		instance = &DB{
-			path:   dbPath,
-			closed: false,
-		}
-
-		conn, err := openGormDB(dbPath)
-		if err != nil {
-			initErr = fmt.Errorf("打开数据库失败: %w", err)
-			return
-		}
-		instance.conn = conn
-
-		if err := instance.configure(); err != nil {
-			initErr = fmt.Errorf("配置数据库失败: %w", err)
-			return
-		}
-
-		if err := instance.migrate(); err != nil {
-			initErr = fmt.Errorf("数据库迁移失败: %w", err)
-			return
-		}
-
-		logger.Info("数据库初始化成功", zap.String("path", dbPath))
-	})
-
-	if initErr != nil {
-		return nil, initErr
+	if instance != nil {
+		return instance, nil
 	}
 
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return nil, fmt.Errorf("创建数据目录失败: %w", err)
+	}
+
+	dbPath := filepath.Join(dataDir, "ai-sync-manager.db")
+	db := &DB{
+		path:   dbPath,
+		closed: false,
+	}
+
+	conn, err := openGormDB(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("打开数据库失败: %w", err)
+	}
+	db.conn = conn
+
+	if err := db.configure(); err != nil {
+		return nil, fmt.Errorf("配置数据库失败: %w", err)
+	}
+
+	if err := db.migrate(); err != nil {
+		return nil, fmt.Errorf("数据库迁移失败: %w", err)
+	}
+
+	instance = db
+	logger.Info("数据库初始化成功", zap.String("path", dbPath))
 	return instance, nil
 }
 
 // InitDBWithConfig 使用外部配置初始化数据库单例。
 // cfg 为 nil 时使用默认值。config 包通过 DatabaseConfig 接口解耦。
+// 为什么：使用 mutex 替代 sync.Once，首次失败后可重试。
 func InitDBWithConfig(dataDir string, cfg DatabaseConfig) (*DB, error) {
 	if cfg == nil {
 		return InitDB(dataDir)
 	}
 
-	var initErr error
-	once.Do(func() {
-		if err := os.MkdirAll(dataDir, 0755); err != nil {
-			initErr = fmt.Errorf("创建数据目录失败: %w", err)
-			return
-		}
+	mu.Lock()
+	defer mu.Unlock()
 
-		dbPath := filepath.Join(dataDir, cfg.GetFilename())
-		instance = &DB{
-			path:   dbPath,
-			closed: false,
-		}
-
-		conn, err := openGormDB(dbPath)
-		if err != nil {
-			initErr = fmt.Errorf("打开数据库失败: %w", err)
-			return
-		}
-		instance.conn = conn
-
-		sqlDB, err := conn.DB()
-		if err != nil {
-			initErr = fmt.Errorf("获取底层 sql.DB 失败: %w", err)
-			return
-		}
-
-		if n := cfg.GetMaxOpenConns(); n > 0 {
-			sqlDB.SetMaxOpenConns(n)
-		}
-		if n := cfg.GetMaxIdleConns(); n > 0 {
-			sqlDB.SetMaxIdleConns(n)
-		}
-		if d := cfg.GetConnMaxLifetime(); d > 0 {
-			sqlDB.SetConnMaxLifetime(d)
-		}
-
-		if err := conn.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
-			initErr = fmt.Errorf("设置 PRAGMA 失败: %w", err)
-			return
-		}
-
-		if err := instance.migrate(); err != nil {
-			initErr = fmt.Errorf("数据库迁移失败: %w", err)
-			return
-		}
-
-		logger.Info("数据库初始化成功", zap.String("path", dbPath))
-	})
-
-	if initErr != nil {
-		return nil, initErr
+	if instance != nil {
+		return instance, nil
 	}
 
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return nil, fmt.Errorf("创建数据目录失败: %w", err)
+	}
+
+	dbPath := filepath.Join(dataDir, cfg.GetFilename())
+	db := &DB{
+		path:   dbPath,
+		closed: false,
+	}
+
+	conn, err := openGormDB(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("打开数据库失败: %w", err)
+	}
+	db.conn = conn
+
+	sqlDB, err := conn.DB()
+	if err != nil {
+		return nil, fmt.Errorf("获取底层 sql.DB 失败: %w", err)
+	}
+
+	if n := cfg.GetMaxOpenConns(); n > 0 {
+		sqlDB.SetMaxOpenConns(n)
+	}
+	if n := cfg.GetMaxIdleConns(); n > 0 {
+		sqlDB.SetMaxIdleConns(n)
+	}
+	if d := cfg.GetConnMaxLifetime(); d > 0 {
+		sqlDB.SetConnMaxLifetime(d)
+	}
+
+	if err := conn.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+		return nil, fmt.Errorf("设置 PRAGMA 失败: %w", err)
+	}
+
+	if err := db.migrate(); err != nil {
+		return nil, fmt.Errorf("数据库迁移失败: %w", err)
+	}
+
+	instance = db
+	logger.Info("数据库初始化成功", zap.String("path", dbPath))
 	return instance, nil
 }
 

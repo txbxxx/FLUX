@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"ai-sync-manager/internal/models"
@@ -186,6 +187,7 @@ func (s *Service) ExportSnapshot(id string, exportPath string) error {
 	}
 
 	// 这里使用快照内记录的相对路径还原目录结构。
+	var failedFiles []string
 	for _, file := range snapshot.Files {
 		targetPath := filepath.Join(exportPath, file.Path)
 
@@ -194,14 +196,19 @@ func (s *Service) ExportSnapshot(id string, exportPath string) error {
 				zap.String("path", file.Path),
 				zap.Error(err),
 			)
-			continue
+			failedFiles = append(failedFiles, file.Path)
 		}
 	}
 
 	logger.Info("快照导出完成",
 		zap.String("id", id),
 		zap.String("export_path", exportPath),
+		zap.Int("failed_count", len(failedFiles)),
 	)
+
+	if len(failedFiles) > 0 {
+		return fmt.Errorf("导出完成，但 %d 个文件失败：%s", len(failedFiles), strings.Join(failedFiles, ", "))
+	}
 
 	return nil
 }
