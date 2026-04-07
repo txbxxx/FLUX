@@ -32,6 +32,10 @@ type ConfigAccessor struct {
 	resolver *RuleResolver
 }
 
+// NewConfigAccessor creates a new configuration accessor with the given rule resolver.
+//
+// If no resolver is provided, a default empty resolver is used.
+// The accessor enforces that all paths are allowed by the configured rules.
 func NewConfigAccessor(resolvers ...*RuleResolver) *ConfigAccessor {
 	var resolver *RuleResolver
 	if len(resolvers) > 0 {
@@ -44,6 +48,11 @@ func NewConfigAccessor(resolvers ...*RuleResolver) *ConfigAccessor {
 	return &ConfigAccessor{resolver: resolver}
 }
 
+// Resolve resolves a request path to a configuration target with security validation.
+//
+// Relative paths are resolved against the tool's global config directory.
+// Absolute paths must match an allowed rule for the specified tool type.
+// All paths are checked for symlink attacks and directory traversal attempts.
 func (a *ConfigAccessor) Resolve(toolType ToolType, requestPath string) (*ConfigTarget, error) {
 	report, err := a.resolver.ResolveTool(toolType)
 	if err != nil {
@@ -160,6 +169,10 @@ func (a *ConfigAccessor) resolveAbsoluteTarget(toolType ToolType, report *ToolRu
 	}, nil
 }
 
+// ListDir returns a sorted list of entries in a configuration directory.
+//
+// Directories are listed before files, and entries within each group are sorted
+// case-insensitively by name. Only entries accessible through resolved rules are included.
 func (a *ConfigAccessor) ListDir(target *ConfigTarget) ([]ConfigEntry, error) {
 	if target == nil {
 		return nil, errors.New("目标不能为空")
@@ -204,6 +217,10 @@ func (a *ConfigAccessor) ListDir(target *ConfigTarget) ([]ConfigEntry, error) {
 	return items, nil
 }
 
+// ReadFile reads the content of a configuration file.
+//
+// Binary files are detected by checking for null bytes in the first 512 bytes
+// and return an error. The content is returned as a UTF-8 string.
 func (a *ConfigAccessor) ReadFile(target *ConfigTarget) (string, error) {
 	if target == nil {
 		return "", errors.New("目标不能为空")
@@ -223,6 +240,10 @@ func (a *ConfigAccessor) ReadFile(target *ConfigTarget) (string, error) {
 	return string(content), nil
 }
 
+// WriteFile writes content to a configuration file atomically.
+//
+// Content is written to a temporary file first, then renamed to the target path
+// to ensure atomicity. The original file permissions are preserved.
 func (a *ConfigAccessor) WriteFile(target *ConfigTarget, content string) error {
 	if target == nil {
 		return errors.New("目标不能为空")

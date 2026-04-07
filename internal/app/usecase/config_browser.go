@@ -49,6 +49,12 @@ type GetConfigResult struct {
 	Editable     bool             // 是否可编辑（仅文件且路径在允许范围内时为 true）
 }
 
+// GetConfig retrieves configuration file or directory content for the specified tool.
+//
+// If path is empty, returns the root directory configuration entries.
+// If path points to a directory, returns directory entries.
+// If path points to a file, returns file content.
+// When edit mode is enabled, validates that the target is a file.
 func (w *LocalWorkflow) GetConfig(_ context.Context, input GetConfigInput) (*GetConfigResult, error) {
 	if w.accessor == nil {
 		return nil, &UserError{
@@ -138,6 +144,10 @@ func parseToolType(value string) (tool.ToolType, error) {
 	}
 }
 
+// SaveConfig writes content to a configuration file for the specified tool.
+//
+// The target path must be a file, not a directory.
+// Content is written atomically using a temporary file to prevent data corruption.
 func (w *LocalWorkflow) SaveConfig(_ context.Context, input SaveConfigInput) error {
 	if w.accessor == nil {
 		return &UserError{

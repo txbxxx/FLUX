@@ -42,6 +42,10 @@ func (m *RuleManager) Store() *RuleStore {
 	return m.store
 }
 
+// AddCustomRule adds a custom sync rule for a specific tool type.
+//
+// The path must be an absolute path to an existing file, not a directory.
+// The path is normalized and stored with a generated ID and timestamp.
 func (m *RuleManager) AddCustomRule(toolType ToolType, absolutePath string) error {
 	if m == nil || m.store == nil || m.store.customRules == nil {
 		return errors.New("规则存储未初始化")
@@ -65,6 +69,10 @@ func (m *RuleManager) AddCustomRule(toolType ToolType, absolutePath string) erro
 	})
 }
 
+// RemoveCustomRule removes a custom sync rule for a specific tool type.
+//
+// The path must be an absolute path and will be normalized before matching.
+// Only exact path matches are removed.
 func (m *RuleManager) RemoveCustomRule(toolType ToolType, absolutePath string) error {
 	if m == nil || m.store == nil || m.store.customRules == nil {
 		return errors.New("规则存储未初始化")
@@ -77,6 +85,10 @@ func (m *RuleManager) RemoveCustomRule(toolType ToolType, absolutePath string) e
 	return m.store.customRules.DeleteByToolAndPath(toolType.String(), normalizedPath)
 }
 
+// AddProject registers a project for a specific tool type with a unique name.
+//
+// The project path must be an absolute path to an existing directory.
+// The project name must not be empty and is used to identify the project.
 func (m *RuleManager) AddProject(toolType ToolType, projectName, projectPath string) error {
 	if m == nil || m.store == nil || m.store.projects == nil {
 		return errors.New("规则存储未初始化")
@@ -106,6 +118,10 @@ func (m *RuleManager) AddProject(toolType ToolType, projectName, projectPath str
 	})
 }
 
+// RemoveProject removes a registered project for a specific tool type.
+//
+// The project path must be an absolute path and will be normalized before matching.
+// Only exact path matches are removed.
 func (m *RuleManager) RemoveProject(toolType ToolType, projectPath string) error {
 	if m == nil || m.store == nil || m.store.projects == nil {
 		return errors.New("规则存储未初始化")
@@ -118,6 +134,10 @@ func (m *RuleManager) RemoveProject(toolType ToolType, projectPath string) error
 	return m.store.projects.DeleteByToolAndPath(toolType.String(), normalizedPath)
 }
 
+// ListCustomRules returns all custom sync rules for the specified tool type.
+//
+// If toolType is nil, returns rules for all tool types.
+// Each rule includes the generated ID, tool type, absolute path, and timestamps.
 func (m *RuleManager) ListCustomRules(toolType *ToolType) ([]models.CustomSyncRule, error) {
 	if m == nil || m.store == nil {
 		return nil, nil
@@ -135,6 +155,10 @@ func (m *RuleManager) ListCustomRules(toolType *ToolType) ([]models.CustomSyncRu
 	return items, nil
 }
 
+// ListRegisteredProjects returns all registered projects for the specified tool type.
+//
+// If toolType is nil, returns projects for all tool types.
+// Each project includes the generated ID, tool type, name, path, and timestamps.
 func (m *RuleManager) ListRegisteredProjects(toolType *ToolType) ([]models.RegisteredProject, error) {
 	if m == nil || m.store == nil {
 		return nil, nil
