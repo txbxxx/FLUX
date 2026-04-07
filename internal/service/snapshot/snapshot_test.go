@@ -598,8 +598,12 @@ func TestServiceCreateSnapshotIncludesRegisteredProjectAndCustomRule(t *testing.
 	})
 	require.NoError(t, err)
 
-	paths := make([]string, 0, len(pkg.Snapshot.Files))
-	for _, file := range pkg.Snapshot.Files {
+	// Retrieve the full snapshot from DB to verify collected files.
+	snapshot, err := service.GetSnapshot(pkg.Snapshot.ID)
+	require.NoError(t, err)
+
+	paths := make([]string, 0, len(snapshot.Files))
+	for _, file := range snapshot.Files {
 		paths = append(paths, file.OriginalPath)
 	}
 

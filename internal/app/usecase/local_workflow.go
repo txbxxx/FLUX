@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
+	typesScan "ai-sync-manager/internal/types/scan"
 	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
@@ -28,14 +28,14 @@ type ScanRuleManager interface {
 	RemoveCustomRule(toolType tool.ToolType, absolutePath string) error
 	AddProject(toolType tool.ToolType, projectName, projectPath string) error
 	RemoveProject(toolType tool.ToolType, projectPath string) error
-	ListCustomRules(toolType *tool.ToolType) ([]models.CustomSyncRule, error)
-	ListRegisteredProjects(toolType *tool.ToolType) ([]models.RegisteredProject, error)
+	ListCustomRules(toolType *tool.ToolType) ([]typesScan.CustomRuleRecord, error)
+	ListRegisteredProjects(toolType *tool.ToolType) ([]typesScan.RegisteredProjectRecord, error)
 }
 
 // SnapshotManager 快照持久化接口，屏蔽底层数据库细节。
 type SnapshotManager interface {
 	CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*typesSnapshot.SnapshotPackage, error)
-	ListSnapshots(limit, offset int) ([]*models.Snapshot, error)
+	ListSnapshots(limit, offset int) ([]*typesSnapshot.SnapshotListItem, error)
 	CountSnapshots() (int, error)
 }
 
@@ -370,7 +370,7 @@ func (w *LocalWorkflow) RemoveProject(_ context.Context, input RemoveProjectInpu
 // 当 input.App 为空时，返回所有工具的规则。
 func (w *LocalWorkflow) ListScanRules(_ context.Context, input ListScanRulesInput) (*ListScanRulesResult, error) {
 	var selectedTool *tool.ToolType
-	var filteredProjects []models.RegisteredProject
+	var filteredProjects []typesScan.RegisteredProjectRecord
 
 	// 第一阶段：解析 input.App，确定要查询的工具类型。
 	// 优先按工具名匹配（codex/claude），匹配失败则按项目名查找。
@@ -436,10 +436,10 @@ func (w *LocalWorkflow) ListScanRules(_ context.Context, input ListScanRulesInpu
 
 // findRegisteredProjectFilter 在已注册项目中查找匹配 filter 的项目。
 // 匹配规则：项目名精确匹配（不区分大小写）或项目路径的 basename 匹配。
-func (w *LocalWorkflow) findRegisteredProjectFilter(filter string) (models.RegisteredProject, tool.ToolType, error) {
+func (w *LocalWorkflow) findRegisteredProjectFilter(filter string) (typesScan.RegisteredProjectRecord, tool.ToolType, error) {
 	projects, err := w.rules.ListRegisteredProjects(nil)
 	if err != nil {
-		return models.RegisteredProject{}, "", &UserError{
+		return typesScan.RegisteredProjectRecord{}, "", &UserError{
 			Message:    "读取项目失败",
 			Suggestion: "请检查本地规则数据后重试",
 			Err:        err,
@@ -452,12 +452,12 @@ func (w *LocalWorkflow) findRegisteredProjectFilter(filter string) (models.Regis
 		}
 		projectToolType, err := resolveToolType(project.ToolType)
 		if err != nil {
-			return models.RegisteredProject{}, "", err
+			return typesScan.RegisteredProjectRecord{}, "", err
 		}
 		return project, projectToolType, nil
 	}
 
-	return models.RegisteredProject{}, "", &UserError{
+	return typesScan.RegisteredProjectRecord{}, "", &UserError{
 		Message:    "未找到匹配的应用或项目：" + filter,
 		Suggestion: "请使用 codex、claude 或已注册项目名重试",
 	}
@@ -465,7 +465,7 @@ func (w *LocalWorkflow) findRegisteredProjectFilter(filter string) (models.Regis
 
 // matchesRegisteredProjectFilter 判断项目是否匹配过滤条件。
 // 支持项目名匹配和路径 basename 匹配两种方式，均不区分大小写。
-func matchesRegisteredProjectFilter(project models.RegisteredProject, filter string) bool {
+func matchesRegisteredProjectFilter(project typesScan.RegisteredProjectRecord, filter string) bool {
 	if strings.EqualFold(project.ProjectName, filter) {
 		return true
 	}
@@ -545,7 +545,7 @@ func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotIn
 	// 第四步：将服务层返回的快照包转换为展示摘要
 	snapshot := pkg.Snapshot
 	if snapshot == nil {
-		snapshot = &models.Snapshot{}
+		snapshot = &typesSnapshot.SnapshotHeader{}
 	}
 
 	return &SnapshotSummary{
@@ -875,7 +875,7 @@ func (w *LocalWorkflow) ListSnapshots(_ context.Context, input ListSnapshotsInpu
 			Message:   snapshot.Message,
 			CreatedAt: snapshot.CreatedAt,
 			Tools:     snapshot.Tools,
-			FileCount: len(snapshot.Files),
+			FileCount: snapshot.FileCount,
 		})
 	}
 

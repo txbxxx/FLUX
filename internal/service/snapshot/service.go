@@ -102,7 +102,13 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 
 	// 创建快照包
 	pkg := &typesSnapshot.SnapshotPackage{
-		Snapshot:    snapshot,
+		Snapshot: &typesSnapshot.SnapshotHeader{
+			ID:        snapshotID,
+			Name:      name,
+			Message:   options.Message,
+			CreatedAt: time.Now(),
+			Tools:     options.Tools,
+		},
 		ProjectPath: projectPath,
 		CreatedAt:   time.Now(),
 		Size:        result.TotalSize,
@@ -133,7 +139,7 @@ func (s *Service) GetSnapshot(id string) (*models.Snapshot, error) {
 }
 
 // ListSnapshots 返回分页快照列表。
-func (s *Service) ListSnapshots(limit, offset int) ([]*models.Snapshot, error) {
+func (s *Service) ListSnapshots(limit, offset int) ([]*typesSnapshot.SnapshotListItem, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 
 	snapshots, err := snapshotDAO.List(limit, offset)
@@ -141,7 +147,18 @@ func (s *Service) ListSnapshots(limit, offset int) ([]*models.Snapshot, error) {
 		return nil, fmt.Errorf("列出快照失败: %w", err)
 	}
 
-	return snapshots, nil
+	items := make([]*typesSnapshot.SnapshotListItem, 0, len(snapshots))
+	for _, snap := range snapshots {
+		items = append(items, &typesSnapshot.SnapshotListItem{
+			ID:        snap.ID,
+			Name:      snap.Name,
+			Message:   snap.Message,
+			CreatedAt: snap.CreatedAt,
+			Tools:     snap.Tools,
+			FileCount: len(snap.Files),
+		})
+	}
+	return items, nil
 }
 
 // DeleteSnapshot 删除快照。

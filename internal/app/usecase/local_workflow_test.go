@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
+	typesScan "ai-sync-manager/internal/types/scan"
 	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
@@ -40,8 +40,8 @@ type stubScanRuleManager struct {
 	removeProjectPath string
 	removeProjectErr  error
 
-	customRules []models.CustomSyncRule
-	projects    []models.RegisteredProject
+	customRules []typesScan.CustomRuleRecord
+	projects    []typesScan.RegisteredProjectRecord
 	listErr     error
 }
 
@@ -70,14 +70,14 @@ func (s *stubScanRuleManager) RemoveProject(toolType tool.ToolType, projectPath 
 	return s.removeProjectErr
 }
 
-func (s *stubScanRuleManager) ListCustomRules(toolType *tool.ToolType) ([]models.CustomSyncRule, error) {
+func (s *stubScanRuleManager) ListCustomRules(toolType *tool.ToolType) ([]typesScan.CustomRuleRecord, error) {
 	if s.listErr != nil {
 		return nil, s.listErr
 	}
 	if toolType == nil {
 		return s.customRules, nil
 	}
-	filtered := make([]models.CustomSyncRule, 0, len(s.customRules))
+	filtered := make([]typesScan.CustomRuleRecord, 0, len(s.customRules))
 	for _, rule := range s.customRules {
 		if rule.ToolType == toolType.String() {
 			filtered = append(filtered, rule)
@@ -86,14 +86,14 @@ func (s *stubScanRuleManager) ListCustomRules(toolType *tool.ToolType) ([]models
 	return filtered, nil
 }
 
-func (s *stubScanRuleManager) ListRegisteredProjects(toolType *tool.ToolType) ([]models.RegisteredProject, error) {
+func (s *stubScanRuleManager) ListRegisteredProjects(toolType *tool.ToolType) ([]typesScan.RegisteredProjectRecord, error) {
 	if s.listErr != nil {
 		return nil, s.listErr
 	}
 	if toolType == nil {
 		return s.projects, nil
 	}
-	filtered := make([]models.RegisteredProject, 0, len(s.projects))
+	filtered := make([]typesScan.RegisteredProjectRecord, 0, len(s.projects))
 	for _, project := range s.projects {
 		if project.ToolType == toolType.String() {
 			filtered = append(filtered, project)
@@ -108,7 +108,7 @@ type stubSnapshotService struct {
 	createErr    error
 	listLimit    int
 	listOffset   int
-	listResult   []*models.Snapshot
+	listResult   []*typesSnapshot.SnapshotListItem
 	listErr      error
 	countResult  int
 	countErr     error
@@ -119,7 +119,7 @@ func (s *stubSnapshotService) CreateSnapshot(input typesSnapshot.CreateSnapshotO
 	return s.createResult, s.createErr
 }
 
-func (s *stubSnapshotService) ListSnapshots(limit, offset int) ([]*models.Snapshot, error) {
+func (s *stubSnapshotService) ListSnapshots(limit, offset int) ([]*typesSnapshot.SnapshotListItem, error) {
 	s.listLimit = limit
 	s.listOffset = offset
 	return s.listResult, s.listErr
@@ -182,7 +182,7 @@ func TestLocalWorkflowScanMapsDetectedTools(t *testing.T) {
 		t.Fatalf("expected demo to be syncable, got %+v", result.Tools[0])
 	}
 	if len(result.Tools[0].Items) != 2 || result.Tools[0].Items[0].Label != "项目配置目录" {
-		t.Fatalf("expected mapped config items, got %+v", result.Tools[0].Items)
+		t.Fatalf("expected mapped config items, got %+v", result.Tools[0])
 	}
 	if result.Tools[1].Tool != "claude" || result.Tools[1].Scope != "project" || result.Tools[1].ProjectName != "claude-global" {
 		t.Fatalf("unexpected second tool summary: %+v", result.Tools[1])
@@ -230,7 +230,7 @@ func TestLocalWorkflowCreateSnapshotMapsServiceResult(t *testing.T) {
 	now := time.Date(2026, 3, 23, 10, 0, 0, 0, time.UTC)
 	service := &stubSnapshotService{
 		createResult: &typesSnapshot.SnapshotPackage{
-			Snapshot: &models.Snapshot{
+			Snapshot: &typesSnapshot.SnapshotHeader{
 				ID:        "snap-123",
 				Name:      "Daily backup",
 				Message:   "backup before change",
@@ -318,10 +318,10 @@ func TestLocalWorkflowAddProjectDelegatesToRuleManager(t *testing.T) {
 
 func TestLocalWorkflowListRulesIncludesDefaultsAndRegisteredData(t *testing.T) {
 	ruleManager := &stubScanRuleManager{
-		customRules: []models.CustomSyncRule{
+		customRules: []typesScan.CustomRuleRecord{
 			{ToolType: "claude", AbsolutePath: `C:\Users\tester\.claude.json`},
 		},
-		projects: []models.RegisteredProject{
+		projects: []typesScan.RegisteredProjectRecord{
 			{ToolType: "claude", ProjectName: "demo", ProjectPath: `D:\workspace\demo`},
 		},
 	}
@@ -344,11 +344,11 @@ func TestLocalWorkflowListRulesIncludesDefaultsAndRegisteredData(t *testing.T) {
 
 func TestLocalWorkflowListRulesSupportsRegisteredProjectNameFilter(t *testing.T) {
 	ruleManager := &stubScanRuleManager{
-		customRules: []models.CustomSyncRule{
+		customRules: []typesScan.CustomRuleRecord{
 			{ToolType: "codex", AbsolutePath: `D:\custom\codex-extra.toml`},
 			{ToolType: "claude", AbsolutePath: `C:\Users\tester\.claude.json`},
 		},
-		projects: []models.RegisteredProject{
+		projects: []typesScan.RegisteredProjectRecord{
 			{ToolType: "codex", ProjectName: "ai-sync-manager", ProjectPath: `D:\workspace\ai-sync-manager`},
 			{ToolType: "claude", ProjectName: "demo", ProjectPath: `D:\workspace\demo`},
 		},
@@ -418,13 +418,14 @@ func TestLocalWorkflowCreateSnapshotMapsNoConfigFilesError(t *testing.T) {
 func TestLocalWorkflowListSnapshotsUsesDefaultPagination(t *testing.T) {
 	now := time.Date(2026, 3, 23, 11, 0, 0, 0, time.UTC)
 	service := &stubSnapshotService{
-		listResult: []*models.Snapshot{
+		listResult: []*typesSnapshot.SnapshotListItem{
 			{
 				ID:        "snap-2",
 				Name:      "Snapshot 2",
 				Message:   "second",
 				CreatedAt: now,
 				Tools:     []string{"codex"},
+				FileCount: 3,
 			},
 		},
 		countResult: 1,

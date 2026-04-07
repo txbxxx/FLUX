@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
+	typesCommon "ai-sync-manager/internal/types/common"
 	typesSetting "ai-sync-manager/internal/types/setting"
 
 	"github.com/google/uuid"
@@ -18,9 +18,9 @@ import (
 
 // AISettingManager AI 配置管理接口。
 type AISettingManager interface {
-	Create(setting *models.AISetting) error
-	GetByName(name string) (*models.AISetting, error)
-	List() ([]*models.AISetting, error)
+	Create(setting *typesSetting.AISettingRecord) error
+	GetByName(name string) (*typesSetting.AISettingRecord, error)
+	List() ([]*typesSetting.AISettingRecord, error)
 	Delete(name string) error
 }
 
@@ -136,15 +136,15 @@ func (w *LocalWorkflow) CreateAISetting(_ context.Context, input CreateAISetting
 	}
 
 	// 创建配置
-	setting := &models.AISetting{
+	setting := &typesSetting.AISettingRecord{
 		ID:          generateUUID(),
 		Name:        name,
 		Token:       token,
 		BaseURL:     baseURL,
 		OpusModel:   opusModel,
 		SonnetModel: sonnetModel,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	if w.aiSettingManager == nil {
@@ -297,7 +297,7 @@ func (w *LocalWorkflow) DeleteAISetting(_ context.Context, input DeleteAISetting
 	}
 
 	if err := w.aiSettingManager.Delete(name); err != nil {
-		if errors.Is(err, models.ErrRecordNotFound) {
+		if errors.Is(err, typesCommon.ErrRecordNotFound) {
 			return &UserError{
 				Message:    "删除配置失败：配置不存在",
 				Suggestion: "请检查配置名称是否正确",

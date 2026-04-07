@@ -10,6 +10,7 @@ import (
 
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/pkg/database"
+	typesScan "ai-sync-manager/internal/types/scan"
 
 	"github.com/google/uuid"
 )
@@ -137,8 +138,8 @@ func (m *RuleManager) RemoveProject(toolType ToolType, projectPath string) error
 // ListCustomRules returns all custom sync rules for the specified tool type.
 //
 // If toolType is nil, returns rules for all tool types.
-// Each rule includes the generated ID, tool type, absolute path, and timestamps.
-func (m *RuleManager) ListCustomRules(toolType *ToolType) ([]models.CustomSyncRule, error) {
+// Each rule includes the tool type and absolute path.
+func (m *RuleManager) ListCustomRules(toolType *ToolType) ([]typesScan.CustomRuleRecord, error) {
 	if m == nil || m.store == nil {
 		return nil, nil
 	}
@@ -148,9 +149,12 @@ func (m *RuleManager) ListCustomRules(toolType *ToolType) ([]models.CustomSyncRu
 		return nil, err
 	}
 
-	items := make([]models.CustomSyncRule, 0, len(rules))
+	items := make([]typesScan.CustomRuleRecord, 0, len(rules))
 	for _, rule := range rules {
-		items = append(items, *rule)
+		items = append(items, typesScan.CustomRuleRecord{
+			ToolType:     rule.ToolType,
+			AbsolutePath: rule.AbsolutePath,
+		})
 	}
 	return items, nil
 }
@@ -158,8 +162,8 @@ func (m *RuleManager) ListCustomRules(toolType *ToolType) ([]models.CustomSyncRu
 // ListRegisteredProjects returns all registered projects for the specified tool type.
 //
 // If toolType is nil, returns projects for all tool types.
-// Each project includes the generated ID, tool type, name, path, and timestamps.
-func (m *RuleManager) ListRegisteredProjects(toolType *ToolType) ([]models.RegisteredProject, error) {
+// Each project includes the tool type, name, and path.
+func (m *RuleManager) ListRegisteredProjects(toolType *ToolType) ([]typesScan.RegisteredProjectRecord, error) {
 	if m == nil || m.store == nil {
 		return nil, nil
 	}
@@ -169,9 +173,13 @@ func (m *RuleManager) ListRegisteredProjects(toolType *ToolType) ([]models.Regis
 		return nil, err
 	}
 
-	items := make([]models.RegisteredProject, 0, len(projects))
+	items := make([]typesScan.RegisteredProjectRecord, 0, len(projects))
 	for _, project := range projects {
-		items = append(items, *project)
+		items = append(items, typesScan.RegisteredProjectRecord{
+			ToolType:    project.ToolType,
+			ProjectName: project.ProjectName,
+			ProjectPath: project.ProjectPath,
+		})
 	}
 	return items, nil
 }

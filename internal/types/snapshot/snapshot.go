@@ -1,19 +1,15 @@
 package snapshot
 
-import (
-	"time"
+import "time"
 
-	"ai-sync-manager/internal/models"
-)
-
-// SnapshotPackage bundles a snapshot with packaging metadata.
+// SnapshotPackage bundles a snapshot header with packaging metadata.
 type SnapshotPackage struct {
-	Snapshot    *models.Snapshot `json:"snapshot"`     // 主快照
-	ProjectPath string           `json:"project_path"` // 项目路径
-	CreatedAt   time.Time        `json:"created_at"`   // 创建时间
-	Size        int64            `json:"size"`         // 总大小（字节）
-	FileCount   int              `json:"file_count"`   // 文件数量
-	Checksum    string           `json:"checksum"`     // 校验和
+	Snapshot    *SnapshotHeader `json:"snapshot"`     // 快照头信息
+	ProjectPath string          `json:"project_path"` // 项目路径
+	CreatedAt   time.Time       `json:"created_at"`   // 创建时间
+	Size        int64           `json:"size"`         // 总大小（字节）
+	FileCount   int             `json:"file_count"`   // 文件数量
+	Checksum    string          `json:"checksum"`     // 校验和
 }
 
 // SnapshotInfo holds brief snapshot information for list display.
