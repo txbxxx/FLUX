@@ -12,6 +12,8 @@ import (
 
 	"ai-sync-manager/internal/models"
 	typesSetting "ai-sync-manager/internal/types/setting"
+
+	"github.com/google/uuid"
 )
 
 // AISettingManager AI 配置管理接口。
@@ -379,13 +381,18 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 		var existing map[string]any
 		if err := json.Unmarshal(content, &existing); err == nil {
 			// 合并 env 字段
+			newEnv, ok := newSettings["env"].(map[string]string)
+			if !ok {
+				newEnv = make(map[string]string)
+			}
 			if env, ok := existing["env"].(map[string]any); ok {
 				for k, v := range env {
-					if _, exists := newSettings["env"].(map[string]string)[k]; !exists {
-						newSettings["env"].(map[string]string)[k] = fmt.Sprint(v)
+					if _, exists := newEnv[k]; !exists {
+						newEnv[k] = fmt.Sprint(v)
 					}
 				}
 			}
+			newSettings["env"] = newEnv
 			// 保留其他字段（如 enabledPlugins, language 等）
 			for k, v := range existing {
 				if k != "env" {
@@ -405,7 +412,7 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 		}
 	}
 
-	if err := os.WriteFile(settingsPath, newContent, 0644); err != nil {
+	if err := atomicWriteFile(settingsPath, newContent, 0644); err != nil {
 		return nil, &UserError{
 			Message:    "切换配置失败：写入配置文件失败",
 			Suggestion: "请检查文件写入权限",
@@ -524,9 +531,41 @@ func backupSettingsFile(src, dst string) error {
 	return os.WriteFile(dst, content, 0644)
 }
 
-// generateUUID 生成 UUID（简化版，实际应使用 google/uuid）。
+// atomicWriteFile writes data to path atomically by writing to a temp file then renaming.
+// 为什么：直接 os.WriteFile 在崩溃时会截断文件，先写临时文件再 rename 保证原子性。
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tempFile, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tempPath := tempFile.Name()
+	defer func() {
+		_ = os.Remove(tempPath)
+	}()
+
+	if _, err := tempFile.Write(data); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("写入临时文件失败: %w", err)
+	}
+	if err := tempFile.Chmod(perm); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("设置文件权限失败: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("关闭临时文件失败: %w", err)
+	}
+
+	if err := os.Rename(tempPath, path); err != nil {
+		return fmt.Errorf("替换原文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// generateUUID generates a UUID v4 string.
 func generateUUID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	return uuid.New().String()
 }
 
 // GetAISettingsBatchInput 批量获取配置的输入。
