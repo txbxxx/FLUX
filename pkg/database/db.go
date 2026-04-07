@@ -214,8 +214,8 @@ func (db *DB) migrate() error {
 // createTables 使用 GORM AutoMigrate 创建表结构。
 func (db *DB) createTables(tx *gorm.DB) error {
 	return tx.AutoMigrate(
-		&snapshotRecord{},
-		&snapshotFileRecord{},
+		&SnapshotRecord{},
+		&SnapshotFileRecord{},
 		&syncTaskRecord{},
 		&remoteConfigRecord{},
 		&appSettingsRecord{},
@@ -389,7 +389,8 @@ type TestDBHelper interface {
 	Cleanup(func())
 }
 
-type snapshotRecord struct {
+// SnapshotRecord is the GORM model for the "snapshots" table, used for migration and CRUD.
+type SnapshotRecord struct {
 	ID          string    `gorm:"column:id;primaryKey"`
 	Name        string    `gorm:"column:name;not null"`
 	Description string    `gorm:"column:description"`
@@ -403,9 +404,10 @@ type snapshotRecord struct {
 	TotalSize   int64     `gorm:"column:total_size;default:0"`
 }
 
-func (snapshotRecord) TableName() string { return "snapshots" }
+func (SnapshotRecord) TableName() string { return "snapshots" }
 
-type snapshotFileRecord struct {
+// SnapshotFileRecord is the GORM model for the "snapshot_files" table, used for migration and CRUD.
+type SnapshotFileRecord struct {
 	ID           uint      `gorm:"column:id;primaryKey;autoIncrement"`
 	SnapshotID   string    `gorm:"column:snapshot_id;not null"`
 	Path         string    `gorm:"column:path;not null"`
@@ -419,7 +421,7 @@ type snapshotFileRecord struct {
 	IsBinary     bool      `gorm:"column:is_binary;default:false"`
 }
 
-func (snapshotFileRecord) TableName() string { return "snapshot_files" }
+func (SnapshotFileRecord) TableName() string { return "snapshot_files" }
 
 type syncTaskRecord struct {
 	ID              string     `gorm:"column:id;primaryKey"`

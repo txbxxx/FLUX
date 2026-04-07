@@ -82,20 +82,17 @@ func NewSnapshotDAO(db *database.DB) *SnapshotDAO {
 	return &SnapshotDAO{db: db}
 }
 
-// Create 写入快照主记录和关联文件。
+// Create writes the snapshot record and its associated files in a single transaction.
 func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
-	row, err := snapshotToRow(snapshot)
-	if err != nil {
-		return err
-	}
+	row := snapshotToRow(snapshot)
+	fileRows := snapshotFilesToRows(snapshot.ID, snapshot.Files)
 
 	return dao.db.Transaction(func(tx *gorm.DB) error {
-		// Omit("Files"): 禁止 GORM 级联写入关联文件，避免与下方手动插入重复。
-		if err := tx.Omit("Files").Create(&row).Error; err != nil {
+		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		if len(row.Files) > 0 {
-			if err := tx.Omit("id").Create(&row.Files).Error; err != nil {
+		if len(fileRows) > 0 {
+			if err := tx.Omit("id").Create(&fileRows).Error; err != nil {
 				return err
 			}
 		}
@@ -103,12 +100,10 @@ func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
 	})
 }
 
-// GetByID 根据 ID 获取快照，并反序列化 JSON 字段。
+// GetByID retrieves a snapshot by ID with its files loaded via explicit query.
 func (dao *SnapshotDAO) GetByID(id string) (*Snapshot, error) {
 	var row snapshotRow
-	err := dao.db.GetConn().
-		Preload("Files").
-		First(&row, "id = ?", id).Error
+	err := dao.db.GetConn().First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("快照不存在")
 	}
@@ -116,16 +111,21 @@ func (dao *SnapshotDAO) GetByID(id string) (*Snapshot, error) {
 		return nil, err
 	}
 
-	snapshot, err := row.toModel()
+	var fileRows []snapshotFileRow
+	if err := dao.db.GetConn().Where("snapshot_id = ?", id).Find(&fileRows).Error; err != nil {
+		return nil, err
+	}
+
+	snapshot, err := snapshotRowToModel(row, fileRows)
 	if err != nil {
 		return nil, err
 	}
 	return snapshot, nil
 }
 
-// List 按创建时间倒序返回快照列表。
+// List returns snapshots ordered by creation time descending, with files loaded in batch.
 func (dao *SnapshotDAO) List(limit, offset int) ([]*Snapshot, error) {
-	query := dao.db.GetConn().Model(&snapshotRow{}).Preload("Files").Order("created_at DESC")
+	query := dao.db.GetConn().Model(&snapshotRow{}).Order("created_at DESC")
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
@@ -138,9 +138,29 @@ func (dao *SnapshotDAO) List(limit, offset int) ([]*Snapshot, error) {
 		return nil, err
 	}
 
+	if len(rows) == 0 {
+		return []*Snapshot{}, nil
+	}
+
+	// Batch-load files for all snapshots.
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+
+	var allFileRows []snapshotFileRow
+	if err := dao.db.GetConn().Where("snapshot_id IN ?", ids).Find(&allFileRows).Error; err != nil {
+		return nil, err
+	}
+
+	filesBySnapshot := make(map[string][]snapshotFileRow)
+	for _, f := range allFileRows {
+		filesBySnapshot[f.SnapshotID] = append(filesBySnapshot[f.SnapshotID], f)
+	}
+
 	snapshots := make([]*Snapshot, 0, len(rows))
 	for _, row := range rows {
-		snapshot, err := row.toModel()
+		snapshot, err := snapshotRowToModel(row, filesBySnapshot[row.ID])
 		if err != nil {
 			return nil, err
 		}
@@ -149,12 +169,9 @@ func (dao *SnapshotDAO) List(limit, offset int) ([]*Snapshot, error) {
 	return snapshots, nil
 }
 
-// Update 更新快照主记录中的可变字段。
+// Update updates mutable fields of the snapshot record.
 func (dao *SnapshotDAO) Update(snapshot *Snapshot) error {
-	row, err := snapshotToRow(snapshot)
-	if err != nil {
-		return err
-	}
+	row := snapshotToRow(snapshot)
 
 	return dao.db.GetConn().
 		Model(&snapshotRow{}).
@@ -184,72 +201,18 @@ func (dao *SnapshotDAO) Count() (int, error) {
 	return int(count), err
 }
 
-type snapshotRow struct {
-	ID          string            `gorm:"column:id;primaryKey"`
-	Name        string            `gorm:"column:name"`
-	Description string            `gorm:"column:description"`
-	Message     string            `gorm:"column:message"`
-	CreatedAt   time.Time         `gorm:"column:created_at"`
-	Tools       string            `gorm:"column:tools"`
-	Metadata    string            `gorm:"column:metadata"`
-	CommitHash  string            `gorm:"column:commit_hash"`
-	Tags        string            `gorm:"column:tags"`
-	FileCount   int               `gorm:"column:file_count"`
-	TotalSize   int64             `gorm:"column:total_size"`
-	Files       []snapshotFileRow `gorm:"foreignKey:SnapshotID;references:ID"`
-}
+// snapshotRow aliases the canonical GORM record defined in pkg/database,
+// eliminating the previous duplication between database/db.go and this file.
+type snapshotRow = database.SnapshotRecord
 
-func (snapshotRow) TableName() string {
-	return "snapshots"
-}
+// snapshotFileRow aliases the canonical GORM record defined in pkg/database.
+type snapshotFileRow = database.SnapshotFileRecord
 
-type snapshotFileRow struct {
-	ID           uint      `gorm:"column:id;primaryKey;autoIncrement"`
-	SnapshotID   string    `gorm:"column:snapshot_id"`
-	Path         string    `gorm:"column:path"`
-	OriginalPath string    `gorm:"column:original_path"`
-	Size         int64     `gorm:"column:size"`
-	Hash         string    `gorm:"column:hash"`
-	ModifiedAt   time.Time `gorm:"column:modified_at"`
-	Content      []byte    `gorm:"column:content"`
-	ToolType     string    `gorm:"column:tool_type"`
-	Category     string    `gorm:"column:category"`
-	IsBinary     bool      `gorm:"column:is_binary"`
-}
-
-func (snapshotFileRow) TableName() string {
-	return "snapshot_files"
-}
-
-func snapshotToRow(snapshot *Snapshot) (snapshotRow, error) {
-	toolsJSON, err := json.Marshal(snapshot.Tools)
-	if err != nil {
-		return snapshotRow{}, fmt.Errorf("序列化工具列表失败: %w", err)
-	}
-	tagsJSON, err := json.Marshal(snapshot.Tags)
-	if err != nil {
-		return snapshotRow{}, fmt.Errorf("序列化标签失败: %w", err)
-	}
-	metadataJSON, err := json.Marshal(snapshot.Metadata)
-	if err != nil {
-		return snapshotRow{}, fmt.Errorf("序列化元数据失败: %w", err)
-	}
-
-	files := make([]snapshotFileRow, 0, len(snapshot.Files))
-	for _, file := range snapshot.Files {
-		files = append(files, snapshotFileRow{
-			SnapshotID:   snapshot.ID,
-			Path:         file.Path,
-			OriginalPath: file.OriginalPath,
-			Size:         file.Size,
-			Hash:         file.Hash,
-			ModifiedAt:   file.ModifiedAt,
-			Content:      file.Content,
-			ToolType:     file.ToolType,
-			Category:     string(file.Category),
-			IsBinary:     file.IsBinary,
-		})
-	}
+// snapshotToRow converts a Snapshot domain model to a snapshotRow for DB persistence.
+func snapshotToRow(snapshot *Snapshot) snapshotRow {
+	toolsJSON, _ := json.Marshal(snapshot.Tools)
+	tagsJSON, _ := json.Marshal(snapshot.Tags)
+	metadataJSON, _ := json.Marshal(snapshot.Metadata)
 
 	return snapshotRow{
 		ID:          snapshot.ID,
@@ -263,11 +226,31 @@ func snapshotToRow(snapshot *Snapshot) (snapshotRow, error) {
 		Tags:        string(tagsJSON),
 		FileCount:   len(snapshot.Files),
 		TotalSize:   calculateTotalSize(snapshot.Files),
-		Files:       files,
-	}, nil
+	}
 }
 
-func (row snapshotRow) toModel() (*Snapshot, error) {
+// snapshotFilesToRows converts SnapshotFile domain models to snapshotFileRow slices for DB persistence.
+func snapshotFilesToRows(snapshotID string, files []SnapshotFile) []snapshotFileRow {
+	rows := make([]snapshotFileRow, 0, len(files))
+	for _, file := range files {
+		rows = append(rows, snapshotFileRow{
+			SnapshotID:   snapshotID,
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Size:         file.Size,
+			Hash:         file.Hash,
+			ModifiedAt:   file.ModifiedAt,
+			Content:      file.Content,
+			ToolType:     file.ToolType,
+			Category:     string(file.Category),
+			IsBinary:     file.IsBinary,
+		})
+	}
+	return rows
+}
+
+// snapshotRowToModel converts a snapshotRow and its file rows into a Snapshot domain model.
+func snapshotRowToModel(row snapshotRow, fileRows []snapshotFileRow) (*Snapshot, error) {
 	snapshot := &Snapshot{
 		ID:          row.ID,
 		Name:        row.Name,
@@ -275,7 +258,7 @@ func (row snapshotRow) toModel() (*Snapshot, error) {
 		Message:     row.Message,
 		CreatedAt:   row.CreatedAt,
 		CommitHash:  row.CommitHash,
-		Files:       make([]SnapshotFile, 0, len(row.Files)),
+		Files:       make([]SnapshotFile, 0, len(fileRows)),
 	}
 
 	if row.Tools != "" {
@@ -294,7 +277,7 @@ func (row snapshotRow) toModel() (*Snapshot, error) {
 		}
 	}
 
-	for _, file := range row.Files {
+	for _, file := range fileRows {
 		snapshot.Files = append(snapshot.Files, SnapshotFile{
 			Path:         file.Path,
 			OriginalPath: file.OriginalPath,
