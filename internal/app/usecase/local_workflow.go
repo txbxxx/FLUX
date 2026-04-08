@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
 	typesScan "ai-sync-manager/internal/types/scan"
 	typesSnapshot "ai-sync-manager/internal/types/snapshot"
@@ -37,6 +38,9 @@ type SnapshotManager interface {
 	CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*typesSnapshot.SnapshotPackage, error)
 	ListSnapshots(limit, offset int) ([]*typesSnapshot.SnapshotListItem, error)
 	CountSnapshots() (int, error)
+	DeleteSnapshot(id string) error
+	GetSnapshot(id string) (*models.Snapshot, error)
+	UpdateSnapshot(snapshot *models.Snapshot) error
 }
 
 // ConfigAccessor 配置文件访问接口，支持目录浏览和文件读写。
@@ -58,6 +62,7 @@ type Workflow interface {
 	ListScanRules(ctx context.Context, input ListScanRulesInput) (*ListScanRulesResult, error)
 	CreateSnapshot(ctx context.Context, input CreateSnapshotInput) (*SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input ListSnapshotsInput) (*ListSnapshotsResult, error)
+	DeleteSnapshot(ctx context.Context, input DeleteSnapshotInput) error
 	GetConfig(ctx context.Context, input GetConfigInput) (*GetConfigResult, error)
 	SaveConfig(ctx context.Context, input SaveConfigInput) error
 	// AI setting 相关方法
@@ -194,6 +199,11 @@ type ListSnapshotsInput struct {
 type ListSnapshotsResult struct {
 	Total int               // 快照总数（用于分页计算）
 	Items []SnapshotSummary // 当前页的快照列表
+}
+
+// DeleteSnapshotInput 是删除快照的输入参数。
+type DeleteSnapshotInput struct {
+	IDOrName string // 快照 ID 或名称
 }
 
 // UserError 是面向用户的错误类型，包含可展示的 Message 和引导性的 Suggestion。
@@ -883,4 +893,68 @@ func (w *LocalWorkflow) ListSnapshots(_ context.Context, input ListSnapshotsInpu
 		Total: total,
 		Items: items,
 	}, nil
+}
+
+// DeleteSnapshot 删除指定快照。
+// 支持通过完整 ID 或快照名称删除。使用名称时会自动查找匹配的快照。
+func (w *LocalWorkflow) DeleteSnapshot(_ context.Context, input DeleteSnapshotInput) error {
+	if strings.TrimSpace(input.IDOrName) == "" {
+		return &UserError{
+			Message:    "删除快照失败：请指定快照 ID 或名称",
+			Suggestion: "使用 snapshot list 查看快照列表",
+		}
+	}
+
+	id := strings.TrimSpace(input.IDOrName)
+
+	// 如果不是 UUID 格式，按名称查找对应的 ID。
+	if !isUUIDFormat(id) {
+		snapshots, err := w.snapshots.ListSnapshots(0, 0)
+		if err != nil {
+			return &UserError{
+				Message:    "删除快照失败：无法查找快照",
+				Suggestion: "请检查本地数据库是否可访问",
+				Err:        err,
+			}
+		}
+
+		found := false
+		for _, snap := range snapshots {
+			if snap.Name == id {
+				id = snap.ID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return &UserError{
+				Message:    "删除快照失败：未找到名称为 \"" + id + "\" 的快照",
+				Suggestion: "使用 snapshot list 查看所有快照",
+			}
+		}
+	}
+
+	// 验证快照存在。
+	if _, err := w.snapshots.GetSnapshot(id); err != nil {
+		return &UserError{
+			Message:    "删除快照失败：快照不存在",
+			Suggestion: "请检查快照 ID 是否正确",
+			Err:        err,
+		}
+	}
+
+	if err := w.snapshots.DeleteSnapshot(id); err != nil {
+		return &UserError{
+			Message:    "删除快照失败",
+			Suggestion: "请检查本地数据库是否可访问",
+			Err:        err,
+		}
+	}
+
+	return nil
+}
+
+// isUUIDFormat 检查字符串是否为 UUID 格式（简单判断）。
+func isUUIDFormat(s string) bool {
+	return len(s) == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-'
 }

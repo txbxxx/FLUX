@@ -10,6 +10,7 @@ import (
 
 func newGetCommand(deps Dependencies) *spcobra.Command {
 	var edit bool
+	var snapshot string
 
 	command := &spcobra.Command{
 		Use:   "get <project> [path]",
@@ -21,9 +22,10 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 				path = args[1]
 			}
 			result, err := deps.Workflow.GetConfig(cmd.Context(), usecase.GetConfigInput{
-				Tool: args[0],
-				Path: path,
-				Edit: edit,
+				Tool:     args[0],
+				Path:     path,
+				Edit:     edit,
+				Snapshot: snapshot,
 			})
 			if err != nil {
 				return err
@@ -35,9 +37,10 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 				}
 				return deps.Editor.Run(cmd.Context(), result, func(content string) error {
 					return deps.Workflow.SaveConfig(cmd.Context(), usecase.SaveConfigInput{
-						Tool:    args[0],
-						Path:    path,
-						Content: content,
+						Tool:     args[0],
+						Path:     path,
+						Content:  content,
+						Snapshot: snapshot,
 					})
 				})
 			}
@@ -54,5 +57,6 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 	}
 
 	command.Flags().BoolVarP(&edit, "edit", "e", false, "Open file in terminal editor")
+	command.Flags().StringVarP(&snapshot, "snapshot", "s", "", "浏览指定快照中的文件（传入快照 ID）")
 	return command
 }

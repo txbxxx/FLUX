@@ -26,6 +26,7 @@ type Workflow interface {
 	ListScanRules(ctx context.Context, input usecase.ListScanRulesInput) (*usecase.ListScanRulesResult, error)
 	CreateSnapshot(ctx context.Context, input usecase.CreateSnapshotInput) (*usecase.SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input usecase.ListSnapshotsInput) (*usecase.ListSnapshotsResult, error)
+	DeleteSnapshot(ctx context.Context, input usecase.DeleteSnapshotInput) error
 	GetConfig(ctx context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error)
 	SaveConfig(ctx context.Context, input usecase.SaveConfigInput) error
 	CreateAISetting(ctx context.Context, input usecase.CreateAISettingInput) (*usecase.CreateAISettingResult, error)
@@ -225,9 +226,13 @@ func printSnapshotList(w io.Writer, result *usecase.ListSnapshotsResult) {
 		return
 	}
 
+	fmt.Fprintln(w, "ID                                   | 名称                      | 说明            | 文件数 | 创建时间")
+	fmt.Fprintln(w, "------------------------------------+---------------------------+-----------------+--------+-------------------")
 	for _, item := range result.Items {
-		fmt.Fprintf(w, "%s | %s | %s\n", item.ID, item.Name, item.Message)
+		createdAt := item.CreatedAt.Format("2006-01-02 15:04")
+		fmt.Fprintf(w, "%-36s | %-25s | %-15s | %4d   | %s\n", item.ID, item.Name, item.Message, item.FileCount, createdAt)
 	}
+	fmt.Fprintf(w, "\n共 %d 条快照\n", result.Total)
 }
 
 func printError(w io.Writer, err error) {

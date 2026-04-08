@@ -18,16 +18,18 @@ const (
 
 // GetConfigInput 是 GetConfig 用例的输入参数。
 type GetConfigInput struct {
-	Tool string // 工具类型名（codex / claude），必填
-	Path string // 相对于配置根目录的路径，空则返回根目录列表
-	Edit bool   // 是否进入编辑模式（仅文件有效）
+	Tool     string // 工具类型名（codex / claude）或项目名，必填
+	Path     string // 相对于配置根目录的路径，空则返回根目录列表
+	Edit     bool   // 是否进入编辑模式（仅文件有效）
+	Snapshot string // 快照 ID，非空时浏览快照中的文件而非磁盘文件
 }
 
 // SaveConfigInput 是 SaveConfig 用例的输入参数。
 type SaveConfigInput struct {
-	Tool    string // 工具类型名（codex / claude），必填
-	Path    string // 相对于配置根目录的文件路径，必填
-	Content string // 要写入的文件内容
+	Tool     string // 工具类型名（codex / claude）或项目名，必填
+	Path     string // 相对于配置根目录的文件路径，必填
+	Content  string // 要写入的文件内容
+	Snapshot string // 快照 ID，非空时修改快照中的文件内容
 }
 
 // ConfigEntry 表示配置目录列表中的单个条目。
@@ -55,7 +57,15 @@ type GetConfigResult struct {
 // If path points to a directory, returns directory entries.
 // If path points to a file, returns file content.
 // When edit mode is enabled, validates that the target is a file.
+// When snapshot is specified, reads from snapshot stored files instead of disk.
+//
+// 工具名解析策略：先尝试精确匹配 codex/claude，失败后按项目名前缀推导（如 claude-global → claude）。
 func (w *LocalWorkflow) GetConfig(_ context.Context, input GetConfigInput) (*GetConfigResult, error) {
+	// 快照模式：从快照中读取文件
+	if strings.TrimSpace(input.Snapshot) != "" {
+		return w.getSnapshotConfig(input)
+	}
+
 	if w.accessor == nil {
 		return nil, &UserError{
 			Message:    "无法读取配置",
@@ -66,10 +76,14 @@ func (w *LocalWorkflow) GetConfig(_ context.Context, input GetConfigInput) (*Get
 
 	toolType, err := parseToolType(input.Tool)
 	if err != nil {
-		return nil, &UserError{
-			Message:    "读取配置失败",
-			Suggestion: "工具名只支持 codex 或 claude",
-			Err:        err,
+		// 精确匹配失败，尝试项目名前缀推导。
+		toolType = inferToolTypeFromProjectName(input.Tool)
+		if toolType == "" {
+			return nil, &UserError{
+				Message:    "读取配置失败",
+				Suggestion: "工具名只支持 codex 或 claude，项目名如 claude-global、codex-global",
+				Err:        err,
+			}
 		}
 	}
 
@@ -144,11 +158,29 @@ func parseToolType(value string) (tool.ToolType, error) {
 	}
 }
 
+// inferToolTypeFromProjectName 从项目名推导工具类型。
+// 支持前缀匹配：claude-global → claude，codex-global → codex。
+func inferToolTypeFromProjectName(name string) tool.ToolType {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	for _, prefix := range []string{"codex", "claude"} {
+		if strings.HasPrefix(lower, prefix) {
+			return tool.ToolType(prefix)
+		}
+	}
+	return ""
+}
+
 // SaveConfig writes content to a configuration file for the specified tool.
 //
 // The target path must be a file, not a directory.
 // Content is written atomically using a temporary file to prevent data corruption.
+// When snapshot is specified, updates the file content within the snapshot record.
 func (w *LocalWorkflow) SaveConfig(_ context.Context, input SaveConfigInput) error {
+	// 快照模式：修改快照中的文件内容
+	if strings.TrimSpace(input.Snapshot) != "" {
+		return w.saveSnapshotConfig(input)
+	}
+
 	if w.accessor == nil {
 		return &UserError{
 			Message:    "无法保存配置",
@@ -159,10 +191,14 @@ func (w *LocalWorkflow) SaveConfig(_ context.Context, input SaveConfigInput) err
 
 	toolType, err := parseToolType(input.Tool)
 	if err != nil {
-		return &UserError{
-			Message:    "无法保存配置",
-			Suggestion: "工具名只支持 codex 或 claude",
-			Err:        err,
+		// 精确匹配失败，尝试项目名前缀推导。
+		toolType = inferToolTypeFromProjectName(input.Tool)
+		if toolType == "" {
+			return &UserError{
+				Message:    "无法保存配置",
+				Suggestion: "工具名只支持 codex 或 claude",
+				Err:        err,
+			}
 		}
 	}
 
@@ -186,6 +222,110 @@ func (w *LocalWorkflow) SaveConfig(_ context.Context, input SaveConfigInput) err
 		return &UserError{
 			Message:    "无法保存配置",
 			Suggestion: "请检查文件是否被占用、是否有写入权限",
+			Err:        err,
+		}
+	}
+
+	return nil
+}
+
+// getSnapshotConfig 从快照中读取文件内容或列出文件列表。
+func (w *LocalWorkflow) getSnapshotConfig(input GetConfigInput) (*GetConfigResult, error) {
+	snapshotID := strings.TrimSpace(input.Snapshot)
+
+	snapshot, err := w.snapshots.GetSnapshot(snapshotID)
+	if err != nil {
+		return nil, &UserError{
+			Message:    "读取快照失败",
+			Suggestion: "请检查快照 ID 是否正确，使用 snapshot list 查看所有快照",
+			Err:        err,
+		}
+	}
+
+	relativePath := strings.TrimSpace(input.Path)
+
+	// 无路径时，列出快照中所有文件
+	if relativePath == "" {
+		result := &GetConfigResult{
+			Tool:         input.Tool,
+			RelativePath: "",
+			AbsolutePath: "[快照] " + snapshot.Name,
+			Kind:         ConfigTargetDirectory,
+		}
+		for _, file := range snapshot.Files {
+			result.Entries = append(result.Entries, ConfigEntry{
+				Name:         file.Path,
+				RelativePath: file.Path,
+				IsDir:        false,
+			})
+		}
+		return result, nil
+	}
+
+	// 查找匹配的文件
+	for _, file := range snapshot.Files {
+		if file.Path == relativePath {
+			result := &GetConfigResult{
+				Tool:         input.Tool,
+				RelativePath: file.Path,
+				AbsolutePath: "[快照] " + snapshot.Name + "/" + file.Path,
+				Kind:         ConfigTargetFile,
+				Content:      string(file.Content),
+				Editable:     true,
+			}
+			return result, nil
+		}
+	}
+
+	return nil, &UserError{
+		Message:    "快照中未找到文件: " + relativePath,
+		Suggestion: "省略路径可查看快照中的所有文件列表",
+	}
+}
+
+// saveSnapshotConfig 更新快照中指定文件的内容。
+func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
+	snapshotID := strings.TrimSpace(input.Snapshot)
+	relativePath := strings.TrimSpace(input.Path)
+
+	if relativePath == "" {
+		return &UserError{
+			Message:    "保存快照文件失败：路径不能为空",
+			Suggestion: "请指定要修改的文件路径",
+		}
+	}
+
+	snapshot, err := w.snapshots.GetSnapshot(snapshotID)
+	if err != nil {
+		return &UserError{
+			Message:    "保存快照文件失败",
+			Suggestion: "请检查快照 ID 是否正确",
+			Err:        err,
+		}
+	}
+
+	// 查找并更新文件内容
+	found := false
+	for i, file := range snapshot.Files {
+		if file.Path == relativePath {
+			snapshot.Files[i].Content = []byte(input.Content)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return &UserError{
+			Message:    "快照中未找到文件: " + relativePath,
+			Suggestion: "省略路径可查看快照中的所有文件列表",
+		}
+	}
+
+	// 通过 DAO 更新整个快照记录
+	if err := w.snapshots.UpdateSnapshot(snapshot); err != nil {
+		return &UserError{
+			Message:    "保存快照文件失败",
+			Suggestion: "请检查数据库是否可访问",
 			Err:        err,
 		}
 	}

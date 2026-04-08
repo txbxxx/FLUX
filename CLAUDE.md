@@ -53,6 +53,7 @@ ai-sync-manager/
 │   │   ├── snapshot.go             # snapshot 命令组
 │   │   ├── snapshot_create.go      # snapshot create
 │   │   ├── snapshot_list.go        # snapshot list
+│   │   ├── snapshot_delete.go      # snapshot delete
 │   │   └── tui.go                  # tui 命令
 │   │
 │   ├── tui/                        # Bubbletea TUI
@@ -340,7 +341,7 @@ feat: get 命令支持省略 path 参数
 | scan remove | `ai-sync scan remove <app> <path>` | `--project/-p` 删除项目 |
 | scan list | `ai-sync scan list [app-or-project]` | — |
 | scan rules | `ai-sync scan rules [app-or-project]` | — |
-| get | `ai-sync get <project> [path]` | `--edit/-e` 编辑模式 |
+| get | `ai-sync get <project> [path]` | `--edit/-e` 编辑模式 `--snapshot/-s` 浏览快照 |
 | setting create | `ai-sync setting create` | `--name` 名称 `--token` 令牌 `--api` API地址 `--opus-model` Opus模型 `--sonnet-model` Sonnet模型 |
 | setting list | `ai-sync setting list` | `-l` 条数 `-o` 偏移 |
 | setting get | `ai-sync setting get <name>` | — |
@@ -348,6 +349,7 @@ feat: get 命令支持省略 path 参数
 | setting switch | `ai-sync setting switch <name>` | — |
 | snapshot create | `ai-sync snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
 | snapshot list | `ai-sync snapshot list` | `-l` 条数 `-o` 偏移 |
+| snapshot delete | `ai-sync snapshot delete <id-or-name>` | — |
 | tui | `ai-sync tui` | — |
 
 ---

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
 	typesScan "ai-sync-manager/internal/types/scan"
 	typesSnapshot "ai-sync-manager/internal/types/snapshot"
@@ -127,6 +128,18 @@ func (s *stubSnapshotService) ListSnapshots(limit, offset int) ([]*typesSnapshot
 
 func (s *stubSnapshotService) CountSnapshots() (int, error) {
 	return s.countResult, s.countErr
+}
+
+func (s *stubSnapshotService) DeleteSnapshot(id string) error {
+	return nil
+}
+
+func (s *stubSnapshotService) GetSnapshot(id string) (*models.Snapshot, error) {
+	return nil, nil
+}
+
+func (s *stubSnapshotService) UpdateSnapshot(snapshot *models.Snapshot) error {
+	return nil
 }
 
 func TestLocalWorkflowScanMapsDetectedTools(t *testing.T) {

@@ -181,6 +181,18 @@ func (s *Service) DeleteSnapshot(id string) error {
 	return nil
 }
 
+// UpdateSnapshot 更新快照记录（包括文件内容）。
+func (s *Service) UpdateSnapshot(snapshot *models.Snapshot) error {
+	snapshotDAO := models.NewSnapshotDAO(s.db)
+
+	if err := snapshotDAO.UpdateWithFiles(snapshot); err != nil {
+		return fmt.Errorf("更新快照失败: %w", err)
+	}
+
+	logger.Info("快照更新成功", zap.String("id", snapshot.ID))
+	return nil
+}
+
 // GetSnapshotFiles 是 GetSnapshot 的轻量包装，供仅关心文件列表的调用方使用。
 func (s *Service) GetSnapshotFiles(id string) ([]models.SnapshotFile, error) {
 	snapshot, err := s.GetSnapshot(id)

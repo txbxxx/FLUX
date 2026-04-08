@@ -32,6 +32,8 @@ type stubWorkflow struct {
 	listInput          usecase.ListSnapshotsInput
 	listResult         *usecase.ListSnapshotsResult
 	listErr            error
+	deleteSnapshotInput usecase.DeleteSnapshotInput
+	deleteSnapshotErr   error
 	getInput           usecase.GetConfigInput
 	getResult          *usecase.GetConfigResult
 	getErr             error
@@ -97,6 +99,11 @@ func (s *stubWorkflow) CreateSnapshot(_ context.Context, input usecase.CreateSna
 func (s *stubWorkflow) ListSnapshots(_ context.Context, input usecase.ListSnapshotsInput) (*usecase.ListSnapshotsResult, error) {
 	s.listInput = input
 	return s.listResult, s.listErr
+}
+
+func (s *stubWorkflow) DeleteSnapshot(_ context.Context, input usecase.DeleteSnapshotInput) error {
+	s.deleteSnapshotInput = input
+	return s.deleteSnapshotErr
 }
 
 func (s *stubWorkflow) GetConfig(_ context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error) {

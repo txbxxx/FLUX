@@ -1,0 +1,64 @@
+# 2026-04-08 快照删除 + get 命令增强
+
+## 需求概述
+
+1. **snapshot delete**：添加快照删除命令，用户可通过 ID 或名称删除快照
+2. **get 命令项目名支持**：`get claude-global` 应能正确识别项目名（当前只支持 codex/claude）
+3. **get --snapshot 支持**：`get <project> --snapshot` 可查看和编辑快照中保存的文件
+4. **snapshot list 表头**：`snapshot list` 输出增加表头，让用户看懂每列含义
+
+---
+
+## 需求详细分析
+
+### 需求 1：snapshot delete
+
+- 命令：`ai-sync snapshot delete <id-or-name>`
+- Service 层已有 `DeleteSnapshot(id)` 方法
+- DAO 层的 `Delete` 只删 snapshot 记录，**未级联删除 snapshot_files**，需修复
+- 支持通过 ID（完整 UUID）或名称（模糊匹配）删除
+- 删除前需确认快照存在
+
+### 需求 2：get 命令支持项目名
+
+- 当前 `get` 命令的 `parseToolType()` 只接受 `codex` 或 `claude`
+- 用户输入 `claude-global` 时应能自动推导为 `claude`
+- 类似 `scan list` 中的项目名匹配逻辑，需在 usecase 层解析项目名到工具类型
+
+### 需求 3：get --snapshot 查看快照文件
+
+- 命令：`ai-sync get <project> --snapshot [path]` 或 `ai-sync get <project> --snapshot <snapshot-id> [path]`
+- 当 `--snapshot` 无参数时，列出该 project 最近的快照文件列表
+- 当指定 path 时，显示快照中该文件的内容
+- 支持 `--edit` 模式编辑快照中的文件（编辑后更新快照记录）
+- 需要在 usecase 层增加快照文件浏览能力
+
+### 需求 4：snapshot list 表头
+
+- 当前输出：`ab2708e3-... | Snapshot-20260408-155737 | claude全局`
+- 改进：增加表头行，如 `ID | 名称 | 说明 | 文件数 | 时间`
+- 输出更丰富的信息（文件数、创建时间）
+
+---
+
+## 实现计划
+
+### Task 1: snapshot list 表头增强
+- 修改 `printSnapshotList()` 增加表头
+- 丰富每行输出：ID | 名称 | 说明 | 文件数 | 创建时间
+
+### Task 2: snapshot delete 命令
+- DAO: 添加级联删除 snapshot_files 的逻辑（事务内）
+- Service: 验证快照存在后再删除
+- UseCase: 添加 `DeleteSnapshot` 方法到 Workflow 接口
+- CLI: 新增 `snapshot_delete.go`
+
+### Task 3: get 命令支持项目名
+- UseCase: 修改 `GetConfig` 中的工具类型解析，支持项目名推导
+- 复用 `inferToolsFromProject` / `resolveToolType` 逻辑
+
+### Task 4: get --snapshot 快照文件浏览
+- UseCase: 添加 `GetSnapshotConfig` 方法，从快照中读取文件
+- UseCase: 添加 `SaveSnapshotConfig` 方法，修改快照中的文件内容
+- CLI: get 命令添加 `--snapshot` flag
+- 修改 `parseToolType` 支持 `claude-global` → `claude` 推导

@@ -189,9 +189,52 @@ func (dao *SnapshotDAO) Update(snapshot *Snapshot) error {
 		}).Error
 }
 
-// Delete 删除快照记录。
+// UpdateWithFiles updates the snapshot record and replaces all associated files in a transaction.
+// 为什么：编辑快照中的文件需要同时更新 snapshot_files 记录。
+func (dao *SnapshotDAO) UpdateWithFiles(snapshot *Snapshot) error {
+	row := snapshotToRow(snapshot)
+	fileRows := snapshotFilesToRows(snapshot.ID, snapshot.Files)
+
+	return dao.db.Transaction(func(tx *gorm.DB) error {
+		// 先删旧文件再插入新文件。
+		if err := tx.Where("snapshot_id = ?", snapshot.ID).Delete(&snapshotFileRow{}).Error; err != nil {
+			return err
+		}
+		if len(fileRows) > 0 {
+			if err := tx.Omit("id").Create(&fileRows).Error; err != nil {
+				return err
+			}
+		}
+		// 更新快照记录字段。
+		return tx.Model(&snapshotRow{}).
+			Where("id = ?", snapshot.ID).
+			Updates(map[string]interface{}{
+				"name":        row.Name,
+				"description": row.Description,
+				"message":     row.Message,
+				"tools":       row.Tools,
+				"metadata":    row.Metadata,
+				"tags":        row.Tags,
+				"commit_hash": row.CommitHash,
+				"file_count":  row.FileCount,
+				"total_size":  row.TotalSize,
+			}).Error
+	})
+}
+
+// Delete deletes the snapshot and its associated files in a single transaction.
+// 为什么：没有外键约束，必须由应用层级联清理 snapshot_files，否则会留下孤立记录。
 func (dao *SnapshotDAO) Delete(id string) error {
-	return dao.db.GetConn().Delete(&snapshotRow{}, "id = ?", id).Error
+	return dao.db.Transaction(func(tx *gorm.DB) error {
+		// 先删文件再删快照记录，避免残留。
+		if err := tx.Where("snapshot_id = ?", id).Delete(&snapshotFileRow{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&snapshotRow{}, "id = ?", id).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // Count 返回当前快照总数。
