@@ -9,14 +9,14 @@ import (
 )
 
 // NewSnapshot 创建一个带默认时间和基础元数据的快照对象。
-func NewSnapshot(message string, tools []string, projectName string) *Snapshot {
+func NewSnapshot(message string, projectName string) *Snapshot {
 	return &Snapshot{
 		ID:          generateID("snap"),
 		Name:        generateSnapshotName(message),
 		Description: message,
 		Message:     message,
 		CreatedAt:   time.Now(),
-		Tools:       tools,
+		Project:     projectName,
 		Metadata: SnapshotMetadata{
 			ProjectPath: projectName, // 使用项目名称标识来源
 		},
@@ -51,14 +51,8 @@ func ValidateSnapshot(snapshot *Snapshot) error {
 		return fmt.Errorf("提交消息不能为空")
 	}
 
-	if len(snapshot.Tools) == 0 {
-		return fmt.Errorf("必须指定至少一个工具")
-	}
-
-	for _, tool := range snapshot.Tools {
-		if tool != "codex" && tool != "claude" {
-			return fmt.Errorf("不支持的工具类型: %s", tool)
-		}
+	if snapshot.Project == "" {
+		return fmt.Errorf("必须指定项目名称")
 	}
 
 	return nil
@@ -253,9 +247,8 @@ func CloneSnapshot(snapshot *Snapshot) *Snapshot {
 	copy(clone.Files, snapshot.Files)
 	clone.Tags = make([]string, len(snapshot.Tags))
 	copy(clone.Tags, snapshot.Tags)
-	clone.Tools = make([]string, len(snapshot.Tools))
-	copy(clone.Tools, snapshot.Tools)
 
+	// Project 是字符串，不需要深拷贝
 	return &clone
 }
 

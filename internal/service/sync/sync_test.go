@@ -87,7 +87,7 @@ func TestPackager_CreateCommitMessage(t *testing.T) {
 		ID:          "test-id-123",
 		Name:        "Test Snapshot",
 		Description: "This is a test snapshot for testing",
-		Tools:       []string{"codex", "cursor"},
+		Project:     "codex",
 		Tags:        []string{"test", "unit"},
 		Files:       []models.SnapshotFile{{Path: "file1"}, {Path: "file2"}},
 	}
@@ -97,8 +97,7 @@ func TestPackager_CreateCommitMessage(t *testing.T) {
 	assert.Contains(t, message, "Snapshot: Test Snapshot")
 	assert.Contains(t, message, "ID: test-id-123")
 	assert.Contains(t, message, "This is a test snapshot for testing")
-	// 注意: strings.Join 会用逗号+空格连接
-	assert.Contains(t, message, "Tools: codex, cursor")
+	assert.Contains(t, message, "Tools: codex")
 	assert.Contains(t, message, "Files: 2")
 	assert.Contains(t, message, "Tags: test, unit")
 }
@@ -149,7 +148,7 @@ func TestPackager_CreateIndex(t *testing.T) {
 		Name:        "Test Index",
 		Description: "Test description",
 		CreatedAt:   time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC),
-		Tools:       []string{"codex"},
+		Project:     "codex",
 		Files: []models.SnapshotFile{
 			{Path: "config.toml"},
 			{Path: "skills.yml"},
@@ -253,7 +252,7 @@ func TestService_PushSnapshot(t *testing.T) {
 		Name:      "Test Push",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:   "codex",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -503,7 +502,7 @@ func TestService_isSnapshotNew(t *testing.T) {
 		Name:      "Existing",
 		Message:   "Test",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:   "codex",
 		Files:     []models.SnapshotFile{},
 		Metadata: models.SnapshotMetadata{
 			Scope: models.ScopeGlobal,
@@ -531,7 +530,7 @@ func TestService_saveRemoteSnapshot(t *testing.T) {
 		Name:      "Remote Snapshot",
 		Message:   "From remote",
 		CreatedAt: time.Now(),
-		Tools:     []string{"cursor"},
+		Project:   "cursor",
 		Files:     []models.SnapshotFile{},
 		Metadata: models.SnapshotMetadata{
 			Scope: models.ScopeProject,
@@ -652,7 +651,7 @@ func TestSyncStatus(t *testing.T) {
 				CommitHash: "abc123",
 				Author:     "Test Author",
 				Date:       "2026-03-20T10:00:00Z",
-				Tools:      []string{"codex"},
+				Project:    "codex",
 			},
 		},
 	}
@@ -674,14 +673,14 @@ func TestRemoteSnapshotInfo(t *testing.T) {
 		CommitHash:  "abc123",
 		Author:      "Test Author",
 		Date:        "2026-03-20T10:00:00Z",
-		Tools:       []string{"codex", "cursor"},
+		Project:     "codex",
 		FileCount:   5,
 		Size:        1024,
 	}
 
 	assert.Equal(t, "snap-1", info.ID)
 	assert.Equal(t, "Snapshot Name", info.Name)
-	assert.Len(t, info.Tools, 2)
+	assert.Equal(t, "codex", info.Project)
 	assert.Equal(t, 5, info.FileCount)
 	assert.Equal(t, int64(1024), info.Size)
 }

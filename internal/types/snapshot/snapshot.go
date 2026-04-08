@@ -18,7 +18,7 @@ type SnapshotInfo struct {
 	Name        string    `json:"name"`        // 快照名称
 	Description string    `json:"description"` // 快照描述
 	CreatedAt   time.Time `json:"created_at"`  // 创建时间
-	Tools       []string  `json:"tools"`       // 包含的工具
+	Project     string    `json:"project"`     // 关联的项目名称
 	CommitHash  string    `json:"commit_hash"` // 提交哈希
 	IsRemote    bool      `json:"is_remote"`   // 是否已推送到远端
 }

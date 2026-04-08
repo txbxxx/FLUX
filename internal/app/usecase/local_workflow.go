@@ -184,7 +184,7 @@ type SnapshotSummary struct {
 	Name      string    // 快照名称
 	Message   string    // 快照说明
 	CreatedAt time.Time // 创建时间
-	Tools     []string  // 包含的工具类型
+	Project   string    // 关联的项目名称
 	FileCount int       // 收集的文件数量
 	Size      int64     // 总文件大小（字节）
 }
@@ -563,7 +563,7 @@ func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotIn
 		Name:      snapshot.Name,
 		Message:   snapshot.Message,
 		CreatedAt: snapshot.CreatedAt,
-		Tools:     snapshot.Tools,
+		Project:   snapshot.Project,
 		FileCount: pkg.FileCount,
 		Size:      pkg.Size,
 	}, nil
@@ -884,7 +884,7 @@ func (w *LocalWorkflow) ListSnapshots(_ context.Context, input ListSnapshotsInpu
 			Name:      snapshot.Name,
 			Message:   snapshot.Message,
 			CreatedAt: snapshot.CreatedAt,
-			Tools:     snapshot.Tools,
+			Project:   snapshot.Project,
 			FileCount: snapshot.FileCount,
 		})
 	}

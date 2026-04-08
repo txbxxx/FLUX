@@ -480,7 +480,7 @@ func TestExecuteSnapshotCreateParsesFlags(t *testing.T) {
 			ID:        "snap-1",
 			Name:      "Daily backup",
 			Message:   "before change",
-			Tools:     []string{"codex", "claude"},
+			Project:   "codex-global",
 			FileCount: 3,
 			Size:      128,
 			CreatedAt: time.Date(2026, 3, 23, 12, 0, 0, 0, time.UTC),

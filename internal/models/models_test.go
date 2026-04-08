@@ -10,15 +10,14 @@ import (
 // TestNewSnapshot 测试创建快照
 func TestNewSnapshot(t *testing.T) {
 	message := "Test snapshot"
-	tools := []string{"codex", "claude"}
 	projectName := "codex-global"
 
-	snapshot := NewSnapshot(message, tools, projectName)
+	snapshot := NewSnapshot(message, projectName)
 
 	assert.NotNil(t, snapshot)
 	assert.NotEmpty(t, snapshot.ID)
 	assert.Equal(t, message, snapshot.Message)
-	assert.Equal(t, tools, snapshot.Tools)
+	assert.Equal(t, projectName, snapshot.Project)
 	assert.Equal(t, projectName, snapshot.Metadata.ProjectPath)
 	assert.False(t, snapshot.CreatedAt.IsZero())
 }
@@ -34,7 +33,7 @@ func TestValidateSnapshot(t *testing.T) {
 			name: "有效快照",
 			snapshot: &Snapshot{
 				Message: "Valid snapshot",
-				Tools:   []string{"codex"},
+				Project: "codex-global",
 			},
 			wantErr: false,
 		},
@@ -46,23 +45,15 @@ func TestValidateSnapshot(t *testing.T) {
 		{
 			name: "空消息",
 			snapshot: &Snapshot{
-				Tools: []string{"codex"},
+				Project: "codex-global",
 			},
 			wantErr: true,
 		},
 		{
-			name: "无工具",
+			name: "空项目",
 			snapshot: &Snapshot{
 				Message: "Test",
-				Tools:   []string{},
-			},
-			wantErr: true,
-		},
-		{
-			name: "无效工具",
-			snapshot: &Snapshot{
-				Message: "Test",
-				Tools:   []string{"invalid"},
+				Project: "",
 			},
 			wantErr: true,
 		},
@@ -345,7 +336,7 @@ func TestCloneSnapshot(t *testing.T) {
 		ID:        "snap-1",
 		Name:      "Test Snapshot",
 		Message:   "Test message",
-		Tools:     []string{"codex", "claude"},
+		Project:   "codex-global",
 		Tags:      []string{"backup", "test"},
 		CreatedAt: time.Now(),
 	}
@@ -356,13 +347,13 @@ func TestCloneSnapshot(t *testing.T) {
 	assert.Equal(t, original.ID, clone.ID)
 	assert.Equal(t, original.Name, clone.Name)
 	assert.Equal(t, original.Message, clone.Message)
-	assert.Equal(t, original.Tools, clone.Tools)
+	assert.Equal(t, original.Project, clone.Project)
 	assert.Equal(t, original.Tags, clone.Tags)
 
 	// 验证是深拷贝
-	clone.Tools = append(clone.Tools, "new-tool")
-	assert.Len(t, original.Tools, 2)
-	assert.Len(t, clone.Tools, 3)
+	clone.Tags = append(clone.Tags, "new-tag")
+	assert.Len(t, original.Tags, 2)
+	assert.Len(t, clone.Tags, 3)
 }
 
 // TestMergeSummary 测试合并变更摘要

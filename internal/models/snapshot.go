@@ -18,7 +18,7 @@ type Snapshot struct {
 	Description string           `json:"description" db:"description"`           // 快照描述
 	Message     string           `json:"message" db:"message"`                   // 提交消息
 	CreatedAt   time.Time        `json:"created_at" db:"created_at"`             // 创建时间
-	Tools       []string         `json:"tools" db:"tools"`                       // 包含的工具列表 [codex, claude]
+	Project     string           `json:"project" db:"tools"`                     // 关联的项目名称
 	Metadata    SnapshotMetadata `json:"metadata" db:"metadata"`                 // 快照元数据
 	Files       []SnapshotFile   `json:"files" db:"files"`                       // 包含的文件列表
 	CommitHash  string           `json:"commit_hash,omitempty" db:"commit_hash"` // Git 提交哈希（如果已推送）
@@ -327,7 +327,7 @@ type snapshotFileRow = database.SnapshotFileRecord
 
 // snapshotToRow converts a Snapshot domain model to a snapshotRow for DB persistence.
 func snapshotToRow(snapshot *Snapshot) snapshotRow {
-	toolsJSON, _ := json.Marshal(snapshot.Tools)
+	projectJSON, _ := json.Marshal(snapshot.Project)
 	tagsJSON, _ := json.Marshal(snapshot.Tags)
 	metadataJSON, _ := json.Marshal(snapshot.Metadata)
 
@@ -337,7 +337,7 @@ func snapshotToRow(snapshot *Snapshot) snapshotRow {
 		Description: snapshot.Description,
 		Message:     snapshot.Message,
 		CreatedAt:   snapshot.CreatedAt,
-		Tools:       string(toolsJSON),
+		Tools:       string(projectJSON),
 		Metadata:    string(metadataJSON),
 		CommitHash:  snapshot.CommitHash,
 		Tags:        string(tagsJSON),
@@ -367,6 +367,8 @@ func snapshotFilesToRows(snapshotID string, files []SnapshotFile) []snapshotFile
 }
 
 // snapshotRowToModel converts a snapshotRow and its file rows into a Snapshot domain model.
+//
+// 向后兼容性处理：如果读取到旧格式的 tools JSON 数组，且 project 为空，则取第一个工具作为 project 名称。
 func snapshotRowToModel(row snapshotRow, fileRows []snapshotFileRow) (*Snapshot, error) {
 	snapshot := &Snapshot{
 		ID:          row.ID,
@@ -379,8 +381,19 @@ func snapshotRowToModel(row snapshotRow, fileRows []snapshotFileRow) (*Snapshot,
 	}
 
 	if row.Tools != "" {
-		if err := json.Unmarshal([]byte(row.Tools), &snapshot.Tools); err != nil {
-			return nil, fmt.Errorf("反序列化工具列表失败: %w", err)
+		// 先尝试解析为新项目格式：单个 project 字符串
+		var project string
+		if err := json.Unmarshal([]byte(row.Tools), &project); err == nil {
+			snapshot.Project = project
+		} else {
+			// 如果失败，尝试解析为旧格式：tools 数组
+			var oldTools []string
+			if err2 := json.Unmarshal([]byte(row.Tools), &oldTools); err2 == nil && len(oldTools) > 0 {
+				// 向后兼容：取第一个工具作为项目名
+				snapshot.Project = oldTools[0]
+			} else {
+				return nil, fmt.Errorf("反序列化项目信息失败 (tried both new and old formats): %w, %w", err, err2)
+			}
 		}
 	}
 	if row.Tags != "" {

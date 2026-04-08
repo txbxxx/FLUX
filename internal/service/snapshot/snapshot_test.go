@@ -29,7 +29,7 @@ func TestCollector_Collect(t *testing.T) {
 
 	// 收集文件
 	options := CollectOptions{
-		Tools:       []string{"codex"},
+		Tools:       []string{"claude", "codex"},
 		ProjectPath: tempDir,
 		Categories:  []models.FileCategory{models.CategoryConfig},
 	}
@@ -63,7 +63,7 @@ func TestService_CreateSnapshot(t *testing.T) {
 
 	options := typesSnapshot.CreateSnapshotOptions{
 		Message:     "Test snapshot",
-		Tools:       []string{"codex"},
+		Tools:       []string{"claude", "codex"},
 		ProjectName: "codex-global",
 		Tags:        []string{"test"},
 	}
@@ -89,7 +89,7 @@ func TestService_ListSnapshots(t *testing.T) {
 		Name:      "Test List",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -132,7 +132,7 @@ func TestService_GetSnapshot(t *testing.T) {
 		Name:      "Test Get",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -188,7 +188,7 @@ func TestService_DeleteSnapshot(t *testing.T) {
 		Name:      "Test Delete",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files:     []models.SnapshotFile{},
 		Metadata: models.SnapshotMetadata{
 			
@@ -221,7 +221,7 @@ func TestService_ValidateSnapshot(t *testing.T) {
 		Name:      "Valid",
 		Message:   "Test",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -240,7 +240,7 @@ func TestService_ValidateSnapshot(t *testing.T) {
 		Name:      "Invalid",
 		Message:   "Test",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files:     []models.SnapshotFile{},
 	}
 
@@ -253,7 +253,7 @@ func TestService_ValidateSnapshot(t *testing.T) {
 		Name:      "Invalid",
 		Message:   "Test",
 		CreatedAt: time.Now(),
-		Tools:     []string{},
+		Project:   "",
 		Files:     []models.SnapshotFile{},
 	}
 
@@ -281,7 +281,7 @@ func TestService_ExportSnapshot(t *testing.T) {
 		Name:      "Test Export",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         filepath.Join(".codex", "config.toml"),
@@ -343,7 +343,7 @@ func TestService_CountSnapshots(t *testing.T) {
 			Name:      fmt.Sprintf("Snapshot %d", i),
 			Message:   "Test",
 			CreatedAt: time.Now(),
-			Tools:     []string{"codex"},
+			Project:     "codex-global",
 			Files:     []models.SnapshotFile{},
 			Metadata: models.SnapshotMetadata{
 				
@@ -371,7 +371,7 @@ func TestApplier_ApplySnapshot(t *testing.T) {
 		Name:      "Test Apply",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -411,7 +411,7 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 		ID:        "source",
 		Name:      "Source",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "file1.toml",
@@ -446,7 +446,7 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 		ID:        "target",
 		Name:      "Target",
 		CreatedAt: time.Now(),
-		Tools:     []string{"codex"},
+		Project:     "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "file1.toml",

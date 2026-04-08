@@ -23,7 +23,7 @@ func TestSnapshotDAO_Create_WritesFiles(t *testing.T) {
 		Name:      "DAO Files Test",
 		Message:   "testing file persistence",
 		CreatedAt: time.Now(),
-		Tools:     []string{"claude"},
+		Project:   "claude",
 		Metadata: SnapshotMetadata{
 			OSVersion:   "test",
 			AppVersion:  "0.0.1",
@@ -94,7 +94,7 @@ func TestSnapshotDAO_Create_DoesNotDuplicateFiles(t *testing.T) {
 		Name:      "No Dup Test",
 		Message:   "test",
 		CreatedAt: time.Now(),
-		Tools:     []string{"claude"},
+		Project:   "claude",
 		Metadata:  SnapshotMetadata{OSVersion: "test"},
 		Files: []SnapshotFile{
 			{Path: "a.txt", OriginalPath: "/a.txt", Size: 5, Hash: "a", ModifiedAt: time.Now(), Content: []byte("aaa"), ToolType: "claude", Category: CategoryConfig},

@@ -9,7 +9,7 @@ type SnapshotHeader struct {
 	Name      string    `json:"name"`
 	Message   string    `json:"message"`
 	CreatedAt time.Time `json:"created_at"`
-	Tools     []string  `json:"tools"`
+	Project   string    `json:"project"`
 }
 
 // SnapshotListItem holds snapshot summary data for list display.
@@ -18,6 +18,6 @@ type SnapshotListItem struct {
 	Name      string    `json:"name"`
 	Message   string    `json:"message"`
 	CreatedAt time.Time `json:"created_at"`
-	Tools     []string  `json:"tools"`
+	Project   string    `json:"project"`
 	FileCount int       `json:"file_count"`
 }

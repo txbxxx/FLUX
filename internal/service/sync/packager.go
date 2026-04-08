@@ -97,7 +97,7 @@ func (p *Packager) createMetadataFile(snapshot *models.Snapshot) ([]byte, error)
 		Description string                  `json:"description"`
 		Message     string                  `json:"message"`
 		CreatedAt   string                  `json:"created_at"`
-		Tools       []string                `json:"tools"`
+		Project     string                  `json:"project"`
 		Tags        []string                `json:"tags"`
 		Metadata    models.SnapshotMetadata `json:"metadata"`
 		FileCount   int                     `json:"file_count"`
@@ -107,7 +107,7 @@ func (p *Packager) createMetadataFile(snapshot *models.Snapshot) ([]byte, error)
 		Description: snapshot.Description,
 		Message:     snapshot.Message,
 		CreatedAt:   snapshot.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		Tools:       snapshot.Tools,
+		Project:     snapshot.Project,
 		Tags:        snapshot.Tags,
 		Metadata:    snapshot.Metadata,
 		FileCount:   len(snapshot.Files),
@@ -141,7 +141,7 @@ func (p *Packager) ParseSnapshotFromCommit(
 		Description string                  `json:"description"`
 		Message     string                  `json:"message"`
 		CreatedAt   string                  `json:"created_at"`
-		Tools       []string                `json:"tools"`
+		Project     string                  `json:"project"`
 		Tags        []string                `json:"tags"`
 		Metadata    models.SnapshotMetadata `json:"metadata"`
 		FileCount   int                     `json:"file_count"`
@@ -156,7 +156,7 @@ func (p *Packager) ParseSnapshotFromCommit(
 		Name:        metadata.Name,
 		Description: metadata.Description,
 		Message:     metadata.Message,
-		Tools:       metadata.Tools,
+		Project:     metadata.Project,
 		Tags:        metadata.Tags,
 		Metadata:    metadata.Metadata,
 		CommitHash:  commitHash,
@@ -179,7 +179,7 @@ func (p *Packager) CreateCommitMessage(snapshot *models.Snapshot) string {
 	}
 
 	buf.WriteString("\n")
-	buf.WriteString(fmt.Sprintf("Tools: %s\n", strings.Join(snapshot.Tools, ", ")))
+	buf.WriteString(fmt.Sprintf("Tools: %s\n", snapshot.Project))
 	buf.WriteString(fmt.Sprintf("Files: %d\n", len(snapshot.Files)))
 
 	if len(snapshot.Tags) > 0 {
@@ -255,7 +255,7 @@ func (p *Packager) CreateIndex(snapshot *models.Snapshot) *SnapshotFileIndex {
 			"name":        snapshot.Name,
 			"description": snapshot.Description,
 			"created_at":  snapshot.CreatedAt.Format("2006-01-02T15:04:05Z"),
-			"tools":       strings.Join(snapshot.Tools, ","),
+			"tools":       snapshot.Project,
 		},
 	}
 }
@@ -339,7 +339,7 @@ func (p *Packager) CreateSnapshotManifest(
 			"message":     snapshot.Message,
 			"created_at":  snapshot.CreatedAt.Format("2006-01-02T15:04:05Z"),
 			"commit_hash": snapshot.CommitHash,
-			"tools":       snapshot.Tools,
+			"project":     snapshot.Project,
 			"tags":        snapshot.Tags,
 			"file_count":  len(snapshot.Files),
 		}

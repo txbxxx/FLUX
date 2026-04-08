@@ -70,7 +70,7 @@ type RemoteSnapshotInfo struct {
 	CommitHash  string   `json:"commit_hash"` // Git 提交哈希
 	Author      string   `json:"author"`      // 作者
 	Date        string   `json:"date"`        // 日期
-	Tools       []string `json:"tools"`       // 包含的工具
+	Project     string   `json:"project"`     // 所属项目
 	FileCount   int      `json:"file_count"`  // 文件数量
 	Size        int64    `json:"size"`        // 快照大小
 }

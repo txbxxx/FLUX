@@ -88,7 +88,7 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 		Description: options.Message,
 		Message:     options.Message,
 		CreatedAt:   time.Now(),
-		Tools:       options.Tools,
+		Project:     options.ProjectName,
 		Metadata:    metadata,
 		Files:       result.Files,
 		Tags:        options.Tags,
@@ -107,7 +107,7 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 			Name:      name,
 			Message:   options.Message,
 			CreatedAt: time.Now(),
-			Tools:     options.Tools,
+			Project:   options.ProjectName,
 		},
 		ProjectPath: projectPath,
 		CreatedAt:   time.Now(),
@@ -154,7 +154,7 @@ func (s *Service) ListSnapshots(limit, offset int) ([]*typesSnapshot.SnapshotLis
 			Name:      snap.Name,
 			Message:   snap.Message,
 			CreatedAt: snap.CreatedAt,
-			Tools:     snap.Tools,
+			Project:   snap.Project,
 			FileCount: len(snap.Files),
 		})
 	}
@@ -300,8 +300,8 @@ func (s *Service) ValidateSnapshot(snapshot *models.Snapshot) error {
 		return fmt.Errorf("快照名称不能为空")
 	}
 
-	if len(snapshot.Tools) == 0 {
-		return fmt.Errorf("快照必须包含至少一个工具")
+	if snapshot.Project == "" {
+		return fmt.Errorf("快照必须指定项目")
 	}
 
 	if len(snapshot.Files) == 0 {
