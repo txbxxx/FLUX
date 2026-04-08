@@ -212,11 +212,15 @@ func (c *Collector) collectSingleFile(
 		return nil, nil
 	}
 
-	// 快照里保存系统盘根路径下的相对表示，减少跨机器展示时的绝对路径噪音。
+	// 快照里保存项目根路径下的相对表示，去除用户机器特定前缀（如 C:\Users\xxx\），更简洁干净。
 	hash := c.calculateHash(content)
-	relPath, err := filepath.Rel(filepath.VolumeName(cleanPath)+string(filepath.Separator), cleanPath)
+	relPath, err := filepath.Rel(options.ProjectPath, cleanPath)
 	if err != nil {
-		relPath = cleanPath
+		// fallback: 如果相对路径计算失败，使用相对于盘符根的原始方案
+		relPath, err = filepath.Rel(filepath.VolumeName(cleanPath)+string(filepath.Separator), cleanPath)
+		if err != nil {
+			relPath = cleanPath
+		}
 	}
 
 	seen[cleanPath] = struct{}{}
