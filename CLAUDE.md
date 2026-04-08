@@ -117,6 +117,19 @@ ai-sync-manager/
 
 ## 架构规范
 
+### 数据库设计约束（最大可移植性原则）
+
+所有 DDL 及数据库操作代码必须严格遵守以下禁止项：
+
+1. **禁止使用外键约束（FOREIGN KEY）**：关系完整性在应用层代码逻辑中维护，不得依赖数据库层的 `REFERENCES` 约束
+2. **禁止使用触发器（TRIGGER）**：不得创建任何 DML/DDL 触发器，`updated_at` 等字段由应用层（GORM tag）管理
+3. **禁止使用存储过程（STORED PROCEDURE）及用户定义函数（UDF）**：所有业务逻辑必须位于应用代码中
+4. **禁止使用特定数据库专有扩展**：包括但不限于 PostgreSQL 的 JSONB 运算符、MySQL 的 ENUM 类型、SQL Server 的 IDENTITY_INSERT 语法、Oracle 的 SEQUENCE 伪列（若非 ANSI SQL 标准）
+5. **仅允许使用 ANSI SQL 标准数据类型**：VARCHAR、INTEGER、TIMESTAMP、TEXT、BOOLEAN 等
+6. **索引（INDEX）允许创建**，但必须使用 `CREATE INDEX` 独立语句，不得依赖隐式索引（PRIMARY KEY 自动创建的索引除外）
+
+> **自查规则**：若检测到 `CREATE TRIGGER`、`ADD FOREIGN KEY`、`CREATE PROCEDURE` 等关键字，必须拒绝并替换为应用层逻辑。
+
 ### 分层调用链
 
 ```
@@ -135,7 +148,6 @@ CLI/TUI 层  →  UseCase 层  →  Service 层  →  DAO（models 内）
 - **DAO 返回值**：只返回 models 中定义的数据库结构体，禁止返回 `map`、`interface{}`
 - **单一职责**：每个 DAO 函数只操作一个数据库表
 - **不做转换**：DAO 不做响应结构体的 convert
-- **禁止外键**：表结构不定义外键（FOREIGN KEY）、级联删除等数据库级关联特性。表间关系由 Service 层在应用代码中维护
 - **纯数据定义**：Models 层只负责数据库表结构定义和 CRUD 操作，不包含任何业务逻辑
 
 ```go

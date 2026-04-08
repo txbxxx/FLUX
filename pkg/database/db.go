@@ -114,10 +114,6 @@ func InitDBWithConfig(dataDir string, cfg DatabaseConfig) (*DB, error) {
 		sqlDB.SetConnMaxLifetime(d)
 	}
 
-	if err := conn.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
-		return nil, fmt.Errorf("设置 PRAGMA 失败: %w", err)
-	}
-
 	if err := db.migrate(); err != nil {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}
@@ -151,7 +147,7 @@ func (db *DB) configure() error {
 	sqlDB.SetMaxIdleConns(1)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	return db.conn.Exec("PRAGMA foreign_keys = ON").Error
+	return nil
 }
 
 // GetDB 返回当前进程内的数据库单例。
@@ -195,16 +191,13 @@ func (db *DB) GetConn() *gorm.DB {
 	return db.conn
 }
 
-// migrate 完成建表、建索引和建触发器。
+// migrate 完成建表和建索引。
 func (db *DB) migrate() error {
 	return db.conn.Transaction(func(tx *gorm.DB) error {
 		if err := db.createTables(tx); err != nil {
 			return err
 		}
 		if err := db.createIndexes(tx); err != nil {
-			return err
-		}
-		if err := db.createTriggers(tx); err != nil {
 			return err
 		}
 		return nil
@@ -248,54 +241,6 @@ func (db *DB) createIndexes(tx *gorm.DB) error {
 	for _, stmt := range indexes {
 		if err := tx.Exec(stmt).Error; err != nil {
 			return fmt.Errorf("创建索引失败: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// createTriggers 创建触发器。
-func (db *DB) createTriggers(tx *gorm.DB) error {
-	triggers := []string{
-		`CREATE TRIGGER IF NOT EXISTS update_remote_configs_updated_at
-			AFTER UPDATE ON remote_configs
-			FOR EACH ROW
-			BEGIN
-				UPDATE remote_configs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-			END`,
-
-		`CREATE TRIGGER IF NOT EXISTS update_app_settings_updated_at
-			AFTER UPDATE ON app_settings
-			FOR EACH ROW
-			BEGIN
-				UPDATE app_settings SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-			END`,
-
-		`CREATE TRIGGER IF NOT EXISTS update_custom_sync_rules_updated_at
-			AFTER UPDATE ON custom_sync_rules
-			FOR EACH ROW
-			BEGIN
-				UPDATE custom_sync_rules SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-			END`,
-
-		`CREATE TRIGGER IF NOT EXISTS update_registered_projects_updated_at
-			AFTER UPDATE ON registered_projects
-			FOR EACH ROW
-			BEGIN
-				UPDATE registered_projects SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-			END`,
-
-		`CREATE TRIGGER IF NOT EXISTS cleanup_sync_history_on_snapshot_delete
-			AFTER DELETE ON snapshots
-			FOR EACH ROW
-			BEGIN
-				DELETE FROM sync_history WHERE task_id IN (SELECT id FROM sync_tasks WHERE snapshot_id = OLD.id);
-			END`,
-	}
-
-	for _, stmt := range triggers {
-		if err := tx.Exec(stmt).Error; err != nil {
-			return fmt.Errorf("创建触发器失败: %w", err)
 		}
 	}
 
@@ -453,7 +398,7 @@ type remoteConfigRecord struct {
 	Branch         string     `gorm:"column:branch;not null;default:main"`
 	IsDefault      bool       `gorm:"column:is_default;default:false"`
 	CreatedAt      time.Time  `gorm:"column:created_at;not null"`
-	UpdatedAt      time.Time  `gorm:"column:updated_at;not null"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at;not null;autoUpdateTime"`
 	LastSynced     *time.Time `gorm:"column:last_synced"`
 	Status         string     `gorm:"column:status;not null;default:inactive"`
 }
@@ -483,7 +428,7 @@ type appSettingsRecord struct {
 	NotificationsNewSnapshot bool      `gorm:"column:notifications_new_snapshot;default:true"`
 	NotificationsSound       string    `gorm:"column:notifications_sound"`
 	CreatedAt                time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt                time.Time `gorm:"column:updated_at;not null"`
+	UpdatedAt                time.Time `gorm:"column:updated_at;not null;autoUpdateTime"`
 }
 
 func (appSettingsRecord) TableName() string { return "app_settings" }
@@ -493,7 +438,7 @@ type customSyncRuleRecord struct {
 	ToolType     string    `gorm:"column:tool_type;not null;uniqueIndex:idx_custom_sync_rules_tool_path"`
 	AbsolutePath string    `gorm:"column:absolute_path;not null;uniqueIndex:idx_custom_sync_rules_tool_path"`
 	CreatedAt    time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt    time.Time `gorm:"column:updated_at;not null"`
+	UpdatedAt    time.Time `gorm:"column:updated_at;not null;autoUpdateTime"`
 }
 
 func (customSyncRuleRecord) TableName() string { return "custom_sync_rules" }
@@ -504,7 +449,7 @@ type registeredProjectRecord struct {
 	ProjectName string    `gorm:"column:project_name;not null"`
 	ProjectPath string    `gorm:"column:project_path;not null;uniqueIndex:idx_registered_projects_tool_path"`
 	CreatedAt   time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt   time.Time `gorm:"column:updated_at;not null"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;not null;autoUpdateTime"`
 }
 
 func (registeredProjectRecord) TableName() string { return "registered_projects" }
@@ -544,7 +489,7 @@ type aiSettingRecord struct {
 	OpusModel string    `gorm:"column:opus_model"`
 	SonnetModel string `gorm:"column:sonnet_model"`
 	CreatedAt time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null;autoUpdateTime"`
 }
 
 func (aiSettingRecord) TableName() string { return "ai_settings" }

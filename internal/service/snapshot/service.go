@@ -163,6 +163,11 @@ func (s *Service) ListSnapshots(limit, offset int) ([]*typesSnapshot.SnapshotLis
 
 // DeleteSnapshot 删除快照。
 // 当前只删除数据库记录；如果未来增加外部存储，应在这里统一扩展清理逻辑。
+// TODO: 当 sync_tasks 和 sync_history 功能实现后，需在此处添加应用层级联清理：
+//
+//	删除 sync_history 中 task_id IN (SELECT id FROM sync_tasks WHERE snapshot_id = ?) 的记录，
+//	随后删除 sync_tasks 中 snapshot_id = ? 的记录。
+//	禁止使用数据库触发器，关系完整性由应用层维护。
 func (s *Service) DeleteSnapshot(id string) error {
 	logger.Info("删除快照", zap.String("id", id))
 
