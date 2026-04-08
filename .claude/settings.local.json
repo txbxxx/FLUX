@@ -11,5 +11,32 @@
       "Bash(git commit:*)",
       "Bash(git worktree:*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "if": "Bash(git commit:*)",
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "在 git commit 执行之前，请完成以下检查工作：\n\n1. 运行 go fmt ./... 格式化代码\n2. 运行 go vet ./... 进行代码检查  \n3. 运行 go test ./... 运行所有测试\n4. 如果上述步骤有任何失败，请终止并报告错误，不允许继续提交\n5. 如果全部通过，运行 git diff --cached 查看本次提交的改动\n6. 根据项目 CLAUDE.md 中的提交规范生成一个符合要求的 commit message：\n   - 格式：<type>: <中文简要描述>，然后空一行，然后写完成了什么、有什么作用、可能的影响（如果有），然后附上测试表格\n   - type 可选值: feat fix refactor docs test chore perf style\n   - 描述必须使用中文，禁止英文描述\n   - 项目要求所有提交必须使用中文描述\n7. 输出生成的 commit message，并询问用户是否使用该消息继续提交",
+            "timeout": 300,
+            "statusMessage": "运行预提交检查：代码格式化、静态检测、测试..."
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; echo \"Formatting: $f\"; go fmt \"$f\"; } 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Go 代码自动格式化..."
+          }
+        ]
+      }
+    ]
   }
 }

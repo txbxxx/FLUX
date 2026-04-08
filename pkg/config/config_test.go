@@ -10,7 +10,7 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	// App
+	// 应用配置
 	if cfg.App.Version != "1.0.0-alpha" {
 		t.Errorf("App.Version = %q, want %q", cfg.App.Version, "1.0.0-alpha")
 	}
@@ -18,7 +18,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("App.DataDir should not be empty")
 	}
 
-	// Logger
+	// 日志配置
 	if cfg.Logger.Level != "info" {
 		t.Errorf("Logger.Level = %q, want %q", cfg.Logger.Level, "info")
 	}
@@ -38,7 +38,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("Logger.ConsoleOut should be true")
 	}
 
-	// Database
+	// 数据库配置
 	if cfg.Database.Filename != "ai-sync-manager.db" {
 		t.Errorf("Database.Filename = %q, want %q", cfg.Database.Filename, "ai-sync-manager.db")
 	}
@@ -49,7 +49,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Database.ConnMaxLifetime = %q, want %q", cfg.Database.ConnMaxLifetime, "1h")
 	}
 
-	// Sync
+	// 同步配置
 	if cfg.Sync.DefaultBranch != "main" {
 		t.Errorf("Sync.DefaultBranch = %q, want %q", cfg.Sync.DefaultBranch, "main")
 	}
@@ -57,7 +57,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Sync.DefaultRemote = %q, want %q", cfg.Sync.DefaultRemote, "origin")
 	}
 
-	// Tools
+	// 工具配置
 	if len(cfg.Tools) != 2 {
 		t.Fatalf("Tools count = %d, want 2", len(cfg.Tools))
 	}

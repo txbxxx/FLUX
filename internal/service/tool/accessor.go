@@ -32,10 +32,10 @@ type ConfigAccessor struct {
 	resolver *RuleResolver
 }
 
-// NewConfigAccessor creates a new configuration accessor with the given rule resolver.
+// NewConfigAccessor 使用给定的规则解析器创建新的配置访问器。
 //
-// If no resolver is provided, a default empty resolver is used.
-// The accessor enforces that all paths are allowed by the configured rules.
+// 如果未提供解析器，则使用默认的空解析器。
+// 访问器强制要求所有路径必须通过配置规则的允许校验。
 func NewConfigAccessor(resolvers ...*RuleResolver) *ConfigAccessor {
 	var resolver *RuleResolver
 	if len(resolvers) > 0 {
@@ -48,11 +48,11 @@ func NewConfigAccessor(resolvers ...*RuleResolver) *ConfigAccessor {
 	return &ConfigAccessor{resolver: resolver}
 }
 
-// Resolve resolves a request path to a configuration target with security validation.
+// Resolve 通过安全校验将请求路径解析为配置目标。
 //
-// Relative paths are resolved against the tool's global config directory.
-// Absolute paths must match an allowed rule for the specified tool type.
-// All paths are checked for symlink attacks and directory traversal attempts.
+// 相对路径相对于工具的全局配置目录解析。
+// 绝对路径必须匹配指定工具类型允许的规则。
+// 所有路径都会检查符号链接攻击和目录遍历尝试。
 func (a *ConfigAccessor) Resolve(toolType ToolType, requestPath string) (*ConfigTarget, error) {
 	report, err := a.resolver.ResolveTool(toolType)
 	if err != nil {
@@ -169,10 +169,10 @@ func (a *ConfigAccessor) resolveAbsoluteTarget(toolType ToolType, report *ToolRu
 	}, nil
 }
 
-// ListDir returns a sorted list of entries in a configuration directory.
+// ListDir 返回配置目录中条目的有序列表。
 //
-// Directories are listed before files, and entries within each group are sorted
-// case-insensitively by name. Only entries accessible through resolved rules are included.
+// 目录排在文件前面，每组内的条目按名称不区分大小写排序。
+// 仅包含可通过解析规则访问的条目。
 func (a *ConfigAccessor) ListDir(target *ConfigTarget) ([]ConfigEntry, error) {
 	if target == nil {
 		return nil, errors.New("目标不能为空")
@@ -217,10 +217,10 @@ func (a *ConfigAccessor) ListDir(target *ConfigTarget) ([]ConfigEntry, error) {
 	return items, nil
 }
 
-// ReadFile reads the content of a configuration file.
+// ReadFile 读取配置文件的内容。
 //
-// Binary files are detected by checking for null bytes in the first 512 bytes
-// and return an error. The content is returned as a UTF-8 string.
+// 通过检查前 512 字节中是否存在空字节来检测二进制文件，检测到时返回错误。
+// 内容以 UTF-8 字符串形式返回。
 func (a *ConfigAccessor) ReadFile(target *ConfigTarget) (string, error) {
 	if target == nil {
 		return "", errors.New("目标不能为空")
@@ -240,10 +240,10 @@ func (a *ConfigAccessor) ReadFile(target *ConfigTarget) (string, error) {
 	return string(content), nil
 }
 
-// WriteFile writes content to a configuration file atomically.
+// WriteFile 将内容原子写入配置文件。
 //
-// Content is written to a temporary file first, then renamed to the target path
-// to ensure atomicity. The original file permissions are preserved.
+// 内容先写入临时文件，然后重命名到目标路径以保证原子性。
+// 保留原始文件权限。
 func (a *ConfigAccessor) WriteFile(target *ConfigTarget, content string) error {
 	if target == nil {
 		return errors.New("目标不能为空")
