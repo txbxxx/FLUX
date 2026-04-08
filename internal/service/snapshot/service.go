@@ -308,71 +308,17 @@ func (s *Service) ValidateSnapshot(snapshot *models.Snapshot) error {
 }
 
 // GetSnapshotsByTool 按工具筛选快照。
-// 当前在内存中过滤，适合当前数据规模。
+// 使用 SQL LIKE 在数据库层过滤，避免全量加载到内存。
 func (s *Service) GetSnapshotsByTool(toolType string, limit, offset int) ([]*models.Snapshot, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
-
-	allSnapshots, err := snapshotDAO.List(0, 0) // 获取所有快照
-	if err != nil {
-		return nil, err
-	}
-
-	// 筛选包含指定工具的快照
-	var filtered []*models.Snapshot
-	for _, snapshot := range allSnapshots {
-		for _, t := range snapshot.Tools {
-			if t == toolType {
-				filtered = append(filtered, snapshot)
-				break
-			}
-		}
-	}
-
-	// 应用分页
-	if offset >= len(filtered) {
-		return []*models.Snapshot{}, nil
-	}
-
-	end := offset + limit
-	if end > len(filtered) || limit <= 0 {
-		end = len(filtered)
-	}
-
-	return filtered[offset:end], nil
+	return snapshotDAO.ListByToolType(toolType, limit, offset)
 }
 
 // GetSnapshotsByTag 按标签筛选快照。
-// 当前在内存中过滤，适合当前数据规模。
+// 使用 SQL LIKE 在数据库层过滤，避免全量加载到内存。
 func (s *Service) GetSnapshotsByTag(tag string, limit, offset int) ([]*models.Snapshot, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
-
-	allSnapshots, err := snapshotDAO.List(0, 0) // 获取所有快照
-	if err != nil {
-		return nil, err
-	}
-
-	// 筛选包含指定标签的快照
-	var filtered []*models.Snapshot
-	for _, snapshot := range allSnapshots {
-		for _, t := range snapshot.Tags {
-			if t == tag {
-				filtered = append(filtered, snapshot)
-				break
-			}
-		}
-	}
-
-	// 应用分页
-	if offset >= len(filtered) {
-		return []*models.Snapshot{}, nil
-	}
-
-	end := offset + limit
-	if end > len(filtered) || limit <= 0 {
-		end = len(filtered)
-	}
-
-	return filtered[offset:end], nil
+	return snapshotDAO.ListByTag(tag, limit, offset)
 }
 
 // CountSnapshots 返回当前本地快照总数。

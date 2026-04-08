@@ -60,6 +60,19 @@ func (s *AISettingService) List() ([]*typesSetting.AISettingRecord, error) {
 	return records, nil
 }
 
+// ListPaginated returns a page of AI settings with total count.
+func (s *AISettingService) ListPaginated(limit, offset int) ([]*typesSetting.AISettingRecord, int, error) {
+	settings, total, err := s.dao.ListPaginated(limit, offset)
+	if err != nil {
+		return nil, 0, s.wrapError(err)
+	}
+	records := make([]*typesSetting.AISettingRecord, 0, len(settings))
+	for _, s := range settings {
+		records = append(records, toRecord(s))
+	}
+	return records, total, nil
+}
+
 // Delete 按名称删除 AI 配置。
 func (s *AISettingService) Delete(name string) error {
 	if err := s.dao.Delete(name); err != nil {

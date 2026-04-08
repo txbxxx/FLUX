@@ -172,6 +172,9 @@ func (c *Collector) collectFilesUnderDir(
 	return files, errors
 }
 
+// maxFileSize 单文件大小上限，与 detector 中的检查保持一致。
+const maxFileSize = 10 * 1024 * 1024 // 10MB
+
 // collectSingleFile 收集单个文件。
 func (c *Collector) collectSingleFile(
 	path string,
@@ -187,6 +190,15 @@ func (c *Collector) collectSingleFile(
 	info, err := os.Stat(cleanPath)
 	if err != nil {
 		return nil, err
+	}
+
+	// 跳过过大文件，避免将超大文件读入内存导致 OOM。
+	// 为什么：detector 扫描阶段有 10MB 检查，但 collector 收集阶段缺少此保护。
+	if info.Size() > maxFileSize {
+		logger.Debug("跳过过大文件",
+			zap.String("path", cleanPath),
+			zap.Int64("size", info.Size()))
+		return nil, nil
 	}
 
 	content, err := os.ReadFile(cleanPath)

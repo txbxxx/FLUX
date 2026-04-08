@@ -21,6 +21,7 @@ type AISettingManager interface {
 	Create(setting *typesSetting.AISettingRecord) error
 	GetByName(name string) (*typesSetting.AISettingRecord, error)
 	List() ([]*typesSetting.AISettingRecord, error)
+	ListPaginated(limit, offset int) ([]*typesSetting.AISettingRecord, int, error)
 	Delete(name string) error
 }
 
@@ -176,7 +177,17 @@ func (w *LocalWorkflow) ListAISettings(_ context.Context, input ListAISettingsIn
 		}
 	}
 
-	settings, err := w.aiSettingManager.List()
+	// 获取当前生效配置的 token + base URL，用于和数据库中的配置逐一匹配
+	currentInfo, _ := w.getCurrentSettingInfo()
+
+	// 使用 SQL 层分页查询，避免全量加载到内存
+	limit := input.Limit
+	offset := input.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	settings, total, err := w.aiSettingManager.ListPaginated(limit, offset)
 	if err != nil {
 		return nil, &UserError{
 			Message:    "读取配置列表失败",
@@ -185,29 +196,10 @@ func (w *LocalWorkflow) ListAISettings(_ context.Context, input ListAISettingsIn
 		}
 	}
 
-	// 获取当前生效配置的 token + base URL，用于和数据库中的配置逐一匹配
-	currentInfo, _ := w.getCurrentSettingInfo()
-
-	var currentMatchedName string
-	limit := input.Limit
-	if limit <= 0 {
-		limit = len(settings)
-	}
-	offset := input.Offset
-	if offset < 0 {
-		offset = 0
-	}
-
 	// 转换为返回结构体
-	items := make([]typesSetting.AISettingListItem, 0, limit)
-	for i, setting := range settings {
-		if i < offset {
-			continue
-		}
-		if len(items) >= limit {
-			break
-		}
-
+	var currentMatchedName string
+	items := make([]typesSetting.AISettingListItem, 0, len(settings))
+	for _, setting := range settings {
 		isCurrent := currentInfo != nil && setting.Token == currentInfo.Token && setting.BaseURL == currentInfo.BaseURL
 		if isCurrent {
 			currentMatchedName = setting.Name
@@ -219,13 +211,19 @@ func (w *LocalWorkflow) ListAISettings(_ context.Context, input ListAISettingsIn
 			BaseURL:     setting.BaseURL,
 			OpusModel:   setting.OpusModel,
 			SonnetModel: setting.SonnetModel,
-			IsCurrent:    isCurrent,
+			IsCurrent:   isCurrent,
 		})
+	}
+
+	// 如果当前页未匹配到 current，从全部配置中查找
+	// 为什么：分页查询可能不包含当前生效的配置，但调用方始终需要 Current 字段
+	if currentMatchedName == "" {
+		currentMatchedName = w.matchCurrentSettingName()
 	}
 
 	return &ListAISettingsResult{
 		Items:   items,
-		Total:   len(settings),
+		Total:   total,
 		Current: currentMatchedName,
 	}, nil
 }
