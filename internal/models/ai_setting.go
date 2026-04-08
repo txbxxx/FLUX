@@ -57,6 +57,29 @@ func (dao *AISettingDAO) List() ([]*AISetting, error) {
 	return settings, nil
 }
 
+// ListPaginated returns a page of AI settings ordered by creation time descending.
+// Returns the settings for the requested page and the total count of all settings.
+func (dao *AISettingDAO) ListPaginated(limit, offset int) ([]*AISetting, int, error) {
+	var total int64
+	if err := dao.db.GetConn().Model(&AISetting{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var settings []*AISetting
+	query := dao.db.GetConn().Order("created_at DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+	if err := query.Find(&settings).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return settings, int(total), nil
+}
+
 // Delete 按名称删除 AI 配置。
 func (dao *AISettingDAO) Delete(name string) error {
 	result := dao.db.GetConn().

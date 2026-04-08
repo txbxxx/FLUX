@@ -244,6 +244,80 @@ func (dao *SnapshotDAO) Count() (int, error) {
 	return int(count), err
 }
 
+// ListByToolType returns snapshots whose JSON tools array contains the specified tool.
+// Uses SQL LIKE to filter at the database level instead of loading all snapshots into memory.
+func (dao *SnapshotDAO) ListByToolType(toolType string, limit, offset int) ([]*Snapshot, error) {
+	query := dao.db.GetConn().Model(&snapshotRow{}).
+		Where("tools LIKE ?", fmt.Sprintf(`%%"%s"%%`, toolType)).
+		Order("created_at DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+
+	var rows []snapshotRow
+	if err := query.Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	return dao.loadSnapshotsWithFiles(rows)
+}
+
+// ListByTag returns snapshots whose JSON tags array contains the specified tag.
+// Uses SQL LIKE to filter at the database level instead of loading all snapshots into memory.
+func (dao *SnapshotDAO) ListByTag(tag string, limit, offset int) ([]*Snapshot, error) {
+	query := dao.db.GetConn().Model(&snapshotRow{}).
+		Where("tags LIKE ?", fmt.Sprintf(`%%"%s"%%`, tag)).
+		Order("created_at DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+
+	var rows []snapshotRow
+	if err := query.Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	return dao.loadSnapshotsWithFiles(rows)
+}
+
+// loadSnapshotsWithFiles batch-loads file rows for the given snapshot rows and converts to domain models.
+func (dao *SnapshotDAO) loadSnapshotsWithFiles(rows []snapshotRow) ([]*Snapshot, error) {
+	if len(rows) == 0 {
+		return []*Snapshot{}, nil
+	}
+
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+
+	var allFileRows []snapshotFileRow
+	if err := dao.db.GetConn().Where("snapshot_id IN ?", ids).Find(&allFileRows).Error; err != nil {
+		return nil, err
+	}
+
+	filesBySnapshot := make(map[string][]snapshotFileRow)
+	for _, f := range allFileRows {
+		filesBySnapshot[f.SnapshotID] = append(filesBySnapshot[f.SnapshotID], f)
+	}
+
+	snapshots := make([]*Snapshot, 0, len(rows))
+	for _, row := range rows {
+		snapshot, err := snapshotRowToModel(row, filesBySnapshot[row.ID])
+		if err != nil {
+			return nil, err
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+	return snapshots, nil
+}
+
 // snapshotRow aliases the canonical GORM record defined in pkg/database,
 // eliminating the previous duplication between database/db.go and this file.
 type snapshotRow = database.SnapshotRecord
