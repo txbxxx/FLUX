@@ -179,7 +179,7 @@ func (p *Packager) CreateCommitMessage(snapshot *models.Snapshot) string {
 	}
 
 	buf.WriteString("\n")
-	buf.WriteString(fmt.Sprintf("Tools: %s\n", snapshot.Project))
+	buf.WriteString(fmt.Sprintf("Project: %s\n", snapshot.Project))
 	buf.WriteString(fmt.Sprintf("Files: %d\n", len(snapshot.Files)))
 
 	if len(snapshot.Tags) > 0 {
@@ -255,7 +255,7 @@ func (p *Packager) CreateIndex(snapshot *models.Snapshot) *SnapshotFileIndex {
 			"name":        snapshot.Name,
 			"description": snapshot.Description,
 			"created_at":  snapshot.CreatedAt.Format("2006-01-02T15:04:05Z"),
-			"tools":       snapshot.Project,
+			"project":     snapshot.Project,
 		},
 	}
 }

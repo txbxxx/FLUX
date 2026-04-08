@@ -97,7 +97,7 @@ func TestPackager_CreateCommitMessage(t *testing.T) {
 	assert.Contains(t, message, "Snapshot: Test Snapshot")
 	assert.Contains(t, message, "ID: test-id-123")
 	assert.Contains(t, message, "This is a test snapshot for testing")
-	assert.Contains(t, message, "Tools: codex")
+	assert.Contains(t, message, "Project: codex")
 	assert.Contains(t, message, "Files: 2")
 	assert.Contains(t, message, "Tags: test, unit")
 }
@@ -111,7 +111,7 @@ ID: test-snapshot-id-123
 
 This is a test snapshot
 
-Tools: codex
+Project: codex
 Files: 5`
 
 	snapshotID := packager.ParseSnapshotIDFromCommit(commitMessage)
@@ -163,7 +163,7 @@ func TestPackager_CreateIndex(t *testing.T) {
 	assert.Equal(t, "skills.yml", index.FilePaths[1])
 	assert.Equal(t, "Test Index", index.Metadata["name"])
 	assert.Equal(t, "Test description", index.Metadata["description"])
-	assert.Equal(t, "codex", index.Metadata["tools"])
+	assert.Equal(t, "codex", index.Metadata["project"])
 }
 
 // TestPackager_ExtractSnapshotID 测试提取快照 ID

@@ -18,7 +18,7 @@ type Snapshot struct {
 	Description string           `json:"description" db:"description"`           // 快照描述
 	Message     string           `json:"message" db:"message"`                   // 提交消息
 	CreatedAt   time.Time        `json:"created_at" db:"created_at"`             // 创建时间
-	Project     string           `json:"project" db:"tools"`                     // 关联的项目名称
+	Project     string           `json:"project" db:"tools"` // 关联的项目名称（db tag 保留 "tools" 复用现有列，不改变表结构）
 	Metadata    SnapshotMetadata `json:"metadata" db:"metadata"`                 // 快照元数据
 	Files       []SnapshotFile   `json:"files" db:"files"`                       // 包含的文件列表
 	CommitHash  string           `json:"commit_hash,omitempty" db:"commit_hash"` // Git 提交哈希（如果已推送）
