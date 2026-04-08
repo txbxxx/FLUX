@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 
 	"ai-sync-manager/internal/service/tool"
@@ -254,7 +255,7 @@ func (w *LocalWorkflow) getSnapshotConfig(input GetConfigInput) (*GetConfigResul
 		}
 		for _, file := range snapshot.Files {
 			result.Entries = append(result.Entries, ConfigEntry{
-				Name:         file.Path,
+				Name:         filepath.Base(file.Path),
 				RelativePath: file.Path,
 				IsDir:        false,
 			})
