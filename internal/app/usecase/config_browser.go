@@ -234,6 +234,32 @@ func (w *LocalWorkflow) SaveConfig(_ context.Context, input SaveConfigInput) err
 func (w *LocalWorkflow) getSnapshotConfig(input GetConfigInput) (*GetConfigResult, error) {
 	snapshotID := strings.TrimSpace(input.Snapshot)
 
+	// 支持通过名称查找快照：如果不是 UUID 格式，按名称查找对应的 ID。
+	if !isUUIDFormat(snapshotID) {
+		snapshots, listErr := w.snapshots.ListSnapshots(0, 0)
+		if listErr != nil {
+			return nil, &UserError{
+				Message:    "读取快照失败",
+				Suggestion: "请检查快照名称或 ID 是否正确，使用 snapshot list 查看所有快照",
+				Err:        listErr,
+			}
+		}
+		found := false
+		for _, snap := range snapshots {
+			if snap.Name == snapshotID {
+				snapshotID = snap.ID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, &UserError{
+				Message:    "未找到名称为 \"" + snapshotID + "\" 的快照",
+				Suggestion: "使用 snapshot list 查看所有快照的名称和 ID",
+			}
+		}
+	}
+
 	snapshot, err := w.snapshots.GetSnapshot(snapshotID)
 	if err != nil {
 		return nil, &UserError{

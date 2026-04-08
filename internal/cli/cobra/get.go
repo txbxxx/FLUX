@@ -57,6 +57,6 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 	}
 
 	command.Flags().BoolVarP(&edit, "edit", "e", false, "Open file in terminal editor")
-	command.Flags().StringVarP(&snapshot, "snapshot", "s", "", "浏览指定快照中的文件（传入快照 ID）")
+	command.Flags().StringVarP(&snapshot, "snapshot", "s", "", "浏览指定快照中的文件（传入快照 ID 或名称）")
 	return command
 }

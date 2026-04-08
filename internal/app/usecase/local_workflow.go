@@ -513,6 +513,27 @@ func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotIn
 			Err:        errors.New("empty tools"),
 		}
 	}
+	trimmedName := strings.TrimSpace(input.Name)
+	if trimmedName == "" {
+		return nil, &UserError{
+			Message:    "创建快照失败：名称不能为空",
+			Suggestion: "请通过 --name 指定快照名称",
+			Err:        errors.New("empty name"),
+		}
+	}
+	// 名称唯一性校验：遍历已有快照检查是否重名。
+	existingSnapshots, listErr := w.snapshots.ListSnapshots(0, 0)
+	if listErr == nil {
+		for _, snap := range existingSnapshots {
+			if snap.Name == trimmedName {
+				return nil, &UserError{
+					Message:    "创建快照失败：名称 \"" + trimmedName + "\" 已存在",
+					Suggestion: "请使用 snapshot list 查看已有快照，指定一个不同的名称",
+					Err:        errors.New("duplicate name"),
+				}
+			}
+		}
+	}
 	if strings.TrimSpace(input.Message) == "" {
 		return nil, &UserError{
 			Message:    "创建快照失败：message 不能为空",

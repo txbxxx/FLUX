@@ -14,7 +14,7 @@ import (
 // 参数说明：
 //   - -t / --tools：      要备份的工具列表（可选），多个用逗号分隔。省略时从 -p 项目名自动推导。
 //   - -m / --message：    快照说明（必填），用于记录本次快照的目的。
-//   - -n / --name：       快照名称（可选），不填时由系统自动生成。
+//   - -n / --name：       快照名称（必填），必须唯一。
 //   - -p / --project：    项目名称（必填），指定要备份哪个项目的配置。
 //
 // 工具类型自动推导示例：
@@ -50,8 +50,9 @@ func newSnapshotCreateCommand(deps Dependencies) *spcobra.Command {
 	flags := command.Flags()
 	flags.StringVarP(&tools, "tools", "t", "", "指定要备份的工具，多个用逗号分隔（如 codex,claude）")
 	flags.StringVarP(&message, "message", "m", "", "快照说明（必填）")
-	flags.StringVarP(&name, "name", "n", "", "快照名称（可选）")
+	flags.StringVarP(&name, "name", "n", "", "快照名称（必填，必须唯一）")
 	flags.StringVarP(&projectName, "project", "p", "", "项目名称（必填，如 codex-global、claude-global 或用户注册的项目）")
+		_ = command.MarkFlagRequired("name")
 
 	return command
 }

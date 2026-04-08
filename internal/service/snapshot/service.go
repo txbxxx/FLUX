@@ -69,9 +69,6 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 	// ID 用于数据库和后续同步；名称主要面向用户展示。
 	snapshotID := uuid.New().String()
 	name := options.Name
-	if name == "" {
-		name = fmt.Sprintf("Snapshot-%s", time.Now().Format("20060102-150405"))
-	}
 
 	// 创建快照元数据
 	metadata := models.SnapshotMetadata{

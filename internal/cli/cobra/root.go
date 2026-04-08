@@ -226,13 +226,74 @@ func printSnapshotList(w io.Writer, result *usecase.ListSnapshotsResult) {
 		return
 	}
 
-	fmt.Fprintln(w, "ID                                   | 名称                      | 说明            | 文件数 | 创建时间")
-	fmt.Fprintln(w, "------------------------------------+---------------------------+-----------------+--------+-------------------")
+	// 动态计算每列最大宽度，解决中英文混排对齐问题。
+	headers := []string{"ID", "名称", "项目", "说明", "文件数", "创建时间"}
+	rows := make([][]string, 0, len(result.Items))
 	for _, item := range result.Items {
-		createdAt := item.CreatedAt.Format("2006-01-02 15:04")
-		fmt.Fprintf(w, "%-36s | %-25s | %-15s | %4d   | %s\n", item.ID, item.Name, item.Message, item.FileCount, createdAt)
+		rows = append(rows, []string{
+			item.ID,
+			item.Name,
+			item.Project,
+			item.Message,
+			fmt.Sprintf("%d", item.FileCount),
+			item.CreatedAt.Format("2006-01-02 15:04"),
+		})
+	}
+
+	widths := make([]int, len(headers))
+	for i, h := range headers {
+		widths[i] = displayWidth(h)
+	}
+	for _, row := range rows {
+		for i, v := range row {
+			if dw := displayWidth(v); dw > widths[i] {
+				widths[i] = dw
+			}
+		}
+	}
+
+	// 表头
+	printAlignedRow(w, headers, widths)
+	// 分隔线
+	seps := make([]string, len(widths))
+	for i, w := range widths {
+		seps[i] = strings.Repeat("-", w)
+	}
+	printAlignedRow(w, seps, widths)
+	// 数据行
+	for _, row := range rows {
+		printAlignedRow(w, row, widths)
 	}
 	fmt.Fprintf(w, "\n共 %d 条快照\n", result.Total)
+}
+
+// displayWidth 计算字符串在终端中的显示宽度。
+// 中文字符和全角字符占 2 列宽，其余占 1 列宽。
+func displayWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		if r > 0x7F {
+			w += 2
+		} else {
+			w++
+		}
+	}
+	return w
+}
+
+// printAlignedRow 按列宽对齐输出一行，使用动态填充确保中英文混排对齐。
+func printAlignedRow(w io.Writer, values []string, widths []int) {
+	for i, v := range values {
+		if i > 0 {
+			fmt.Fprint(w, " | ")
+		}
+		padding := widths[i] - displayWidth(v)
+		if padding < 0 {
+			padding = 0
+		}
+		fmt.Fprint(w, v+strings.Repeat(" ", padding))
+	}
+	fmt.Fprintln(w)
 }
 
 func printError(w io.Writer, err error) {
