@@ -24,6 +24,8 @@ type Row struct {
 //	│ Col1 │ Col2 │
 //	├──────┼──────┤
 //	│ val1 │ val2 │
+//	├──────┼──────┤
+//	│ val3 │ val4 │
 //	└──────┴──────┘
 type Table struct {
 	Columns []Column // 列定义
@@ -52,10 +54,15 @@ func (t *Table) Render() string {
 	b.WriteString(t.renderBorder("├", "┼", "┤", "─", widths))
 	b.WriteByte('\n')
 
-	// 第四步：数据行
-	for _, row := range t.Rows {
+	// 第四步：数据行（行间加分隔线）
+	for i, row := range t.Rows {
 		b.WriteString(t.renderRow(row, widths))
 		b.WriteByte('\n')
+		// 最后一行不加分隔线，底边框会紧接其后
+		if i < len(t.Rows)-1 {
+			b.WriteString(t.renderBorder("├", "┼", "┤", "─", widths))
+			b.WriteByte('\n')
+		}
 	}
 
 	// 第五步：底边框
