@@ -12,53 +12,53 @@ import (
 )
 
 type stubWorkflow struct {
-	scanInput          usecase.ScanInput
-	scanResult         *usecase.ScanResult
-	scanErr            error
-	addRuleInput       usecase.AddCustomRuleInput
-	addRuleErr         error
-	removeRuleInput    usecase.RemoveCustomRuleInput
-	removeRuleErr      error
-	addProjectInput    usecase.AddProjectInput
-	addProjectErr      error
-	removeProjectInput usecase.RemoveProjectInput
-	removeProjectErr   error
-	listRulesInput     usecase.ListScanRulesInput
-	listRulesResult    *usecase.ListScanRulesResult
-	listRulesErr       error
-	createInput        usecase.CreateSnapshotInput
-	createResult       *usecase.SnapshotSummary
-	createErr          error
-	listInput          usecase.ListSnapshotsInput
-	listResult         *usecase.ListSnapshotsResult
-	listErr            error
-	deleteSnapshotInput usecase.DeleteSnapshotInput
-	deleteSnapshotErr   error
-	getInput           usecase.GetConfigInput
-	getResult          *usecase.GetConfigResult
-	getErr             error
-	saveInput          usecase.SaveConfigInput
-	saveErr            error
-	createAISettingInput   usecase.CreateAISettingInput
-	createAISettingResult  *usecase.CreateAISettingResult
-	createAISettingErr    error
-	listAISettingsInput  usecase.ListAISettingsInput
-	listAISettingsResult *usecase.ListAISettingsResult
-	listAISettingsErr    error
-	getAISettingInput    usecase.GetAISettingInput
-	getAISettingResult  *usecase.GetAISettingResult
-	getAISettingErr      error
-	deleteAISettingInput usecase.DeleteAISettingInput
-	deleteAISettingErr   error
-	switchAISettingInput usecase.SwitchAISettingInput
-	switchAISettingResult *usecase.SwitchAISettingResult
-	switchAISettingErr   error
-	getAISettingsBatchInput   usecase.GetAISettingsBatchInput
-	getAISettingsBatchResult  *usecase.GetAISettingsBatchResult
-	getAISettingsBatchErr    error
-	deleteAISettingsBatchInput usecase.DeleteAISettingsBatchInput
+	scanInput                   usecase.ScanInput
+	scanResult                  *usecase.ScanResult
+	scanErr                     error
+	addRuleInput                usecase.AddCustomRuleInput
+	addRuleErr                  error
+	removeRuleInput             usecase.RemoveCustomRuleInput
+	removeRuleErr               error
+	addProjectInput             usecase.AddProjectInput
+	addProjectErr               error
+	removeProjectInput          usecase.RemoveProjectInput
+	removeProjectErr            error
+	listRulesInput              usecase.ListScanRulesInput
+	listRulesResult             *usecase.ListScanRulesResult
+	listRulesErr                error
+	createInput                 usecase.CreateSnapshotInput
+	createResult                *usecase.SnapshotSummary
+	createErr                   error
+	listInput                   usecase.ListSnapshotsInput
+	listResult                  *usecase.ListSnapshotsResult
+	listErr                     error
+	deleteSnapshotInput         usecase.DeleteSnapshotInput
+	deleteSnapshotErr           error
+	getInput                    usecase.GetConfigInput
+	getResult                   *usecase.GetConfigResult
+	getErr                      error
+	saveInput                   usecase.SaveConfigInput
+	saveErr                     error
+	createAISettingInput        usecase.CreateAISettingInput
+	createAISettingResult       *usecase.CreateAISettingResult
+	createAISettingErr          error
+	listAISettingsInput         usecase.ListAISettingsInput
+	listAISettingsResult        *usecase.ListAISettingsResult
+	listAISettingsErr           error
+	getAISettingInput           usecase.GetAISettingInput
+	getAISettingResult          *usecase.GetAISettingResult
+	getAISettingErr             error
+	deleteAISettingInput        usecase.DeleteAISettingInput
+	deleteAISettingErr          error
+	switchAISettingInput        usecase.SwitchAISettingInput
+	switchAISettingResult       *usecase.SwitchAISettingResult
+	switchAISettingErr          error
+	getAISettingsBatchInput     usecase.GetAISettingsBatchInput
+	getAISettingsBatchResult    *usecase.GetAISettingsBatchResult
+	getAISettingsBatchErr       error
+	deleteAISettingsBatchInput  usecase.DeleteAISettingsBatchInput
 	deleteAISettingsBatchResult *usecase.DeleteAISettingsBatchResult
-	deleteAISettingsBatchErr   error
+	deleteAISettingsBatchErr    error
 }
 
 func (s *stubWorkflow) Scan(_ context.Context, input usecase.ScanInput) (*usecase.ScanResult, error) {
@@ -517,6 +517,7 @@ func TestExecuteGetDirectoryCommandPrintsEntries(t *testing.T) {
 		getResult: &usecase.GetConfigResult{
 			Tool:         "codex",
 			RelativePath: "skills",
+			AbsolutePath: "/home/user/.codex/skills",
 			Kind:         usecase.ConfigTargetDirectory,
 			Entries: []usecase.ConfigEntry{
 				{Name: "aiskills", RelativePath: "skills/aiskills", IsDir: true},
@@ -537,7 +538,7 @@ func TestExecuteGetDirectoryCommandPrintsEntries(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
-	if !strings.Contains(stdout.String(), "Codex > skills") ||
+	if !strings.Contains(stdout.String(), "/home/user/.codex/skills") ||
 		!strings.Contains(stdout.String(), "目录") ||
 		!strings.Contains(stdout.String(), "aiskills") ||
 		!strings.Contains(stdout.String(), "README.md") {
@@ -550,6 +551,7 @@ func TestExecuteGetFileCommandPrintsContent(t *testing.T) {
 		getResult: &usecase.GetConfigResult{
 			Tool:         "codex",
 			RelativePath: "skills/README.md",
+			AbsolutePath: "/home/user/.codex/skills/README.md",
 			Kind:         usecase.ConfigTargetFile,
 			Content:      "# hello",
 			Editable:     true,
@@ -568,7 +570,7 @@ func TestExecuteGetFileCommandPrintsContent(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
-	if !strings.Contains(stdout.String(), "Codex > skills/README.md") || !strings.Contains(stdout.String(), "# hello") {
+	if !strings.Contains(stdout.String(), "/home/user/.codex/skills/README.md") || !strings.Contains(stdout.String(), "# hello") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 }

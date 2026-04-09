@@ -296,7 +296,14 @@ func isAllowedRelativePath(matches []ResolvedRuleMatch, relativePath string) boo
 		if cleanRelativePath == allowedPath {
 			return true
 		}
+		// 精确匹配已允许的路径，或作为允许目录的子路径。
 		if match.IsDir && strings.HasPrefix(cleanRelativePath, allowedPath+string(filepath.Separator)) {
+			return true
+		}
+		// 如果请求路径是某个允许路径的父目录，也视为允许。
+		// 为什么：plugins/ 下有 plugins/blocklist.json 等允许的文件时，
+		// plugins 目录本身也应可访问，否则用户无法导航进入。
+		if strings.HasPrefix(allowedPath, cleanRelativePath+string(filepath.Separator)) {
 			return true
 		}
 	}

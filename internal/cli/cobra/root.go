@@ -52,12 +52,12 @@ type EditorRunner interface {
 // Dependencies 集中描述 root command 所需的全部外部依赖。
 // 所有子命令共享同一份 Dependencies 实例，通过它访问业务逻辑和 I/O。
 type Dependencies struct {
-	Workflow Workflow      // 用例层接口，提供所有业务操作（扫描、快照、配置读写等）
-	TUI      TUIRunner    // TUI 交互式终端界面启动器
-	Editor   EditorRunner // 外部编辑器启动器（如 vim / code）
-	DataDir  string       // 应用数据目录路径（存放数据库、配置等）
-	Out      io.Writer    // 标准输出写入器，nil 时回退到 io.Discard
-	Err      io.Writer    // 标准错误写入器，nil 时回退到 io.Discard
+	Workflow Workflow        // 用例层接口，提供所有业务操作（扫描、快照、配置读写等）
+	TUI      TUIRunner       // TUI 交互式终端界面启动器
+	Editor   EditorRunner    // 外部编辑器启动器（如 vim / code）
+	DataDir  string          // 应用数据目录路径（存放数据库、配置等）
+	Out      io.Writer       // 标准输出写入器，nil 时回退到 io.Discard
+	Err      io.Writer       // 标准错误写入器，nil 时回退到 io.Discard
 	Context  context.Context // 外部上下文（用于取消控制和超时），nil 时使用 context.Background
 }
 
@@ -283,7 +283,7 @@ func printError(w io.Writer, err error) {
 }
 
 func printConfigEntries(w io.Writer, result *usecase.GetConfigResult) {
-	fmt.Fprintf(w, "%s > %s\n\n", displayToolName(result.Tool), result.RelativePath)
+	fmt.Fprintf(w, "%s\n\n", result.AbsolutePath)
 	fmt.Fprintln(w, "类型    名称                 路径")
 	for _, entry := range result.Entries {
 		entryType := "文件"
@@ -299,7 +299,7 @@ func printConfigEntries(w io.Writer, result *usecase.GetConfigResult) {
 }
 
 func printConfigFile(w io.Writer, result *usecase.GetConfigResult) {
-	fmt.Fprintf(w, "%s > %s\n\n", displayToolName(result.Tool), result.RelativePath)
+	fmt.Fprintf(w, "%s\n\n", result.AbsolutePath)
 	fmt.Fprintln(w, result.Content)
 }
 
