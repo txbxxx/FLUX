@@ -1,7 +1,3 @@
-SHELL := pwsh.exe
-.SHELLFLAGS := -NoProfile -Command
-.ONESHELL:
-
 GO ?= go
 CMD_PATH ?= ./cmd/ai-sync
 OUTPUT_DIR ?= bin
@@ -27,12 +23,11 @@ help:
 	@echo "Current output: $(BINARY_PATH)"
 
 build:
-	@New-Item -ItemType Directory -Force -Path "$(OUTPUT_DIR)" | Out-Null
 	@echo "Building CLI: $(BINARY_PATH)"
 	@$(GO) build -buildvcs=false -o "$(BINARY_PATH)" "$(CMD_PATH)"
 
 run: build
-	@& "$(BINARY_PATH)" $(ARGS)
+	@"$(BINARY_PATH)" $(ARGS)
 
 test:
 	@$(GO) test ./...
@@ -41,4 +36,5 @@ fmt:
 	@$(GO) fmt ./...
 
 clean:
-	@if (Test-Path "$(OUTPUT_DIR)") { Remove-Item -Recurse -Force "$(OUTPUT_DIR)" }
+	@echo "Cleaning $(OUTPUT_DIR)..."
+	@if exist "$(OUTPUT_DIR)" rmdir /s /q "$(OUTPUT_DIR)"

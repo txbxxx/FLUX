@@ -12,7 +12,7 @@ AI Sync Manager 是一个本地优先的 AI 工具配置管理器，当前主线
 
 ## 当前状态
 
-当前 `master` 已不再包含 Wails / Vue 桌面入口，仓库主入口是：
+仓库主入口：
 
 - CLI：`cmd/ai-sync`
 - 终端界面：`ai-sync tui`
@@ -142,8 +142,4 @@ go test ./...
 make build
 ```
 
-如果你刚从旧分支切回主线，需要注意：
-
-- 旧的 `main.go` / `app.go` / `wails.json` 已移除
-- `frontend/` 已不再是当前主线入口
-- 命令入口统一收敛到 `cmd/ai-sync/main.go`
+如果你刚从旧分支切回主线，命令入口统一收敛到 `cmd/ai-sync/main.go`。
