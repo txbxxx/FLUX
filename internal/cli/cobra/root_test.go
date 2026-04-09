@@ -244,13 +244,10 @@ func TestExecuteScanCommandPrintsToolSummary(t *testing.T) {
 	if len(workflow.scanInput.Apps) != 0 {
 		t.Fatalf("expected no app filters, got %+v", workflow.scanInput)
 	}
-	if !strings.Contains(stdout.String(), "Codex") ||
-		!strings.Contains(stdout.String(), "Codex（全局）") ||
+	if !strings.Contains(stdout.String(), "Codex（全局）") ||
 		!strings.Contains(stdout.String(), "demo（Codex 项目）") ||
-		!strings.Contains(stdout.String(), "项目配置目录: .codex/") ||
-		!strings.Contains(stdout.String(), "主配置: config.toml") ||
-		!strings.Contains(stdout.String(), "技能目录: skills") ||
-		!strings.Contains(stdout.String(), "代理规则: AGENTS.md") {
+		!strings.Contains(stdout.String(), "可同步") ||
+		!strings.Contains(stdout.String(), "2 项") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 	if stderr.Len() != 0 {
@@ -331,7 +328,7 @@ func TestExecuteScanListCommandPrintsScanResult(t *testing.T) {
 	if len(workflow.scanInput.Apps) != 1 || workflow.scanInput.Apps[0] != "claude" {
 		t.Fatalf("unexpected scan input: %+v", workflow.scanInput)
 	}
-	if !strings.Contains(stdout.String(), "Claude（全局）") || !strings.Contains(stdout.String(), "检测结果: 可同步") {
+	if !strings.Contains(stdout.String(), "Claude（全局）") || !strings.Contains(stdout.String(), "可同步") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 }
@@ -469,7 +466,7 @@ func TestExecuteScanCommandPrintsNotSyncableReason(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
-	if !strings.Contains(stdout.String(), "Claude") || !strings.Contains(stdout.String(), "原因: 找到了配置目录，但未识别到可同步的配置文件") {
+	if !strings.Contains(stdout.String(), "Claude（全局）") || !strings.Contains(stdout.String(), "暂不可同步") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 }

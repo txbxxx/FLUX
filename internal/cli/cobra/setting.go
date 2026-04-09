@@ -8,6 +8,7 @@ import (
 	spcobra "github.com/spf13/cobra"
 
 	"ai-sync-manager/internal/app/usecase"
+	"ai-sync-manager/internal/cli/output"
 )
 
 func newSettingCommand(deps Dependencies) *spcobra.Command {
@@ -225,29 +226,26 @@ func printSettingList(w io.Writer, result *usecase.ListAISettingsResult) {
 		return
 	}
 
-	fmt.Fprintf(w, "配置列表（共 %d 个）\n\n", result.Total)
+	tbl := &output.Table{
+		Columns: []output.Column{
+			{Title: "名称"},
+			{Title: "Base URL"},
+			{Title: "Opus 模型"},
+			{Title: "Sonnet 模型"},
+		},
+		Footer: fmt.Sprintf("当前生效配置: %s", result.Current),
+	}
 	for _, item := range result.Items {
-		prefix := "  "
+		name := item.Name
 		if item.IsCurrent {
-			prefix = "* "
+			name = "* " + name
 		}
-		fmt.Fprintf(w, "%s%s\n", prefix, item.Name)
-		fmt.Fprintf(w, "    Base URL: %s\n", item.BaseURL)
-		if item.OpusModel != "" {
-			fmt.Fprintf(w, "    Opus 模型: %s\n", item.OpusModel)
-		}
-		if item.SonnetModel != "" {
-			fmt.Fprintf(w, "    Sonnet 模型: %s\n", item.SonnetModel)
-		}
-		if item.IsCurrent {
-			fmt.Fprintf(w, "    (当前生效)\n")
-		}
-		fmt.Fprintln(w)
+		tbl.Rows = append(tbl.Rows, output.Row{
+			Cells:     []string{name, item.BaseURL, item.OpusModel, item.SonnetModel},
+			Highlight: item.IsCurrent,
+		})
 	}
-
-	if result.Current != "" {
-		fmt.Fprintf(w, "当前生效配置: %s\n", result.Current)
-	}
+	fmt.Fprint(w, tbl.Render())
 }
 
 // printSwitchResult 输出切换结果。

@@ -19,7 +19,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 				return err
 			}
 
-			printScanResult(cmd.OutOrStdout(), result)
+			printScanResult(cmd.OutOrStdout(), result, false)
 			return nil
 		},
 	}
@@ -77,6 +77,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 	}
 	removeCommand.Flags().BoolVarP(&removeProjectMode, "project", "p", false, "删除已注册项目")
 
+	var verbose bool
 	listCommand := &spcobra.Command{
 		Use:   "list [app-or-project...]",
 		Short: "查看当前扫描结果",
@@ -85,10 +86,11 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 			if err != nil {
 				return err
 			}
-			printScanResult(cmd.OutOrStdout(), result)
+			printScanResult(cmd.OutOrStdout(), result, verbose)
 			return nil
 		},
 	}
+	listCommand.Flags().BoolVarP(&verbose, "verbose", "v", false, "显示详细配置项")
 
 	rulesCommand := &spcobra.Command{
 		Use:   "rules [app-or-project]",

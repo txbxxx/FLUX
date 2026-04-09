@@ -54,7 +54,13 @@ ai-sync-manager/
 │   │   ├── snapshot_create.go      # snapshot create
 │   │   ├── snapshot_list.go        # snapshot list
 │   │   ├── snapshot_delete.go      # snapshot delete
+│   │   ├── setting.go              # setting 命令组
 │   │   └── tui.go                  # tui 命令
+│   │
+│   ├── cli/output/                 # 统一 CLI 输出渲染
+│   │   ├── table.go                # 通用表格渲染器（Unicode 边框）
+│   │   ├── style.go                # 全局样式常量（颜色、间距）
+│   │   └── table_test.go           # 表格渲染测试
 │   │
 │   ├── tui/                        # Bubbletea TUI
 │   │   ├── app.go                  # Program 启动
@@ -339,7 +345,7 @@ feat: get 命令支持省略 path 参数
 | scan | `ai-sync scan [app-or-project...]` | — |
 | scan add | `ai-sync scan add <app> <path>` | `--project/-p` 注册项目 |
 | scan remove | `ai-sync scan remove <app> <path>` | `--project/-p` 删除项目 |
-| scan list | `ai-sync scan list [app-or-project]` | — |
+| scan list | `ai-sync scan list [app-or-project]` | `--verbose/-v` 显示详细配置项 |
 | scan rules | `ai-sync scan rules [app-or-project]` | — |
 | get | `ai-sync get <project> [path]` | `--edit/-e` 编辑模式 `--snapshot/-s` 浏览快照 |
 | setting create | `ai-sync setting create` | `--name` 名称 `--token` 令牌 `--api` API地址 `--opus-model` Opus模型 `--sonnet-model` Sonnet模型 |

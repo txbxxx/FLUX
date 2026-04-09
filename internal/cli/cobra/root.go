@@ -12,6 +12,7 @@ import (
 	spcobra "github.com/spf13/cobra"
 
 	"ai-sync-manager/internal/app/usecase"
+	"ai-sync-manager/internal/cli/output"
 )
 
 var errCommandHandled = errors.New("command handled")
@@ -129,47 +130,63 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "请指定子命令，例如: ai-sync scan")
 }
 
-// printScanResult 负责把扫描结果整理成面向终端的分组文本。
-func printScanResult(w io.Writer, result *usecase.ScanResult) {
-	for index, item := range result.Tools {
-		if index > 0 {
-			fmt.Fprintln(w)
-		}
+// printScanResult 负责把扫描结果渲染为统一表格。
+// verbose 为 true 时，在表格下方追加每个项目的详细配置项列表。
+func printScanResult(w io.Writer, result *usecase.ScanResult, verbose bool) {
+	if len(result.Tools) == 0 {
+		return
+	}
 
-		fmt.Fprintln(w, displayScanSummaryTitle(item))
-		fmt.Fprintf(w, "  检测结果: %s\n", item.ResultText)
-		if strings.TrimSpace(item.Path) != "" {
-			fmt.Fprintf(w, "  配置目录: %s\n", item.Path)
-		}
-
+	// 第一步：渲染精简表格
+	tbl := &output.Table{
+		Columns: []output.Column{
+			{Title: "项目"},
+			{Title: "类型"},
+			{Title: "配置目录"},
+			{Title: "状态"},
+			{Title: "可同步项"},
+		},
+	}
+	for _, item := range result.Tools {
+		projectName := displayScanSummaryTitle(item)
+		toolType := displayToolName(item.Tool)
+		configCount := ""
 		if item.ConfigCount > 0 {
-			fmt.Fprintf(w, "  可同步项: %d 项\n", item.ConfigCount)
+			configCount = fmt.Sprintf("%d 项", item.ConfigCount)
 		}
-		if strings.TrimSpace(item.Reason) != "" {
-			fmt.Fprintf(w, "  原因: %s\n", item.Reason)
-		}
-
-		if len(item.Items) == 0 {
-			continue
-		}
-
-		grouped := map[string][]usecase.ToolConfigItem{}
-		groupOrder := []string{}
-		for _, configItem := range item.Items {
-			if _, exists := grouped[configItem.Group]; !exists {
-				groupOrder = append(groupOrder, configItem.Group)
-			}
-			grouped[configItem.Group] = append(grouped[configItem.Group], configItem)
-		}
-		preferredOrder := []string{"关键配置", "扩展内容", "其他内容"}
-		slices.SortStableFunc(groupOrder, func(a, b string) int {
-			return slices.Index(preferredOrder, a) - slices.Index(preferredOrder, b)
+		tbl.Rows = append(tbl.Rows, output.Row{
+			Cells: []string{projectName, toolType, item.Path, item.ResultText, configCount},
 		})
+	}
+	fmt.Fprint(w, tbl.Render())
 
-		for _, group := range groupOrder {
-			fmt.Fprintf(w, "\n  %s:\n", group)
-			for _, configItem := range grouped[group] {
-				fmt.Fprintf(w, "    - %s: %s\n", configItem.Label, configItem.RelativePath)
+	// 第二步：verbose 模式追加详细配置项
+	if verbose {
+		for _, item := range result.Tools {
+			if len(item.Items) == 0 {
+				continue
+			}
+			fmt.Fprintln(w)
+			fmt.Fprintf(w, "%s 详细配置:\n", displayScanSummaryTitle(item))
+
+			grouped := map[string][]usecase.ToolConfigItem{}
+			groupOrder := []string{}
+			for _, configItem := range item.Items {
+				if _, exists := grouped[configItem.Group]; !exists {
+					groupOrder = append(groupOrder, configItem.Group)
+				}
+				grouped[configItem.Group] = append(grouped[configItem.Group], configItem)
+			}
+			preferredOrder := []string{"关键配置", "扩展内容", "其他内容"}
+			slices.SortStableFunc(groupOrder, func(a, b string) int {
+				return slices.Index(preferredOrder, a) - slices.Index(preferredOrder, b)
+			})
+
+			for _, group := range groupOrder {
+				fmt.Fprintf(w, "  %s:\n", group)
+				for _, configItem := range grouped[group] {
+					fmt.Fprintf(w, "    - %s: %s\n", configItem.Label, configItem.RelativePath)
+				}
 			}
 		}
 	}
@@ -226,74 +243,30 @@ func printSnapshotList(w io.Writer, result *usecase.ListSnapshotsResult) {
 		return
 	}
 
-	// 动态计算每列最大宽度，解决中英文混排对齐问题。
-	headers := []string{"ID", "名称", "项目", "说明", "文件数", "创建时间"}
-	rows := make([][]string, 0, len(result.Items))
+	tbl := &output.Table{
+		Columns: []output.Column{
+			{Title: "ID"},
+			{Title: "名称"},
+			{Title: "项目"},
+			{Title: "说明"},
+			{Title: "文件数"},
+			{Title: "创建时间"},
+		},
+		Footer: fmt.Sprintf("共 %d 条快照", result.Total),
+	}
 	for _, item := range result.Items {
-		rows = append(rows, []string{
-			item.ID,
-			item.Name,
-			item.Project,
-			item.Message,
-			fmt.Sprintf("%d", item.FileCount),
-			item.CreatedAt.Format("2006-01-02 15:04"),
+		tbl.Rows = append(tbl.Rows, output.Row{
+			Cells: []string{
+				item.ID,
+				item.Name,
+				item.Project,
+				item.Message,
+				fmt.Sprintf("%d", item.FileCount),
+				item.CreatedAt.Format("2006-01-02 15:04"),
+			},
 		})
 	}
-
-	widths := make([]int, len(headers))
-	for i, h := range headers {
-		widths[i] = displayWidth(h)
-	}
-	for _, row := range rows {
-		for i, v := range row {
-			if dw := displayWidth(v); dw > widths[i] {
-				widths[i] = dw
-			}
-		}
-	}
-
-	// 表头
-	printAlignedRow(w, headers, widths)
-	// 分隔线
-	seps := make([]string, len(widths))
-	for i, w := range widths {
-		seps[i] = strings.Repeat("-", w)
-	}
-	printAlignedRow(w, seps, widths)
-	// 数据行
-	for _, row := range rows {
-		printAlignedRow(w, row, widths)
-	}
-	fmt.Fprintf(w, "\n共 %d 条快照\n", result.Total)
-}
-
-// displayWidth 计算字符串在终端中的显示宽度。
-// 中文字符和全角字符占 2 列宽，其余占 1 列宽。
-func displayWidth(s string) int {
-	w := 0
-	for _, r := range s {
-		if r > 0x7F {
-			w += 2
-		} else {
-			w++
-		}
-	}
-	return w
-}
-
-// printAlignedRow 按列宽对齐输出一行，使用动态填充确保中英文混排对齐。
-func printAlignedRow(w io.Writer, values []string, widths []int) {
-	for i, v := range values {
-		if i > 0 {
-			fmt.Fprint(w, " | ")
-		}
-		padding := widths[i] - displayWidth(v)
-		if padding < 0 {
-			padding = 0
-		}
-		fmt.Fprint(w, v+strings.Repeat(" ", padding))
-	}
-	fmt.Fprintln(w)
+	fmt.Fprint(w, tbl.Render())
 }
 
 func printError(w io.Writer, err error) {
