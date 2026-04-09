@@ -87,7 +87,7 @@ func NewRootCommand(deps Dependencies) *spcobra.Command {
 	return root
 }
 
-// Execute 负责执行命令，并把“已自行输出帮助”的情况转换为稳定退出码。
+// Execute 负责执行命令，并把"已自行输出帮助"的情况转换为稳定退出码。
 func Execute(deps Dependencies, args []string) int {
 	cmd := NewRootCommand(deps)
 	cmd.SetArgs(args)
@@ -192,41 +192,64 @@ func printScanResult(w io.Writer, result *usecase.ScanResult, verbose bool) {
 	}
 }
 
-// printScanRuleList 把默认规则、自定义规则和项目规则合并成稳定输出。
+// printScanRuleList 把默认规则、自定义规则和项目规则用表格渲染输出。
 func printScanRuleList(w io.Writer, result *usecase.ListScanRulesResult) {
 	if strings.TrimSpace(result.App) != "" {
-		fmt.Fprintf(w, "%s 规则\n\n", displayToolName(result.App))
+		fmt.Fprintf(w, "%s 规则\n\n", output.HeaderStyle.Render(displayToolName(result.App)))
 	}
 
-	fmt.Fprintln(w, "默认全局规则:")
+	// 第一步：默认全局规则
+	fmt.Fprintln(w, output.HeaderStyle.Render("默认全局规则:"))
+	tbl := &output.Table{
+		Columns: []output.Column{{Title: "路径"}},
+	}
 	for _, item := range result.DefaultGlobalRules {
-		fmt.Fprintf(w, "  - %s\n", item.Path)
+		tbl.Rows = append(tbl.Rows, output.Row{Cells: []string{item.Path}})
 	}
+	fmt.Fprint(w, tbl.Render())
 
+	// 第二步：已注册项目扫描模板
 	if len(result.RegisteredProjects) > 0 && len(result.ProjectRuleTemplates) > 0 {
-		fmt.Fprintln(w, "\n已注册项目扫描模板:")
-		for _, item := range result.ProjectRuleTemplates {
-			fmt.Fprintf(w, "  - %s\n", item.Path)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, output.HeaderStyle.Render("已注册项目扫描模板:"))
+		tblTemplate := &output.Table{
+			Columns: []output.Column{{Title: "路径"}},
 		}
+		for _, item := range result.ProjectRuleTemplates {
+			tblTemplate.Rows = append(tblTemplate.Rows, output.Row{Cells: []string{item.Path}})
+		}
+		fmt.Fprint(w, tblTemplate.Render())
 	}
 
-	fmt.Fprintln(w, "\n自定义规则:")
+	// 第三步：自定义规则
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, output.HeaderStyle.Render("自定义规则:"))
+	tblCustom := &output.Table{
+		Columns: []output.Column{{Title: "路径"}},
+	}
 	if len(result.CustomRules) == 0 {
-		fmt.Fprintln(w, "  - 暂无")
+		tblCustom.Rows = append(tblCustom.Rows, output.Row{Cells: []string{"暂无"}})
 	} else {
 		for _, item := range result.CustomRules {
-			fmt.Fprintf(w, "  - %s\n", item.Path)
+			tblCustom.Rows = append(tblCustom.Rows, output.Row{Cells: []string{item.Path}})
 		}
 	}
+	fmt.Fprint(w, tblCustom.Render())
 
-	fmt.Fprintln(w, "\n已注册项目:")
+	// 第四步：已注册项目
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, output.HeaderStyle.Render("已注册项目:"))
+	tblProjects := &output.Table{
+		Columns: []output.Column{{Title: "名称"}, {Title: "路径"}},
+	}
 	if len(result.RegisteredProjects) == 0 {
-		fmt.Fprintln(w, "  - 暂无")
+		tblProjects.Rows = append(tblProjects.Rows, output.Row{Cells: []string{"暂无", ""}})
 	} else {
 		for _, item := range result.RegisteredProjects {
-			fmt.Fprintf(w, "  - %s: %s\n", item.Name, item.Path)
+			tblProjects.Rows = append(tblProjects.Rows, output.Row{Cells: []string{item.Name, item.Path}})
 		}
 	}
+	fmt.Fprint(w, tblProjects.Render())
 }
 
 // 其余 print* 函数都是 cobra 层的纯展示逻辑，不承载业务判断。

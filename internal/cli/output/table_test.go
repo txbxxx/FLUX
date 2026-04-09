@@ -195,6 +195,60 @@ func TestTableRenderMultipleRowsAlignment(t *testing.T) {
 	}
 }
 
+func TestTableRenderRowSeparators(t *testing.T) {
+	tbl := &Table{
+		Columns: []Column{
+			{Title: "名称"},
+			{Title: "状态"},
+		},
+		Rows: []Row{
+			{Cells: []string{"a", "ok"}},
+			{Cells: []string{"b", "err"}},
+			{Cells: []string{"c", "ok"}},
+		},
+	}
+	result := tbl.Render()
+	lines := strings.Split(result, "\n")
+
+	// 预期行数：顶边框 + 表头 + 表头分隔线 + 3数据行 + 2行间分隔线 + 底边框 = 9 行
+	expectedLines := 9
+	if len(lines) != expectedLines {
+		t.Errorf("3行数据应有 %d 行输出, got %d: %v", expectedLines, len(lines), lines)
+	}
+
+	// 验证行间分隔线存在（第 5 行和第 7 行，0-indexed 为 4 和 6）
+	// 结构：顶边框[0], 表头[1], 表头分隔线[2], 数据1[3], 行间分隔线[4], 数据2[5], 行间分隔线[6], 数据3[7], 底边框[8]
+	if !strings.Contains(lines[4], "├") || !strings.Contains(lines[4], "┼") {
+		t.Errorf("第1条行间分隔线缺失: %s", lines[4])
+	}
+	if !strings.Contains(lines[6], "├") || !strings.Contains(lines[6], "┼") {
+		t.Errorf("第2条行间分隔线缺失: %s", lines[6])
+	}
+	// 底边框应为 └──┴──┘
+	if !strings.Contains(lines[8], "└") || !strings.Contains(lines[8], "┴") {
+		t.Errorf("底边框不正确: %s", lines[8])
+	}
+}
+
+func TestTableRenderSingleRowNoSeparator(t *testing.T) {
+	tbl := &Table{
+		Columns: []Column{
+			{Title: "名称"},
+		},
+		Rows: []Row{
+			{Cells: []string{"only"}},
+		},
+	}
+	result := tbl.Render()
+	// 单行数据不应有行间分隔线
+	// 结构：顶边框 + 表头 + 表头分隔线 + 1数据行 + 底边框 = 5 行
+	lines := strings.Split(result, "\n")
+	expectedLines := 5
+	if len(lines) != expectedLines {
+		t.Errorf("1行数据应有 %d 行输出, got %d: %v", expectedLines, len(lines), lines)
+	}
+}
+
 // displayPipePositions 返回每行中 │ 出现的显示列位置（忽略 ANSI 转义码）。
 func displayPipePositions(s string) []int {
 	var pos []int
