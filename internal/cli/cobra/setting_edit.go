@@ -83,10 +83,3 @@ func printEditResult(w io.Writer, result *usecase.EditAISettingResult) {
 	fmt.Fprintf(w, "\n更新时间: %s\n", result.UpdatedAt.Format(time.RFC3339))
 }
 
-// runEditorMode 运行编辑器模式。
-func runEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string) error {
-	// TODO: 实现编辑器模式
-	// Task 7 将实现此功能
-	fmt.Fprintf(cmd.ErrOrStderr(), "编辑器模式将在后续任务中实现\n")
-	return nil
-}
