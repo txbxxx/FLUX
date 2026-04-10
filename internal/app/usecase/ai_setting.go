@@ -23,6 +23,7 @@ type AISettingManager interface {
 	List() ([]*typesSetting.AISettingRecord, error)
 	ListPaginated(limit, offset int) ([]*typesSetting.AISettingRecord, int, error)
 	Delete(name string) error
+	UpdateByName(oldName string, record *typesSetting.AISettingRecord) error
 }
 
 // CreateAISettingInput 创建 AI 配置的输入。
@@ -676,4 +677,182 @@ func extractErrorMessage(err error) string {
 		return userErr.Message
 	}
 	return err.Error()
+}
+
+// EditAISettingInput 编辑配置的输入。
+type EditAISettingInput struct {
+	Name        string // 配置名称，必填
+	NewName     string // 新名称，可选
+	Token       string // 新 Token，可选
+	BaseURL     string // 新 API 地址，可选
+	OpusModel   string // 新 Opus 模型，可选
+	SonnetModel string // 新 Sonnet 模型，可选
+}
+
+// EditAISettingResult 编辑配置的返回值。
+type EditAISettingResult struct {
+	ID        string
+	Name      string
+	UpdatedAt time.Time
+	Changes   []typesSetting.FieldChange
+	IsCurrent bool
+}
+
+// EditAISetting 编辑 AI 配置。
+func (w *LocalWorkflow) EditAISetting(_ context.Context, input EditAISettingInput) (*EditAISettingResult, error) {
+	// 参数校验
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, &UserError{
+			Message:    "编辑配置失败：名称不能为空",
+			Suggestion: "请指定要编辑的配置名称",
+			Err:        errors.New("empty name"),
+		}
+	}
+
+	if w.aiSettingManager == nil {
+		return nil, &UserError{
+			Message:    "编辑配置失败：数据库未初始化",
+			Suggestion: "请检查应用数据目录是否正常",
+			Err:        errors.New("ai setting manager not initialized"),
+		}
+	}
+
+	// 读取现有配置
+	existing, err := w.aiSettingManager.GetByName(name)
+	if err != nil {
+		return nil, &UserError{
+			Message:    "编辑配置失败：配置不存在",
+			Suggestion: "请检查配置名称是否正确",
+			Err:        err,
+		}
+	}
+
+	// 判断是否为当前配置
+	currentInfo, _ := w.getCurrentSettingInfo()
+	isCurrent := currentInfo != nil && existing.Token == currentInfo.Token && existing.BaseURL == currentInfo.BaseURL
+
+	// 构建更新数据
+	updated := &typesSetting.AISettingRecord{
+		ID:          existing.ID,
+		Name:        existing.Name,
+		Token:       existing.Token,
+		BaseURL:     existing.BaseURL,
+		OpusModel:   existing.OpusModel,
+		SonnetModel: existing.SonnetModel,
+		CreatedAt:   existing.CreatedAt,
+		UpdatedAt:   time.Now(),
+	}
+
+	changes := make([]typesSetting.FieldChange, 0)
+
+	// 处理新名称
+	if input.NewName != "" {
+		newName := strings.TrimSpace(input.NewName)
+		if newName != existing.Name {
+			// 检查新名称是否已存在
+			if conflict, _ := w.aiSettingManager.GetByName(newName); conflict != nil && conflict.ID != existing.ID {
+				return nil, &UserError{
+					Message:    "编辑配置失败：配置名称已存在",
+					Suggestion: fmt.Sprintf("配置 %q 已存在，请使用其他名称", newName),
+					Err:        errors.New("duplicate name"),
+				}
+			}
+			changes = append(changes, typesSetting.FieldChange{
+				Field:    "name",
+				OldValue: existing.Name,
+				NewValue: newName,
+			})
+			updated.Name = newName
+		}
+	}
+
+	// 处理 Token
+	if input.Token != "" {
+		changes = append(changes, typesSetting.FieldChange{
+			Field:    "token",
+			OldValue: maskTokenForDisplay(existing.Token),
+			NewValue: maskTokenForDisplay(input.Token),
+		})
+		updated.Token = input.Token
+	}
+
+	// 处理 BaseURL
+	if input.BaseURL != "" {
+		baseURL := strings.TrimSpace(input.BaseURL)
+		if baseURL != "" {
+			if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+				return nil, &UserError{
+					Message:    "编辑配置失败：API 地址格式不正确",
+					Suggestion: "API 地址必须以 http:// 或 https:// 开头",
+					Err:        errors.New("invalid base_url format"),
+				}
+			}
+			changes = append(changes, typesSetting.FieldChange{
+				Field:    "base_url",
+				OldValue: existing.BaseURL,
+				NewValue: baseURL,
+			})
+			updated.BaseURL = baseURL
+		}
+	}
+
+	// 处理 OpusModel
+	if input.OpusModel != "" {
+		changes = append(changes, typesSetting.FieldChange{
+			Field:    "opus_model",
+			OldValue: existing.OpusModel,
+			NewValue: input.OpusModel,
+		})
+		updated.OpusModel = input.OpusModel
+	}
+
+	// 处理 SonnetModel
+	if input.SonnetModel != "" {
+		changes = append(changes, typesSetting.FieldChange{
+			Field:    "sonnet_model",
+			OldValue: existing.SonnetModel,
+			NewValue: input.SonnetModel,
+		})
+		updated.SonnetModel = input.SonnetModel
+	}
+
+	// 如果没有任何变更
+	if len(changes) == 0 {
+		return &EditAISettingResult{
+			ID:        existing.ID,
+			Name:      existing.Name,
+			UpdatedAt: existing.UpdatedAt,
+			Changes:   nil,
+			IsCurrent: isCurrent,
+		}, nil
+	}
+
+	// 执行更新
+	if err := w.aiSettingManager.UpdateByName(name, updated); err != nil {
+		return nil, &UserError{
+			Message:    "编辑配置失败",
+			Suggestion: "请检查数据库连接后重试",
+			Err:        err,
+		}
+	}
+
+	return &EditAISettingResult{
+		ID:        updated.ID,
+		Name:      updated.Name,
+		UpdatedAt: updated.UpdatedAt,
+		Changes:   changes,
+		IsCurrent: isCurrent,
+	}, nil
+}
+
+// maskTokenForDisplay 脱敏显示 token（复用现有逻辑）。
+func maskTokenForDisplay(token string) string {
+	if len(token) > 8 {
+		return token[:4] + "****" + token[len(token)-4:]
+	}
+	if len(token) > 0 {
+		return "****"
+	}
+	return ""
 }

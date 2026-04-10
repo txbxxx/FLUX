@@ -71,6 +71,7 @@ type Workflow interface {
 	GetAISetting(ctx context.Context, input GetAISettingInput) (*GetAISettingResult, error)
 	DeleteAISetting(ctx context.Context, input DeleteAISettingInput) error
 	SwitchAISetting(ctx context.Context, input SwitchAISettingInput) (*SwitchAISettingResult, error)
+	EditAISetting(ctx context.Context, input EditAISettingInput) (*EditAISettingResult, error)
 	// 新增批量方法
 	GetAISettingsBatch(ctx context.Context, input GetAISettingsBatchInput) (*GetAISettingsBatchResult, error)
 	DeleteAISettingsBatch(ctx context.Context, input DeleteAISettingsBatchInput) (*DeleteAISettingsBatchResult, error)
