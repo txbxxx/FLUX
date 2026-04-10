@@ -59,6 +59,9 @@ type stubWorkflow struct {
 	deleteAISettingsBatchInput  usecase.DeleteAISettingsBatchInput
 	deleteAISettingsBatchResult *usecase.DeleteAISettingsBatchResult
 	deleteAISettingsBatchErr    error
+	editAISettingInput          usecase.EditAISettingInput
+	editAISettingResult         *usecase.EditAISettingResult
+	editAISettingErr            error
 }
 
 func (s *stubWorkflow) Scan(_ context.Context, input usecase.ScanInput) (*usecase.ScanResult, error) {
@@ -149,6 +152,11 @@ func (s *stubWorkflow) GetAISettingsBatch(_ context.Context, input usecase.GetAI
 func (s *stubWorkflow) DeleteAISettingsBatch(_ context.Context, input usecase.DeleteAISettingsBatchInput) (*usecase.DeleteAISettingsBatchResult, error) {
 	s.deleteAISettingsBatchInput = input
 	return s.deleteAISettingsBatchResult, s.deleteAISettingsBatchErr
+}
+
+func (s *stubWorkflow) EditAISetting(_ context.Context, input usecase.EditAISettingInput) (*usecase.EditAISettingResult, error) {
+	s.editAISettingInput = input
+	return s.editAISettingResult, s.editAISettingErr
 }
 
 type stubTUIRunner struct {
