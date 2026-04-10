@@ -118,7 +118,6 @@ ai-sync-manager/
 │   ├── logger/                     # Zap 日志
 │   └── utils/                      # 字符串/文件/转换工具
 │
-├── configs/default.yaml            # 配置模板（与 pkg/config/default.yaml 同步）
 ├── docs/                           # 文档（使用指南/架构设计/_old 存档）
 ├── go.mod · go.sum · Makefile · .golangci.yml · README.md
 ```
@@ -277,11 +276,10 @@ logger.Info("操作开始", zap.String("snapshot_id", id), zap.Int("file_count",
 
 ```bash
 git checkout master && git pull origin master
-git worktree add ../AToSync-feat-xxx feat/xxx
-# ... 在 worktree 中开发 ...
-git push -u origin feat/xxx
-git checkout master && git merge feat/xxx && git push origin master
-git worktree remove ../AToSync-feat-xxx && git branch -d feat/xxx
+git worktree add ../AToSync-<prefix>-<desc> <prefix>/<desc>
+# ... 在 worktree 中开发、测试、提交 ...
+git push -u origin <prefix>/<desc>
+# 创建 PR 合并，不直接 merge 到 master
 ```
 
 **分支前缀**：`feat/` `fix/` `refactor/` `docs/` `test/` `chore/` `perf/` `style/`
