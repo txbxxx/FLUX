@@ -35,6 +35,7 @@ type Workflow interface {
 	GetAISetting(ctx context.Context, input usecase.GetAISettingInput) (*usecase.GetAISettingResult, error)
 	DeleteAISetting(ctx context.Context, input usecase.DeleteAISettingInput) error
 	SwitchAISetting(ctx context.Context, input usecase.SwitchAISettingInput) (*usecase.SwitchAISettingResult, error)
+	EditAISetting(ctx context.Context, input usecase.EditAISettingInput) (*usecase.EditAISettingResult, error)
 	// 新增批量方法
 	GetAISettingsBatch(ctx context.Context, input usecase.GetAISettingsBatchInput) (*usecase.GetAISettingsBatchResult, error)
 	DeleteAISettingsBatch(ctx context.Context, input usecase.DeleteAISettingsBatchInput) (*usecase.DeleteAISettingsBatchResult, error)

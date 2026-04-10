@@ -173,7 +173,9 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 		},
 	}
 
-	command.AddCommand(createCommand, listCommand, getCommand, deleteCommand, switchCommand)
+	editCommand := newSettingEditCommand(deps)
+
+	command.AddCommand(createCommand, listCommand, getCommand, deleteCommand, switchCommand, editCommand)
 	return command
 }
 
