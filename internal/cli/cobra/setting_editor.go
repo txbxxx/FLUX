@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -40,13 +41,21 @@ func runEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string)
 	}
 
 	// 生成临时文件
-	tempDir := os.TempDir()
-	ext := "." + format
-	tempFile, err := os.CreateTemp(tempDir, "ai-sync-edit-*"+ext)
-	if err != nil {
-		return fmt.Errorf("创建临时文件失败: %w", err)
+	// 使用用户主目录而非系统临时目录，避免 notepad 另存为问题
+	homeDir, _ := os.UserHomeDir()
+	tempDir := filepath.Join(homeDir, ".ai-sync-temp")
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		// 降级到系统临时目录
+		tempDir = os.TempDir()
 	}
-	tempPath := tempFile.Name()
+
+	// 使用固定文件名而非随机名称，让 notepad 认为这是正常文件
+	ext := "." + format
+	tempFileName := "ai-sync-edit-" + name + ext
+	tempPath := filepath.Join(tempDir, tempFileName)
+
+	// 删除旧文件（如果存在）
+	os.Remove(tempPath)
 	defer os.Remove(tempPath)
 
 	// 写入模板内容
@@ -113,9 +122,14 @@ func generateEditorTemplate(setting *usecase.GetAISettingResult, format string) 
 		lines := []string{
 			"# AI 配置编辑",
 			"#",
-			"# 重要：请直接保存（Ctrl+S），不要使用\"另存为\"",
-			"# 字段值为 <unchanged> 时保持原值",
-			"# 留空（空字符串）表示清空该字段",
+			"# 操作说明：",
+			"# 1. 按 Ctrl+S 直接保存（不要\"另存为\"）",
+			"# 2. 关闭窗口后自动应用变更",
+			"#",
+			"# 字段说明：",
+			"# - <unchanged> = 保持原值",
+			"# - 留空（空字符串）= 清空该字段",
+			"# - 其他值 = 更新为新值",
 			"#",
 			"",
 		}
