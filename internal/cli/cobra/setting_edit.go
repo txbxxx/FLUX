@@ -24,7 +24,7 @@ func newSettingEditCommand(deps Dependencies) *spcobra.Command {
 
 			// 编辑器模式
 			if useEditor {
-				return runEditorMode(cmd, deps, name, format)
+				return runSettingEditorMode(cmd, deps, name, format)
 			}
 
 			// 命令行参数模式

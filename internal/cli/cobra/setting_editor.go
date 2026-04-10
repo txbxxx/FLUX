@@ -1,6 +1,7 @@
 package cobra
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"ai-sync-manager/internal/app/usecase"
+	"ai-sync-manager/internal/tui"
 	typesSetting "ai-sync-manager/internal/types/setting"
 )
 
@@ -24,7 +26,27 @@ type EditorConfig struct {
 	Format  string // 文件格式：yaml 或 json
 }
 
-// runEditorMode 运行编辑器模式。
+// runSettingEditorMode 运行 TUI 内置编辑器模式。
+func runSettingEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string) error {
+	// 读取现有配置
+	getResult, err := deps.Workflow.GetAISetting(cmd.Context(), usecase.GetAISettingInput{Name: name})
+	if err != nil {
+		return err
+	}
+
+	// 使用 TUI 编辑器
+	editor := tui.NewSettingEditor(os.Stdin, os.Stdout)
+	return editor.Run(context.Background(), getResult, func(input *usecase.EditAISettingInput) error {
+		result, err := deps.Workflow.EditAISetting(cmd.Context(), *input)
+		if err != nil {
+			return err
+		}
+		printEditResult(cmd.OutOrStdout(), result)
+		return nil
+	})
+}
+
+// runEditorMode 运行外部编辑器模式（已弃用，保留向后兼容）。
 func runEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string) error {
 	// 读取现有配置
 	getResult, err := deps.Workflow.GetAISetting(cmd.Context(), usecase.GetAISettingInput{Name: name})
