@@ -12,7 +12,7 @@ import (
 
 // newSettingEditCommand 创建 edit 子命令。
 func newSettingEditCommand(deps Dependencies) *spcobra.Command {
-	var newName, token, api, opusModel, sonnetModel, format string
+	var newName, token, api, opusModel, sonnetModel string
 	var useEditor bool
 
 	command := &spcobra.Command{
@@ -24,7 +24,7 @@ func newSettingEditCommand(deps Dependencies) *spcobra.Command {
 
 			// 编辑器模式
 			if useEditor {
-				return runSettingEditorMode(cmd, deps, name, format)
+				return runSettingEditorMode(cmd, deps, name)
 			}
 
 			// 命令行参数模式
@@ -50,8 +50,7 @@ func newSettingEditCommand(deps Dependencies) *spcobra.Command {
 	command.Flags().StringVarP(&api, "api", "a", "", "新 API base URL")
 	command.Flags().StringVarP(&opusModel, "opus-model", "o", "", "新 Opus 模型")
 	command.Flags().StringVarP(&sonnetModel, "sonnet-model", "s", "", "新 Sonnet 模型")
-	command.Flags().BoolVarP(&useEditor, "editor", "e", false, "使用编辑器模式")
-	command.Flags().StringVarP(&format, "format", "f", "yaml", "文件格式（yaml 或 json）")
+	command.Flags().BoolVarP(&useEditor, "editor", "e", false, "使用 TUI 编辑器模式")
 
 	return command
 }

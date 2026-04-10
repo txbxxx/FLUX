@@ -27,7 +27,7 @@ type EditorConfig struct {
 }
 
 // runSettingEditorMode 运行 TUI 内置编辑器模式。
-func runSettingEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string) error {
+func runSettingEditorMode(cmd *spcobra.Command, deps Dependencies, name string) error {
 	// 读取现有配置
 	getResult, err := deps.Workflow.GetAISetting(cmd.Context(), usecase.GetAISettingInput{Name: name})
 	if err != nil {
