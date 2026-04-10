@@ -74,15 +74,9 @@ tools:
       - path: "output-styles"
         category: "config"
         is_dir: true
-      - path: "plugins/blocklist.json"
+      - path: "plugins"
         category: "plugins"
-        is_dir: false
-      - path: "plugins/installed_plugins.json"
-        category: "plugins"
-        is_dir: false
-      - path: "plugins/known_marketplaces.json"
-        category: "plugins"
-        is_dir: false
+        is_dir: true
     project_rules:
       - path: ".claude"
         category: "config"

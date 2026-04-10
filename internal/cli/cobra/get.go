@@ -2,6 +2,8 @@ package cobra
 
 import (
 	"errors"
+	"path/filepath"
+	"strings"
 
 	spcobra "github.com/spf13/cobra"
 
@@ -19,7 +21,7 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			path := ""
 			if len(args) > 1 {
-				path = args[1]
+				path = strings.Join(args[1:], string(filepath.Separator))
 			}
 			result, err := deps.Workflow.GetConfig(cmd.Context(), usecase.GetConfigInput{
 				Tool:     args[0],
