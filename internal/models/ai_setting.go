@@ -94,13 +94,60 @@ func (dao *AISettingDAO) Delete(name string) error {
 	return nil
 }
 
+// UpdateByName 按名称更新 AI 配置。
+// 如果新名称与原名称不同，会先检查新名称是否已存在。
+func (dao *AISettingDAO) UpdateByName(oldName string, setting *AISetting) error {
+	// 开启事务
+	tx := dao.db.GetConn().Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if tx.Error != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 如果名称发生变化，检查新名称是否已存在
+	if oldName != setting.Name {
+		var existing int64
+		if err := tx.Model(&AISetting{}).Where("name = ? AND id != ?", setting.Name, setting.ID).Count(&existing).Error; err != nil {
+			return err
+		}
+		if existing > 0 {
+			return ErrDuplicateName
+		}
+	}
+
+	// 执行更新
+	result := tx.Model(&AISetting{}).Where("name = ?", oldName).Updates(setting)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
+	return tx.Commit().Error
+}
+
 // ErrRecordNotFound 表示记录未找到的错误。
 var ErrRecordNotFound = RecordNotFound("记录未找到")
+
+// ErrDuplicateName 表示名称重复错误。
+var ErrDuplicateName = DuplicateName("配置名称已存在")
 
 // RecordNotFound 记录未找到错误类型。
 type RecordNotFound string
 
 func (e RecordNotFound) Error() string {
+	return string(e)
+}
+
+// DuplicateName 名称重复错误类型。
+type DuplicateName string
+
+func (e DuplicateName) Error() string {
 	return string(e)
 }
 
