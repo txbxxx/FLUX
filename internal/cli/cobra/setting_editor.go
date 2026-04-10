@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	spcobra "github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -55,20 +56,27 @@ func runEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string)
 	}
 
 	// 启动编辑器
-	editor := getEditor()
-	editorCmd := exec.Command(editor, tempPath)
-	editorCmd.Stdin = os.Stdin
-	editorCmd.Stdout = os.Stdout
-	editorCmd.Stderr = os.Stderr
+	editorName, editorArgs := getEditorCommand()
+	cmdArgs := append(editorArgs, tempPath)
+	execCmd := exec.Command(editorName, cmdArgs...)
 
-	if err := editorCmd.Run(); err != nil {
+	if err := execCmd.Run(); err != nil {
 		return fmt.Errorf("启动编辑器失败: %w", err)
 	}
+
+	// 短暂等待确保编辑器完全释放文件句柄
+	// 为什么：Windows GUI 编辑器可能需要时间刷新文件缓冲区
+	time.Sleep(100 * time.Millisecond)
 
 	// 读取编辑后的内容
 	editedContent, err := os.ReadFile(tempPath)
 	if err != nil {
 		return fmt.Errorf("读取编辑后文件失败: %w", err)
+	}
+
+	// 检查文件是否被修改（通过文件大小或内容）
+	if len(editedContent) == 0 {
+		return fmt.Errorf("编辑后文件为空，请确保保存了修改")
 	}
 
 	// 解析编辑后的内容
@@ -88,10 +96,11 @@ func runEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string)
 }
 
 // generateEditorTemplate 生成编辑器模板。
+// 使用 <unchanged> 占位符表示保持原值，允许用户清空字段。
 func generateEditorTemplate(setting *usecase.GetAISettingResult, format string) string {
 	template := typesSetting.EditorTemplate{
 		Name:        setting.Name,
-		Token:       "", // 留空表示保持原值
+		Token:       "<unchanged>", // 占位符表示保持原值
 		BaseURL:     setting.BaseURL,
 		OpusModel:   setting.OpusModel,
 		SonnetModel: setting.SonnetModel,
@@ -103,7 +112,10 @@ func generateEditorTemplate(setting *usecase.GetAISettingResult, format string) 
 		// YAML 格式带注释
 		lines := []string{
 			"# AI 配置编辑",
-			"# 留空字段将保持原值（敏感信息不显示）",
+			"#",
+			"# 重要：请直接保存（Ctrl+S），不要使用\"另存为\"",
+			"# 字段值为 <unchanged> 时保持原值",
+			"# 留空（空字符串）表示清空该字段",
 			"#",
 			"",
 		}
@@ -120,6 +132,7 @@ func generateEditorTemplate(setting *usecase.GetAISettingResult, format string) 
 }
 
 // parseEditedContent 解析编辑后的内容。
+// <unchanged> 占位符会被转换为空字符串，由 EditAISetting 识别为保持原值。
 func parseEditedContent(originalName, content, format string) (*usecase.EditAISettingInput, error) {
 	var template typesSetting.EditorTemplate
 	var err error
@@ -134,6 +147,11 @@ func parseEditedContent(originalName, content, format string) (*usecase.EditAISe
 		return nil, fmt.Errorf("解析文件失败: %w", err)
 	}
 
+	// <unchanged> 占位符转换为空字符串，表示保持原值
+	if template.Token == "<unchanged>" {
+		template.Token = ""
+	}
+
 	input := &usecase.EditAISettingInput{
 		Name:        originalName,
 		NewName:     template.Name,
@@ -146,15 +164,17 @@ func parseEditedContent(originalName, content, format string) (*usecase.EditAISe
 	return input, nil
 }
 
-// getEditor 获取编辑器命令。
-func getEditor() string {
+// getEditorCommand 获取编辑器命令及参数。
+// 返回命令名和参数列表，Windows notepad 使用 start /wait 等待关闭。
+func getEditorCommand() (string, []string) {
 	editor := os.Getenv("EDITOR")
 	if editor != "" {
-		return editor
+		return editor, nil
 	}
 
 	if runtime.GOOS == "windows" {
-		return "notepad"
+		// 使用 cmd /c start /wait 等待 notepad 关闭
+		return "cmd", []string{"/c", "start", "/wait", "notepad"}
 	}
-	return "vim"
+	return "vim", nil
 }

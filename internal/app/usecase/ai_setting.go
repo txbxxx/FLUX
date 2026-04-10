@@ -768,19 +768,28 @@ func (w *LocalWorkflow) EditAISetting(_ context.Context, input EditAISettingInpu
 	}
 
 	// 处理 Token
-	if input.Token != "" {
-		changes = append(changes, typesSetting.FieldChange{
-			Field:    "token",
-			OldValue: maskTokenForDisplay(existing.Token),
-			NewValue: maskTokenForDisplay(input.Token),
-		})
-		updated.Token = input.Token
+	// <unchanged> 占位符表示保持原值（编辑器模式）
+	// 空字符串表示不修改（命令行模式，保持向后兼容）
+	if input.Token != "" && input.Token != "<unchanged>" {
+		// 新值：比较是否真的有变化
+		if input.Token != existing.Token {
+			changes = append(changes, typesSetting.FieldChange{
+				Field:    "token",
+				OldValue: maskTokenForDisplay(existing.Token),
+				NewValue: maskTokenForDisplay(input.Token),
+			})
+			updated.Token = input.Token
+		}
+	} else {
+		// <unchanged> 或空字符串：保持原值
+		updated.Token = existing.Token
 	}
 
 	// 处理 BaseURL
-	if input.BaseURL != "" {
+	if input.BaseURL != "" && input.BaseURL != "<unchanged>" {
 		baseURL := strings.TrimSpace(input.BaseURL)
-		if baseURL != "" {
+		// 新值：比较是否真的有变化
+		if baseURL != "" && baseURL != existing.BaseURL {
 			if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 				return nil, &UserError{
 					Message:    "编辑配置失败：API 地址格式不正确",
@@ -795,26 +804,41 @@ func (w *LocalWorkflow) EditAISetting(_ context.Context, input EditAISettingInpu
 			})
 			updated.BaseURL = baseURL
 		}
+	} else {
+		// <unchanged> 或空字符串：保持原值
+		updated.BaseURL = existing.BaseURL
 	}
 
 	// 处理 OpusModel
-	if input.OpusModel != "" {
-		changes = append(changes, typesSetting.FieldChange{
-			Field:    "opus_model",
-			OldValue: existing.OpusModel,
-			NewValue: input.OpusModel,
-		})
-		updated.OpusModel = input.OpusModel
+	if input.OpusModel != "" && input.OpusModel != "<unchanged>" {
+		// 新值：比较是否真的有变化
+		if input.OpusModel != existing.OpusModel {
+			changes = append(changes, typesSetting.FieldChange{
+				Field:    "opus_model",
+				OldValue: existing.OpusModel,
+				NewValue: input.OpusModel,
+			})
+			updated.OpusModel = input.OpusModel
+		}
+	} else {
+		// <unchanged> 或空字符串：保持原值
+		updated.OpusModel = existing.OpusModel
 	}
 
 	// 处理 SonnetModel
-	if input.SonnetModel != "" {
-		changes = append(changes, typesSetting.FieldChange{
-			Field:    "sonnet_model",
-			OldValue: existing.SonnetModel,
-			NewValue: input.SonnetModel,
-		})
-		updated.SonnetModel = input.SonnetModel
+	if input.SonnetModel != "" && input.SonnetModel != "<unchanged>" {
+		// 新值：比较是否真的有变化
+		if input.SonnetModel != existing.SonnetModel {
+			changes = append(changes, typesSetting.FieldChange{
+				Field:    "sonnet_model",
+				OldValue: existing.SonnetModel,
+				NewValue: input.SonnetModel,
+			})
+			updated.SonnetModel = input.SonnetModel
+		}
+	} else {
+		// <unchanged> 或空字符串：保持原值
+		updated.SonnetModel = existing.SonnetModel
 	}
 
 	// 如果没有任何变更

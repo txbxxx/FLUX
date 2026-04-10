@@ -549,10 +549,13 @@ Sonnet 模型: claude-3-sonnet-20240229
 YAML 格式示例：
 ```yaml
 # AI 配置编辑
-# 留空字段将保持原值（敏感信息不显示）
+#
+# 重要：请直接保存（Ctrl+S），不要使用"另存为"
+# 字段值为 <unchanged> 时保持原值
+# 留空（空字符串）表示清空该字段
 #
 name: glm3
-token: ""
+token: <unchanged>
 base_url: https://api.anthropic.com
 opus_model: claude-3-opus-20240229
 sonnet_model: claude-3-sonnet-20240229
@@ -562,12 +565,22 @@ JSON 格式示例：
 ```json
 {
   "name": "glm3",
-  "token": "",
+  "token": "<unchanged>",
   "base_url": "https://api.anthropic.com",
   "opus_model": "claude-3-opus-20240229",
   "sonnet_model": "claude-3-sonnet-20240229"
 }
 ```
+
+**字段说明**：
+
+| 字段值 | 含义 |
+|--------|------|
+| `<unchanged>` | 保持原值不变 |
+| 空字符串 `""` | 清空该字段 |
+| 其他值 | 更新为新值 |
+
+> **注意**：`token` 字段默认显示为 `<unchanged>`，敏感信息不会显示在编辑器中。
 
 **自定义编辑器**：
 
