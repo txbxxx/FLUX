@@ -12,7 +12,8 @@ import (
 
 // newSettingEditCommand 创建 edit 子命令。
 func newSettingEditCommand(deps Dependencies) *spcobra.Command {
-	var newName, token, api, opusModel, sonnetModel string
+	var newName, token, api, opusModel, sonnetModel, format string
+	var useEditor bool
 
 	command := &spcobra.Command{
 		Use:   "edit <name>",
@@ -21,6 +22,12 @@ func newSettingEditCommand(deps Dependencies) *spcobra.Command {
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			name := args[0]
 
+			// 编辑器模式
+			if useEditor {
+				return runEditorMode(cmd, deps, name, format)
+			}
+
+			// 命令行参数模式
 			result, err := deps.Workflow.EditAISetting(cmd.Context(), usecase.EditAISettingInput{
 				Name:        name,
 				NewName:     newName,
@@ -43,6 +50,8 @@ func newSettingEditCommand(deps Dependencies) *spcobra.Command {
 	command.Flags().StringVarP(&api, "api", "a", "", "新 API base URL")
 	command.Flags().StringVarP(&opusModel, "opus-model", "o", "", "新 Opus 模型")
 	command.Flags().StringVarP(&sonnetModel, "sonnet-model", "s", "", "新 Sonnet 模型")
+	command.Flags().BoolVarP(&useEditor, "editor", "e", false, "使用编辑器模式")
+	command.Flags().StringVarP(&format, "format", "f", "yaml", "文件格式（yaml 或 json）")
 
 	return command
 }
@@ -72,4 +81,12 @@ func printEditResult(w io.Writer, result *usecase.EditAISettingResult) {
 	}
 
 	fmt.Fprintf(w, "\n更新时间: %s\n", result.UpdatedAt.Format(time.RFC3339))
+}
+
+// runEditorMode 运行编辑器模式。
+func runEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string) error {
+	// TODO: 实现编辑器模式
+	// Task 7 将实现此功能
+	fmt.Fprintf(cmd.ErrOrStderr(), "编辑器模式将在后续任务中实现\n")
+	return nil
 }
