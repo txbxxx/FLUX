@@ -1,0 +1,149 @@
+# 快照恢复功能设计文档
+
+> 创建时间：2026-04-11
+> 阶段：第一阶段（仅恢复），远端同步和 Git 封装后续迭代
+
+---
+
+## 1. 设计背景
+
+当前快照系统支持创建、列表、删除，但不支持恢复。快照数据存储在 SQLite 数据库中（元数据 + 文件内容），`applier.go` 已预留恢复逻辑但未接入 CLI。
+
+本阶段目标：完成 **snapshot restore** 命令，让用户能将快照中的配置文件恢复到磁盘。
+
+---
+
+## 2. 设计原则
+
+- **SQLite 是唯一真相源** — 存储最新快照数据（元数据 + 文件内容）
+- **Git 对用户完全透明** — 封装在 ai-sync 内部，用户不直接接触（后续阶段实现）
+- **恢复前强制备份** — 每次恢复自动备份当前配置，万无一失
+- **预览优先** — 展示变更摘要，用户确认后才写入
+
+---
+
+## 3. 数据流
+
+```
+snapshot restore <id>
+  ↓
+从 SQLite 读快照最新数据
+  ↓
+扫描当前磁盘文件，与快照对比
+  ↓
+强制备份当前配置到临时目录
+  ↓
+展示变更摘要（新增/更新/删除/跳过）
+  ↓
+用户确认
+  ↓
+将快照文件写回原始路径
+```
+
+---
+
+## 4. CLI 命令
+
+### 4.1 命令定义
+
+```
+ai-sync snapshot restore <id-or-name>                      # 全量恢复
+ai-sync snapshot restore <id-or-name> --files <path1,path2> # 选择性恢复
+ai-sync snapshot restore <id-or-name> --dry-run             # 仅预览
+ai-sync snapshot restore <id-or-name> --force               # 跳过确认（仍备份）
+```
+
+### 4.2 参数说明
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `<id-or-name>` | 是 | 快照 ID 或名称（复用现有查找逻辑） |
+| `--files` | 否 | 指定要恢复的文件路径，逗号分隔。不传则恢复全部文件 |
+| `--dry-run` | 否 | 预览模式：只展示变更摘要，不备份不写入 |
+| `--force` | 否 | 跳过用户确认步骤，但仍自动备份 |
+
+### 4.3 输出示例
+
+正常恢复：
+
+```
+快照: 初始备份 (550e8400-...)
+即将恢复 12 个文件:
+  更新: settings.json
+  更新: .claude/CLAUDE.md
+  新增: plugins/config.json
+  跳过: skills/README.md (内容相同)
+
+备份已创建: ~/.ai-sync/backup/20260411-143022/
+
+确认恢复？[y/N]
+```
+
+---
+
+## 5. 分层调用链
+
+```
+CLI (snapshot_restore.go)
+  → UseCase (LocalWorkflow.RestoreSnapshot)
+    → Service (snapshot.Service.RestoreSnapshot)
+      → DAO (SnapshotDAO.GetByID) 读快照数据
+      → Applier (已有) 执行备份 + 写入文件
+```
+
+---
+
+## 6. 代码变更清单
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `internal/cli/cobra/snapshot_restore.go` | 新增 | CLI 命令定义、参数解析、输出渲染 |
+| `internal/types/snapshot/apply.go` | 修改 | 新增 `RestoreInput` / `RestoreResult` 结构体 |
+| `internal/app/usecase/local_workflow.go` | 修改 | 新增 `RestoreSnapshot` 方法 |
+| `internal/service/snapshot/service.go` | 修改 | 新增 `RestoreSnapshot` 方法，编排 Applier |
+| `internal/service/snapshot/applier.go` | 修改 | 调整 `ApplySnapshot` 支持选择性文件列表 |
+| `internal/cli/cobra/root.go` | 修改 | 注册 `snapshot restore` 子命令 |
+
+**不需要变更：**
+- DAO 层 — `GetByID` 已有，能读取快照 + 文件内容
+- 数据库表结构 — 现有表完全够用
+- TUI — 第一阶段不做 TUI 页面
+
+---
+
+## 7. 恢复流程详细步骤
+
+1. **查找快照** — 用 id-or-name 查询数据库，找不到则报错
+2. **文件匹配** — 如果指定了 `--files`，筛选出目标文件；否则使用全部文件
+3. **强制备份** — 遍历快照中的文件，将磁盘上已存在的文件复制到备份目录（`~/.ai-sync/backup/<timestamp>/`）
+4. **生成摘要** — 对比快照文件与磁盘文件，分类为：更新（内容不同）、新增（磁盘不存在）、跳过（内容相同）
+5. **用户确认** — 展示摘要，等待确认（`--force` 跳过）
+6. **写入文件** — 逐个写入，记录成功/失败
+7. **输出结果** — 展示恢复结果和备份路径
+
+---
+
+## 8. 错误处理
+
+| 场景 | 处理方式 |
+|------|---------|
+| 快照不存在 | 报错退出："快照 'xxx' 不存在" |
+| `--files` 指定的文件不在快照中 | 报错退出："文件 'xxx' 不在快照中" |
+| 备份失败 | 报错退出，不继续恢复 |
+| 单个文件写入失败 | 记录错误，继续恢复其他文件，最终汇总报告 |
+| 所有文件内容相同 | 提示"无需恢复，所有文件已是最新"并退出 |
+| 用户拒绝确认 | 提示"已取消"并退出，已创建的备份保留 |
+
+---
+
+## 9. 后续阶段（本文档不涉及）
+
+以下功能在后续阶段实现：
+
+- **snapshot update** — 更新快照（覆盖 SQLite 数据）
+- **Git 封装** — 本地自动 commit，对用户透明
+- **远端同步** — remote add/list/remove、sync push/pull
+- **历史版本恢复** — 从 Git commit 历史选择版本恢复
+- **冲突处理** — 利用 Git 原生 merge 处理多设备冲突
+- **多 project 共享远端** — 多个 project 推送到同一仓库的不同目录
+- **TUI 页面** — 恢复和同步的 TUI 界面

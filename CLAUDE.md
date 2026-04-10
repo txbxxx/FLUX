@@ -272,7 +272,7 @@ logger.Info("操作开始", zap.String("snapshot_id", id), zap.Int("file_count",
 
 ### 分支开发（必须使用 worktree）
 
-禁止直接在 `master` 编码。每次从 `master` 切出 worktree：
+检查是否自身在`master`分支，如果在就拉取`master`最新代码然后 切出 worktree，不在则需要切换到master分支然后拉取最新代码切出worktree：
 
 ```bash
 git checkout master && git pull origin master
