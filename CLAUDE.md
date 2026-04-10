@@ -57,6 +57,7 @@ ai-sync-manager/
 │   │   ├── snapshot_create.go      # snapshot create
 │   │   ├── snapshot_list.go        # snapshot list
 │   │   ├── snapshot_delete.go      # snapshot delete
+│   │   ├── snapshot_restore.go     # snapshot restore
 │   │   ├── setting.go              # setting 命令组
 │   │   └── tui.go                  # tui 命令
 │   │
@@ -357,6 +358,7 @@ feat: get 命令支持省略 path 参数
 | snapshot create | `ai-sync snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
 | snapshot list | `ai-sync snapshot list` | `-l` 条数 `-o` 偏移 |
 | snapshot delete | `ai-sync snapshot delete <id-or-name>` | — |
+| snapshot restore | `ai-sync snapshot restore <id-or-name>` | `--files` 选择性恢复 `--dry-run` 预览 `--force` 跳过确认 |
 | tui | `ai-sync tui` | — |
 
 ---

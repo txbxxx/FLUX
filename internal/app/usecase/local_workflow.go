@@ -41,6 +41,7 @@ type SnapshotManager interface {
 	DeleteSnapshot(id string) error
 	GetSnapshot(id string) (*models.Snapshot, error)
 	UpdateSnapshot(snapshot *models.Snapshot) error
+	RestoreSnapshot(id string, files []string, options typesSnapshot.ApplyOptions) (*typesSnapshot.RestoreResult, error)
 }
 
 // ConfigAccessor 配置文件访问接口，支持目录浏览和文件读写。
@@ -63,6 +64,7 @@ type Workflow interface {
 	CreateSnapshot(ctx context.Context, input CreateSnapshotInput) (*SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input ListSnapshotsInput) (*ListSnapshotsResult, error)
 	DeleteSnapshot(ctx context.Context, input DeleteSnapshotInput) error
+tRestoreSnapshot(ctx context.Context, input RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error)
 	GetConfig(ctx context.Context, input GetConfigInput) (*GetConfigResult, error)
 	SaveConfig(ctx context.Context, input SaveConfigInput) error
 	// AI setting 相关方法
@@ -205,6 +207,15 @@ type ListSnapshotsResult struct {
 // DeleteSnapshotInput 是删除快照的输入参数。
 type DeleteSnapshotInput struct {
 	IDOrName string // 快照 ID 或名称
+}
+
+// RestoreSnapshotInput is the input for restoring a snapshot to disk.
+type RestoreSnapshotInput struct {
+	IDOrName  string   // 快照 ID 或名称
+	Files     []string // 指定要恢复的文件路径（空=全部恢复）
+	DryRun    bool     // 预览模式：只展示变更摘要，不备份不写入
+	Force     bool     // 跳过用户确认步骤，但仍自动备份
+	BackupDir string   // 备份基础目录（由 CLI 层从 DataDir 传入）
 }
 
 // UserError 是面向用户的错误类型，包含可展示的 Message 和引导性的 Suggestion。
@@ -979,4 +990,87 @@ func (w *LocalWorkflow) DeleteSnapshot(_ context.Context, input DeleteSnapshotIn
 // isUUIDFormat 检查字符串是否为 UUID 格式（简单判断）。
 func isUUIDFormat(s string) bool {
 	return len(s) == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-'
+}
+
+// RestoreSnapshot restores a snapshot's files to their original paths on disk.
+//
+// 流程：
+//  1. 通过 ID 或名称查找快照
+//  2. 构造备份路径
+//  3. 调用 Service.RestoreSnapshot 执行恢复
+//  4. 将底层技术性错误翻译为用户可读错误
+func (w *LocalWorkflow) RestoreSnapshot(_ context.Context, input RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error) {
+	// 第一步：参数校验
+	if strings.TrimSpace(input.IDOrName) == "" {
+		return nil, &UserError{
+			Message:    "恢复快照失败：请指定快照 ID 或名称",
+			Suggestion: "使用 snapshot list 查看快照列表",
+		}
+	}
+
+	// 第二步：解析 ID（支持名称查找，复用 DeleteSnapshot 的模式）
+	id := strings.TrimSpace(input.IDOrName)
+	if !isUUIDFormat(id) {
+		snapshots, err := w.snapshots.ListSnapshots(0, 0)
+		if err != nil {
+			return nil, &UserError{
+				Message:    "恢复快照失败：无法查找快照",
+				Suggestion: "请检查本地数据库是否可访问",
+				Err:        err,
+			}
+		}
+
+		found := false
+		for _, snap := range snapshots {
+			if snap.Name == id {
+				id = snap.ID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, &UserError{
+				Message:    "恢复快照失败：未找到名称为 \"" + id + "\" 的快照",
+				Suggestion: "使用 snapshot list 查看所有快照",
+			}
+		}
+	}
+
+	// 第三步：构造备份路径（仅非 dry-run 时需要）
+	backupPath := ""
+	if !input.DryRun && strings.TrimSpace(input.BackupDir) != "" {
+		backupPath = filepath.Join(input.BackupDir, "backup", time.Now().Format("20060102-150405"))
+	}
+
+	// 第四步：调用 Service 执行恢复
+	result, err := w.snapshots.RestoreSnapshot(id, input.Files, typesSnapshot.ApplyOptions{
+		CreateBackup: !input.DryRun,
+		BackupPath:   backupPath,
+		Force:        false,
+		DryRun:       input.DryRun,
+	})
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "获取快照失败") {
+			return nil, &UserError{
+				Message:    "恢复快照失败：快照不存在",
+				Suggestion: "请检查快照 ID 或名称是否正确",
+				Err:        err,
+			}
+		}
+		if strings.Contains(errMsg, "不在快照中") {
+			return nil, &UserError{
+				Message:    errMsg,
+				Suggestion: "请检查文件路径是否正确",
+				Err:        err,
+			}
+		}
+		return nil, &UserError{
+			Message:    "恢复快照失败",
+			Suggestion: "请检查本地数据库和文件系统权限",
+			Err:        err,
+		}
+	}
+
+	return result, nil
 }

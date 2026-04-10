@@ -370,3 +370,96 @@ func (s *Service) resolveProjectPath(projectName string, tools []string) (string
 
 	return "", fmt.Errorf("未找到项目: %s（请先使用 scan add 注册，或确保已自动注册全局项目）", projectName)
 }
+
+// RestoreSnapshot restores a snapshot's files to their original paths on disk.
+// It supports selective file restoration via the files parameter, dry-run preview,
+// and automatic backup before writing.
+func (s *Service) RestoreSnapshot(id string, files []string, options typesSnapshot.ApplyOptions) (*typesSnapshot.RestoreResult, error) {
+	logger.Info("开始恢复快照",
+		zap.String("id", id),
+		zap.Bool("dry_run", options.DryRun),
+		zap.Int("specified_files", len(files)),
+	)
+
+	// 第一步：从数据库读取快照数据（含文件内容）
+	snapshot, err := s.GetSnapshot(id)
+	if err != nil {
+		return nil, fmt.Errorf("获取快照失败: %w", err)
+	}
+
+	// 第二步：如果指定了文件列表，进行过滤
+	if len(files) > 0 {
+		filtered, filterErr := filterSnapshotFiles(snapshot.Files, files)
+		if filterErr != nil {
+			return nil, filterErr
+		}
+		snapshot.Files = filtered
+	}
+
+	if len(snapshot.Files) == 0 {
+		return nil, fmt.Errorf("快照中没有可恢复的文件")
+	}
+
+	// 第三步：使用 Applier 执行恢复（Applier 内部处理备份 + 写入）
+	applier := NewApplier(s.collector)
+	applyResult, err := applier.ApplySnapshot(snapshot, options)
+	if err != nil {
+		return nil, fmt.Errorf("恢复快照失败: %w", err)
+	}
+
+	// 第四步：转换为 RestoreResult
+	result := &typesSnapshot.RestoreResult{
+		SnapshotID:    snapshot.ID,
+		SnapshotName:  snapshot.Name,
+		AppliedFiles:  applyResult.AppliedFiles,
+		SkippedFiles:  applyResult.SkippedFiles,
+		Errors:        applyResult.Errors,
+		BackupPath:    applyResult.BackupPath,
+		TotalFiles:    applyResult.Summary.TotalFiles,
+		AppliedCount:  len(applyResult.AppliedFiles),
+		SkippedCount:  len(applyResult.SkippedFiles),
+		ErrorCount:    len(applyResult.Errors),
+		DryRun:        options.DryRun,
+	}
+
+	logger.Info("快照恢复完成",
+		zap.String("id", id),
+		zap.Int("applied", result.AppliedCount),
+		zap.Int("skipped", result.SkippedCount),
+		zap.Int("errors", result.ErrorCount),
+		zap.Bool("dry_run", options.DryRun),
+	)
+
+	return result, nil
+}
+
+// filterSnapshotFiles filters snapshot files to only include those matching the specified paths.
+// Returns an error if any specified path is not found in the snapshot.
+func filterSnapshotFiles(allFiles []models.SnapshotFile, specifiedPaths []string) ([]models.SnapshotFile, error) {
+	pathSet := make(map[string]bool, len(specifiedPaths))
+	for _, p := range specifiedPaths {
+		pathSet[p] = true
+	}
+
+	var result []models.SnapshotFile
+	var notFound []string
+
+	for _, file := range allFiles {
+		if pathSet[file.Path] || pathSet[file.OriginalPath] {
+			result = append(result, file)
+			delete(pathSet, file.Path)
+			delete(pathSet, file.OriginalPath)
+		}
+	}
+
+	// 检查是否有未找到的路径
+	for p := range pathSet {
+		notFound = append(notFound, p)
+	}
+
+	if len(notFound) > 0 {
+		return nil, fmt.Errorf("以下文件不在快照中: %s", strings.Join(notFound, ", "))
+	}
+
+	return result, nil
+}
