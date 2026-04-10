@@ -35,7 +35,7 @@ func main() {
 	}()
 
 	accessor := tool.NewConfigAccessor(rt.RuleResolver)
-	aiSettingService := setting.NewAISettingService(rt.AISettingDAO)
+	aiSettingService := setting.NewAISettingManager(rt.AISettingDAO)
 	workflow := usecase.NewLocalWorkflow(rt.Detector, rt.SnapshotService, accessor).
 		WithScanRuleManager(rt.RuleManager).
 		WithAISettingManager(aiSettingService)

@@ -381,6 +381,7 @@ Codex > skills\aiskills\README.md
 .\ai-sync.exe setting get <name> [name...]
 .\ai-sync.exe setting delete <name> [name...]
 .\ai-sync.exe setting switch <name>
+.\ai-sync.exe setting edit <name> [flags]
 ```
 
 ### 8.2 setting create：创建配置
@@ -483,6 +484,102 @@ Sonnet 模型: claude-3-sonnet-20240229
 
 ```powershell
 .\ai-sync.exe setting switch glm3
+```
+
+### 8.7 setting edit：编辑配置
+
+编辑已保存的 AI 配置，支持命令行参数和编辑器两种交互模式。
+
+#### 命令行参数模式
+
+通过参数直接修改配置：
+
+```powershell
+# 编辑单个字段
+.\ai-sync.exe setting edit glm3 -t sk-ant-new-token
+.\ai-sync.exe setting edit glm3 -a https://new-api.example.com
+
+# 编辑多个字段
+.\ai-sync.exe setting edit glm3 -a https://new-api.example.com -o claude-3-opus-20240229
+
+# 修改配置名称
+.\ai-sync.exe setting edit glm3 -n glm3-updated
+```
+
+**参数说明**：
+
+| 参数 | 简写 | 说明 |
+|------|------|------|
+| `--name` | `-n` | 新名称（可选） |
+| `--token` | `-t` | 新 Token（可选） |
+| `--api` | `-a` | 新 API 地址（可选） |
+| `--opus-model` | `-o` | 新 Opus 模型（可选） |
+| `--sonnet-model` | `-s` | 新 Sonnet 模型（可选） |
+
+未指定的字段将保持原值。
+
+**输出示例**：
+```text
+配置已更新: glm3
+
+变更内容：
+- token: sk-a****xxxx → sk-a****yyyy （已修改）
+更新时间: 2024-04-10T14:30:00+08:00
+```
+
+#### 编辑器模式
+
+使用外部编辑器可视化编辑配置：
+
+```powershell
+# 使用默认 YAML 格式
+.\ai-sync.exe setting edit glm3 -e
+
+# 使用 JSON 格式
+.\ai-sync.exe setting edit glm3 -e -f json
+```
+
+编辑器模式会：
+1. 导出当前配置到临时文件（YAML 或 JSON 格式）
+2. 自动打开系统编辑器（Windows 默认 notepad，Linux 默认 vim）
+3. 保存后自动解析并应用变更
+
+**临时文件格式**：
+
+YAML 格式示例：
+```yaml
+# AI 配置编辑
+# 留空字段将保持原值（敏感信息不显示）
+#
+name: glm3
+token: ""
+base_url: https://api.anthropic.com
+opus_model: claude-3-opus-20240229
+sonnet_model: claude-3-sonnet-20240229
+```
+
+JSON 格式示例：
+```json
+{
+  "name": "glm3",
+  "token": "",
+  "base_url": "https://api.anthropic.com",
+  "opus_model": "claude-3-opus-20240229",
+  "sonnet_model": "claude-3-sonnet-20240229"
+}
+```
+
+**自定义编辑器**：
+
+通过设置 `EDITOR` 环境变量指定编辑器：
+```powershell
+# Windows
+set EDITOR=code
+.\ai-sync.exe setting edit glm3 -e
+
+# Linux/macOS
+export EDITOR=nano
+./ai-sync setting edit glm3 -e
 ```
 
 ---
