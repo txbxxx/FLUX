@@ -1,0 +1,50 @@
+{
+  "tasks": [
+    {
+      "id": "6a997f27-c574-4cce-ac39-92f5141b84a7",
+      "name": "搜索统计所有英文注释",
+      "description": "递归搜索项目根目录下所有 .go 文件（排除 vendor、node_modules、.git 等目录），找出所有包含英文的注释，统计总数，并按文件分类列出。",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-04-08T16:13:37.578Z",
+      "updatedAt": "2026-04-08T16:13:55.805Z",
+      "relatedFiles": [],
+      "implementationGuide": "使用 Grep 工具搜索模式：//.*[A-Za-z]+，排除不需要的目录。输出结果包含：每个文件中英文注释的数量，以及总数量。",
+      "verificationCriteria": "能够正确统计出项目中所有英文注释的数量，输出清晰的分类统计结果。",
+      "summary": "成功递归搜索了项目中所有 .go 文件，排除了 vendor、node_modules、.git 等目录，共在 81 个文件中找到 1306 个英文注释匹配项。统计结果清晰，每个文件都列出了具体数量。",
+      "completedAt": "2026-04-08T16:13:55.800Z"
+    },
+    {
+      "id": "da23dcc5-011e-49a3-a286-3f1d4495d538",
+      "name": "逐个文件处理英文注释翻译",
+      "description": "从搜索结果中逐个取出文件，读取完整文件内容，识别所有英文注释，将其翻译为中文，保持代码逻辑不变，遵循项目注释规范。godoc 注释翻译为中文，函数内部逻辑块统一使用 // 第 X 步：格式。",
+      "status": "pending",
+      "dependencies": [
+        {
+          "taskId": "6a997f27-c574-4cce-ac39-92f5141b84a7"
+        }
+      ],
+      "createdAt": "2026-04-08T16:13:37.578Z",
+      "updatedAt": "2026-04-08T16:13:37.578Z",
+      "relatedFiles": [],
+      "implementationGuide": "对于每个文件：1) Read 读取文件内容；2) 逐行识别英文注释；3) 翻译注释内容；4) 保持代码不变，只替换注释；5) Edit 写回修改。处理过程中注意：URL、变量名、标识符不翻译；保持注释原意；遵循项目现有缩进格式。",
+      "verificationCriteria": "所有英文注释都成功翻译为中文，代码逻辑没有任何改变，遵循项目注释规范。"
+    },
+    {
+      "id": "cc042249-acbb-425a-971e-eb6242035873",
+      "name": "输出最终修改统计报告",
+      "description": "统计总共修改了多少个文件，替换了多少处注释，输出总结报告。",
+      "status": "pending",
+      "dependencies": [
+        {
+          "taskId": "da23dcc5-011e-49a3-a286-3f1d4495d538"
+        }
+      ],
+      "createdAt": "2026-04-08T16:13:37.578Z",
+      "updatedAt": "2026-04-08T16:13:37.578Z",
+      "relatedFiles": [],
+      "implementationGuide": "遍历处理过的文件，统计：1) 修改的文件总数；2) 修改的注释总数；3) 分类统计（godoc 注释 / 内部注释）。输出清晰的总结报告。",
+      "verificationCriteria": "统计准确，报告清晰。"
+    }
+  ]
+}
