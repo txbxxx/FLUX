@@ -142,6 +142,10 @@ func (w *LocalWorkflow) GetConfig(_ context.Context, input GetConfigInput) (*Get
 		}
 	}
 
+	// 清理文件内容中的特殊字符，避免在终端编辑器中显示异常
+	// 为什么：某些文件可能包含控制字符或非打印字符，导致 Bubbletea 渲染时显示为"二进制"或乱码
+	content = sanitizeContent(content)
+
 	result.Kind = ConfigTargetFile
 	result.Content = content
 	result.Editable = true
@@ -384,4 +388,18 @@ func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
 	}
 
 	return nil
+}
+
+// sanitizeContent 清理文件内容中的特殊字符，确保在终端编辑器中正常显示。
+// 移除 ASCII 控制字符（保留 \t, \n, \r），避免渲染异常。
+func sanitizeContent(content string) string {
+	var sb strings.Builder
+	for _, r := range content {
+		// 保留可打印字符（ASCII >= 32）和必要的控制字符（\t, \n, \r）
+		if r == '\t' || r == '\n' || r == '\r' || r >= 32 {
+			sb.WriteRune(r)
+		}
+		// 跳过其他控制字符（0-31，除了 \t=9, \n=10, \r=13）
+	}
+	return sb.String()
 }
