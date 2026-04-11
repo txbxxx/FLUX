@@ -9,6 +9,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-git/go-git/v5 v5.17.0
 	github.com/google/uuid v1.6.0
+	github.com/hexops/gotextdiff v1.0.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.1

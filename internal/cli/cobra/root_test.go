@@ -114,6 +114,10 @@ func (s *stubWorkflow) RestoreSnapshot(_ context.Context, input usecase.RestoreS
 	return nil, nil
 }
 
+func (s *stubWorkflow) DiffSnapshots(_ context.Context, input usecase.DiffSnapshotsInput) (*typesSnapshot.DiffResult, error) {
+	return nil, nil
+}
+
 func (s *stubWorkflow) GetConfig(_ context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error) {
 	s.getInput = input
 	return s.getResult, s.getErr
