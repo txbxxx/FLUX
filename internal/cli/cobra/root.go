@@ -13,6 +13,7 @@ import (
 
 	"ai-sync-manager/internal/app/usecase"
 	"ai-sync-manager/internal/cli/output"
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
 var errCommandHandled = errors.New("command handled")
@@ -28,6 +29,7 @@ type Workflow interface {
 	CreateSnapshot(ctx context.Context, input usecase.CreateSnapshotInput) (*usecase.SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input usecase.ListSnapshotsInput) (*usecase.ListSnapshotsResult, error)
 	DeleteSnapshot(ctx context.Context, input usecase.DeleteSnapshotInput) error
+	RestoreSnapshot(ctx context.Context, input usecase.RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error)
 	GetConfig(ctx context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error)
 	SaveConfig(ctx context.Context, input usecase.SaveConfigInput) error
 	CreateAISetting(ctx context.Context, input usecase.CreateAISettingInput) (*usecase.CreateAISettingResult, error)

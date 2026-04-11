@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ai-sync-manager/internal/app/usecase"
+	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
 type stubWorkflow struct {
@@ -107,6 +108,10 @@ func (s *stubWorkflow) ListSnapshots(_ context.Context, input usecase.ListSnapsh
 func (s *stubWorkflow) DeleteSnapshot(_ context.Context, input usecase.DeleteSnapshotInput) error {
 	s.deleteSnapshotInput = input
 	return s.deleteSnapshotErr
+}
+
+func (s *stubWorkflow) RestoreSnapshot(_ context.Context, input usecase.RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error) {
+	return nil, nil
 }
 
 func (s *stubWorkflow) GetConfig(_ context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error) {
