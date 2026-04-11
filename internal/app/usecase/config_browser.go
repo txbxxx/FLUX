@@ -322,6 +322,32 @@ func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
 		}
 	}
 
+	// 支持通过名称查找快照：如果不是 UUID 格式，按名称查找对应的 ID。
+	if !isUUIDFormat(snapshotID) {
+		snapshots, listErr := w.snapshots.ListSnapshots(0, 0)
+		if listErr != nil {
+			return &UserError{
+				Message:    "读取快照失败",
+				Suggestion: "请检查快照名称或 ID 是否正确，使用 snapshot list 查看所有快照",
+				Err:        listErr,
+			}
+		}
+		found := false
+		for _, snap := range snapshots {
+			if snap.Name == snapshotID {
+				snapshotID = snap.ID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return &UserError{
+				Message:    "未找到名称为 \"" + snapshotID + "\" 的快照",
+				Suggestion: "使用 snapshot list 查看所有快照的名称和 ID",
+			}
+		}
+	}
+
 	snapshot, err := w.snapshots.GetSnapshot(snapshotID)
 	if err != nil {
 		return &UserError{
