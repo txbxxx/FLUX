@@ -146,6 +146,10 @@ func (s *stubSnapshotService) RestoreSnapshot(id string, files []string, options
 	return nil, nil
 }
 
+func (s *stubSnapshotService) DiffSnapshots(sourceID, targetID string, verbose bool, tool string, pathPattern string, context int) (*typesSnapshot.DiffResult, error) {
+	return nil, nil
+}
+
 func TestLocalWorkflowScanMapsDetectedTools(t *testing.T) {
 	detector := &stubDetector{
 		result: &tool.ToolDetectionResult{

@@ -58,6 +58,7 @@ ai-sync-manager/
 │   │   ├── snapshot_list.go        # snapshot list
 │   │   ├── snapshot_delete.go      # snapshot delete
 │   │   ├── snapshot_restore.go     # snapshot restore
+│   │   ├── snapshot_diff.go       # snapshot diff
 │   │   ├── setting.go              # setting 命令组
 │   │   └── tui.go                  # tui 命令
 │   │
@@ -359,6 +360,7 @@ feat: get 命令支持省略 path 参数
 | snapshot list | `ai-sync snapshot list` | `-l` 条数 `-o` 偏移 |
 | snapshot delete | `ai-sync snapshot delete <id-or-name>` | — |
 | snapshot restore | `ai-sync snapshot restore <id-or-name>` | `--files` 选择性恢复 `--dry-run` 预览 `--force` 跳过确认 |
+| snapshot diff | `ai-sync snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 |
 | tui | `ai-sync tui` | — |
 
 ---

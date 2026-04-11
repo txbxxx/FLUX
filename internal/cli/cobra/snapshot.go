@@ -21,7 +21,8 @@ func newSnapshotCommand(deps Dependencies) *spcobra.Command {
 		newSnapshotCreateCommand(deps),
 		newSnapshotListCommand(deps),
 		newSnapshotDeleteCommand(deps),
-			newSnapshotRestoreCommand(deps),
+		newSnapshotRestoreCommand(deps),
+		newSnapshotDiffCommand(deps),
 	)
 
 	return command

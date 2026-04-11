@@ -30,6 +30,7 @@ type Workflow interface {
 	ListSnapshots(ctx context.Context, input usecase.ListSnapshotsInput) (*usecase.ListSnapshotsResult, error)
 	DeleteSnapshot(ctx context.Context, input usecase.DeleteSnapshotInput) error
 	RestoreSnapshot(ctx context.Context, input usecase.RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error)
+	DiffSnapshots(ctx context.Context, input usecase.DiffSnapshotsInput) (*typesSnapshot.DiffResult, error)
 	GetConfig(ctx context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error)
 	SaveConfig(ctx context.Context, input usecase.SaveConfigInput) error
 	CreateAISetting(ctx context.Context, input usecase.CreateAISettingInput) (*usecase.CreateAISettingResult, error)
@@ -96,7 +97,7 @@ func Execute(deps Dependencies, args []string) int {
 	cmd.SetArgs(args)
 
 	if err := cmd.ExecuteContext(commandContext(deps)); err != nil {
-		if !errors.Is(err, errCommandHandled) {
+		if !errors.Is(err, errCommandHandled) && !errors.Is(err, errDiffHasChanges) {
 			printError(cmd.ErrOrStderr(), err)
 		}
 		return 1
