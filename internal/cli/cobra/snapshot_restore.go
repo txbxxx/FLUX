@@ -10,6 +10,7 @@ import (
 	spcobra "github.com/spf13/cobra"
 
 	"ai-sync-manager/internal/app/usecase"
+	"ai-sync-manager/internal/cli/output"
 	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
@@ -42,12 +43,24 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 				BackupDir: deps.DataDir,
 			}
 
-			// dry-run 模式：直接预览并退出
+			// dry-run 模式：展示 diff + 恢复摘要
 			if dryRun {
 				result, err := deps.Workflow.RestoreSnapshot(cmd.Context(), input)
 				if err != nil {
 					return err
 				}
+
+				// 使用 diff 渲染展示差异详情
+				diffResult, _ := deps.Workflow.DiffSnapshots(cmd.Context(), usecase.DiffSnapshotsInput{
+					SourceID: args[0],
+					Verbose:  true,
+					Context:  5,
+				})
+				if diffResult != nil && diffResult.HasDiff {
+					output.RenderUnifiedDiff(cmd.OutOrStdout(), diffResult, true)
+				}
+
+				// 追加恢复摘要
 				printRestorePreview(cmd.OutOrStdout(), result)
 				return nil
 			}

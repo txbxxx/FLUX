@@ -42,6 +42,7 @@ type SnapshotManager interface {
 	GetSnapshot(id string) (*models.Snapshot, error)
 	UpdateSnapshot(snapshot *models.Snapshot) error
 	RestoreSnapshot(id string, files []string, options typesSnapshot.ApplyOptions) (*typesSnapshot.RestoreResult, error)
+	DiffSnapshots(sourceID, targetID string, verbose bool, tool string, pathPattern string, context int) (*typesSnapshot.DiffResult, error)
 }
 
 // ConfigAccessor 配置文件访问接口，支持目录浏览和文件读写。
@@ -64,7 +65,8 @@ type Workflow interface {
 	CreateSnapshot(ctx context.Context, input CreateSnapshotInput) (*SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input ListSnapshotsInput) (*ListSnapshotsResult, error)
 	DeleteSnapshot(ctx context.Context, input DeleteSnapshotInput) error
-tRestoreSnapshot(ctx context.Context, input RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error)
+	RestoreSnapshot(ctx context.Context, input RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error)
+	DiffSnapshots(ctx context.Context, input DiffSnapshotsInput) (*typesSnapshot.DiffResult, error)
 	GetConfig(ctx context.Context, input GetConfigInput) (*GetConfigResult, error)
 	SaveConfig(ctx context.Context, input SaveConfigInput) error
 	// AI setting 相关方法
@@ -207,6 +209,17 @@ type ListSnapshotsResult struct {
 // DeleteSnapshotInput 是删除快照的输入参数。
 type DeleteSnapshotInput struct {
 	IDOrName string // 快照 ID 或名称
+}
+
+// DiffSnapshotsInput is the input for comparing snapshots.
+type DiffSnapshotsInput struct {
+	SourceID    string // 源快照 ID 或名称
+	TargetID    string // 目标快照 ID 或名称（空则对比文件系统）
+	Verbose     bool   // 是否显示内容级 diff
+	SideBySide  bool   // 是否并排显示
+	Tool        string // 按工具类型过滤（空则不过滤）
+	PathPattern string // 按路径模式过滤（空则不过滤）
+	Context     int    // 上下文行数（默认 5）
 }
 
 // RestoreSnapshotInput is the input for restoring a snapshot to disk.
@@ -1073,4 +1086,73 @@ func (w *LocalWorkflow) RestoreSnapshot(_ context.Context, input RestoreSnapshot
 	}
 
 	return result, nil
+}
+
+// DiffSnapshots compares two snapshots (or a snapshot with the filesystem)
+// and returns structured diff results.
+func (w *LocalWorkflow) DiffSnapshots(_ context.Context, input DiffSnapshotsInput) (*typesSnapshot.DiffResult, error) {
+	// 第一步：参数校验
+	if strings.TrimSpace(input.SourceID) == "" {
+		return nil, &UserError{
+			Message:    "对比快照失败：请指定源快照 ID 或名称",
+			Suggestion: "使用 snapshot list 查看快照列表",
+		}
+	}
+
+	// 第二步：解析源快照 ID（支持名称查找）
+	sourceID, err := w.resolveSnapshotID(input.SourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 第三步：解析目标快照 ID（如果提供）
+	var targetID string
+	if input.TargetID != "" {
+		targetID, err = w.resolveSnapshotID(input.TargetID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 第四步：调用 Service
+	result, err := w.snapshots.DiffSnapshots(sourceID, targetID, input.Verbose, input.Tool, input.PathPattern, input.Context)
+	if err != nil {
+		return nil, &UserError{
+			Message:    "对比快照失败",
+			Suggestion: "请检查快照是否存在",
+			Err:        err,
+		}
+	}
+
+	return result, nil
+}
+
+// resolveSnapshotID resolves a snapshot ID or name to a UUID.
+// If the input is already in UUID format, it is returned as-is.
+// Otherwise, the snapshot list is searched for a matching name.
+func (w *LocalWorkflow) resolveSnapshotID(idOrName string) (string, error) {
+	id := strings.TrimSpace(idOrName)
+	if isUUIDFormat(id) {
+		return id, nil
+	}
+
+	snapshots, err := w.snapshots.ListSnapshots(0, 0)
+	if err != nil {
+		return "", &UserError{
+			Message:    "无法查找快照",
+			Suggestion: "请检查本地数据库是否可访问",
+			Err:        err,
+		}
+	}
+
+	for _, snap := range snapshots {
+		if snap.Name == id {
+			return snap.ID, nil
+		}
+	}
+
+	return "", &UserError{
+		Message:    "未找到名称为 \"" + id + "\" 的快照",
+		Suggestion: "使用 snapshot list 查看所有快照",
+	}
 }

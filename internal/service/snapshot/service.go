@@ -1,10 +1,13 @@
 package snapshot
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,6 +18,8 @@ import (
 	"ai-sync-manager/pkg/logger"
 
 	"github.com/google/uuid"
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
 	"go.uber.org/zap"
 )
 
@@ -462,4 +467,334 @@ func filterSnapshotFiles(allFiles []models.SnapshotFile, specifiedPaths []string
 	}
 
 	return result, nil
+}
+
+// DiffSnapshots compares two snapshots (or a snapshot with the filesystem)
+// and returns structured diff results with optional line-level detail.
+func (s *Service) DiffSnapshots(sourceID, targetID string, verbose bool, tool string, pathPattern string, context int) (*typesSnapshot.DiffResult, error) {
+	// 第一步：加载源快照
+	source, err := s.GetSnapshot(sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("获取源快照失败: %w", err)
+	}
+
+	var result *typesSnapshot.DiffResult
+
+	if targetID == "" {
+		// 第二步a：快照 vs 文件系统
+		result, err = s.diffWithFilesystem(source, verbose, context)
+	} else {
+		// 第二步b：快照 vs 快照
+		var target *models.Snapshot
+		target, err = s.GetSnapshot(targetID)
+		if err != nil {
+			return nil, fmt.Errorf("获取目标快照失败: %w", err)
+		}
+		result, err = s.diffTwoSnapshots(source, target, verbose, context)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 第三步：应用过滤
+	result.Files = s.filterDiffFiles(result.Files, tool, pathPattern)
+
+	// 第四步：重新计算统计
+	result.Stats = s.computeDiffStats(result.Files)
+	result.HasDiff = len(result.Files) > 0
+
+	return result, nil
+}
+
+// diffWithFilesystem compares a snapshot against the current filesystem.
+func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
+	logger.Info("对比快照与文件系统",
+		zap.String("snapshot_id", snapshot.ID),
+	)
+
+	var changes []typesSnapshot.DiffFileChange
+
+	for _, sf := range snapshot.Files {
+		info, err := os.Stat(sf.OriginalPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// 快照中有但文件系统没有 → 相对文件系统是新增
+				changes = append(changes, typesSnapshot.DiffFileChange{
+					Path:     sf.Path,
+					Status:   typesSnapshot.FileAdded,
+					IsBinary: sf.IsBinary,
+					NewSize:  sf.Size,
+					ToolType: sf.ToolType,
+				})
+			}
+			continue
+		}
+
+		if info.IsDir() {
+			continue
+		}
+
+		currentContent, err := os.ReadFile(sf.OriginalPath)
+		if err != nil {
+			continue
+		}
+
+		currentHash := calculateFileHash(currentContent)
+		if currentHash != sf.Hash {
+			change := typesSnapshot.DiffFileChange{
+				Path:     sf.Path,
+				Status:   typesSnapshot.FileModified,
+				IsBinary: sf.IsBinary,
+				OldSize:  sf.Size,
+				NewSize:  info.Size(),
+				ToolType: sf.ToolType,
+			}
+			if verbose && !sf.IsBinary {
+				change.Hunks = computeFileHunks(sf.Content, currentContent)
+			}
+			if !sf.IsBinary {
+				change.AddLines, change.DelLines = countLineChanges(sf.Content, currentContent)
+			}
+			changes = append(changes, change)
+		}
+	}
+
+	sort.Slice(changes, func(i, j int) bool {
+		return changes[i].Path < changes[j].Path
+	})
+
+	result := &typesSnapshot.DiffResult{
+		SourceName: snapshot.Name,
+		TargetName: "当前文件系统",
+		Files:      changes,
+	}
+	result.Stats = s.computeDiffStats(changes)
+	result.HasDiff = len(changes) > 0
+
+	return result, nil
+}
+
+// diffTwoSnapshots compares two snapshots and returns detailed differences.
+func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
+	logger.Info("对比两个快照",
+		zap.String("source_id", source.ID),
+		zap.String("target_id", target.ID),
+	)
+
+	sourceFiles := make(map[string]models.SnapshotFile, len(source.Files))
+	for _, f := range source.Files {
+		sourceFiles[f.Path] = f
+	}
+	targetFiles := make(map[string]models.SnapshotFile, len(target.Files))
+	for _, f := range target.Files {
+		targetFiles[f.Path] = f
+	}
+
+	allPaths := make(map[string]bool)
+	for p := range sourceFiles {
+		allPaths[p] = true
+	}
+	for p := range targetFiles {
+		allPaths[p] = true
+	}
+
+	var changes []typesSnapshot.DiffFileChange
+
+	for p := range allPaths {
+		sf, sourceExists := sourceFiles[p]
+		tf, targetExists := targetFiles[p]
+
+		switch {
+		case sourceExists && !targetExists:
+			change := typesSnapshot.DiffFileChange{
+				Path:     p,
+				Status:   typesSnapshot.FileAdded,
+				IsBinary: sf.IsBinary,
+				NewSize:  sf.Size,
+				ToolType: sf.ToolType,
+			}
+			if !sf.IsBinary {
+				change.AddLines = len(strings.Split(string(sf.Content), "\n"))
+			}
+			changes = append(changes, change)
+
+		case !sourceExists && targetExists:
+			change := typesSnapshot.DiffFileChange{
+				Path:     p,
+				Status:   typesSnapshot.FileDeleted,
+				IsBinary: tf.IsBinary,
+				OldSize:  tf.Size,
+				ToolType: tf.ToolType,
+			}
+			if !tf.IsBinary {
+				change.DelLines = len(strings.Split(string(tf.Content), "\n"))
+			}
+			changes = append(changes, change)
+
+		case sourceExists && targetExists && sf.Hash != tf.Hash:
+			change := typesSnapshot.DiffFileChange{
+				Path:     p,
+				Status:   typesSnapshot.FileModified,
+				IsBinary: sf.IsBinary || tf.IsBinary,
+				OldSize:  tf.Size,
+				NewSize:  sf.Size,
+				ToolType: sf.ToolType,
+			}
+			if verbose && !change.IsBinary {
+				change.Hunks = computeFileHunks(tf.Content, sf.Content)
+			}
+			if !change.IsBinary {
+				change.AddLines, change.DelLines = countLineChanges(tf.Content, sf.Content)
+			}
+			changes = append(changes, change)
+		}
+	}
+
+	sort.Slice(changes, func(i, j int) bool {
+		return changes[i].Path < changes[j].Path
+	})
+
+	result := &typesSnapshot.DiffResult{
+		SourceName: source.Name,
+		TargetName: target.Name,
+		Files:      changes,
+	}
+	result.Stats = s.computeDiffStats(changes)
+	result.HasDiff = len(changes) > 0
+
+	return result, nil
+}
+
+// filterDiffFiles filters diff results by tool type and path pattern.
+func (s *Service) filterDiffFiles(files []typesSnapshot.DiffFileChange, tool string, pathPattern string) []typesSnapshot.DiffFileChange {
+	if tool == "" && pathPattern == "" {
+		return files
+	}
+
+	var filtered []typesSnapshot.DiffFileChange
+	for _, f := range files {
+		if tool != "" && f.ToolType != tool {
+			continue
+		}
+		if pathPattern != "" {
+			matched, err := filepath.Match(pathPattern, f.Path)
+			if err != nil || !matched {
+				continue
+			}
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered
+}
+
+// computeDiffStats calculates aggregate statistics from diff file changes.
+func (s *Service) computeDiffStats(files []typesSnapshot.DiffFileChange) typesSnapshot.DiffStats {
+	stats := typesSnapshot.DiffStats{
+		TotalFiles: len(files),
+	}
+	for _, f := range files {
+		switch f.Status {
+		case typesSnapshot.FileAdded:
+			stats.AddedFiles++
+		case typesSnapshot.FileModified:
+			stats.ModifiedFiles++
+		case typesSnapshot.FileDeleted:
+			stats.DeletedFiles++
+		}
+		stats.AddLines += f.AddLines
+		stats.DelLines += f.DelLines
+	}
+	return stats
+}
+
+// calculateFileHash computes SHA256 hash of file content.
+func calculateFileHash(content []byte) string {
+	hash := sha256.Sum256(content)
+	return hex.EncodeToString(hash[:])
+}
+
+// computeFileHunks uses gotextdiff to compute structured diff hunks.
+func computeFileHunks(oldContent, newContent []byte) []typesSnapshot.DiffHunk {
+	oldText := string(oldContent)
+	newText := string(newContent)
+
+	edits := myers.ComputeEdits("a", oldText, newText)
+	unified := gotextdiff.ToUnified("a", "b", oldText, edits)
+
+	lines := strings.Split(fmt.Sprint(unified), "\n")
+	return parseUnifiedDiffLines(lines)
+}
+
+// parseUnifiedDiffLines converts unified diff text lines into structured DiffHunks.
+func parseUnifiedDiffLines(lines []string) []typesSnapshot.DiffHunk {
+	var hunks []typesSnapshot.DiffHunk
+	var current *typesSnapshot.DiffHunk
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") || line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, "@@") {
+			if current != nil {
+				hunks = append(hunks, *current)
+			}
+			current = &typesSnapshot.DiffHunk{}
+			continue
+		}
+
+		if current == nil || len(line) == 0 {
+			continue
+		}
+
+		switch line[0] {
+		case '+':
+			current.Lines = append(current.Lines, typesSnapshot.DiffLine{
+				Type:    typesSnapshot.LineAdded,
+				Content: line[1:],
+			})
+			current.NewCount++
+		case '-':
+			current.Lines = append(current.Lines, typesSnapshot.DiffLine{
+				Type:    typesSnapshot.LineDeleted,
+				Content: line[1:],
+			})
+			current.OldCount++
+		default:
+			content := line
+			if len(content) > 0 && content[0] == ' ' {
+				content = content[1:]
+			}
+			current.Lines = append(current.Lines, typesSnapshot.DiffLine{
+				Type:    typesSnapshot.LineContext,
+				Content: content,
+			})
+			current.OldCount++
+			current.NewCount++
+		}
+	}
+
+	if current != nil {
+		hunks = append(hunks, *current)
+	}
+
+	return hunks
+}
+
+// countLineChanges counts added and deleted lines between two byte contents.
+func countLineChanges(oldContent, newContent []byte) (addLines, delLines int) {
+	edits := myers.ComputeEdits("a", string(oldContent), string(newContent))
+	unified := gotextdiff.ToUnified("a", "b", string(oldContent), edits)
+
+	for _, line := range strings.Split(fmt.Sprint(unified), "\n") {
+		if len(line) > 0 {
+			if line[0] == '+' && !strings.HasPrefix(line, "+++") {
+				addLines++
+			} else if line[0] == '-' && !strings.HasPrefix(line, "---") {
+				delLines++
+			}
+		}
+	}
+	return
 }
