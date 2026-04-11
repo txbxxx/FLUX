@@ -680,13 +680,13 @@ export EDITOR=nano
 
 ## 10. `snapshot list`：列出本地快照
 
-### 9.1 基础用法
+### 10.1 基础用法
 
 ```powershell
 .\ai-sync.exe snapshot list
 ```
 
-### 9.2 分页参数
+### 10.2 分页参数
 
 ```powershell
 .\ai-sync.exe snapshot list --limit 20 --offset 0
@@ -703,22 +703,34 @@ export EDITOR=nano
 
 - `-l / --limit`
   最多返回多少条记录
+（0 表示不限制）
 - `-o / --offset`
   从第几条之后开始返回
 
-### 9.3 有结果时的输出
+### 10.3 有结果时的输出
 
-```text
-12345678-1234-1234-1234-1234567890ab | Daily backup | backup before change
+以表格形式展示快照信息：
+
+```
+ID                  | 名称           | 项目        | 说明       | 文件数 | 创建时间
+550e8400-...       | 升级前备份      | codex-global | 升级前备份 | 8       | 2026-04-11 14:30
+660e8400-...       | 自动备份        | claude-global | 每周备份   | 5       | 2026-04-10 09:15
 ```
 
-每一行依次表示：
+表格包含以下列：
 
-- 快照 ID
-- 快照名称
-- 快照说明
+| 列名 | 说明 |
+|------|------|
+| ID | 快照唯一标识符（UUID 前缀） |
+| 名称 | 用户指定的快照名称 |
+| 项目 | 关联的项目名称（如 `codex-global`、`claude-global` 或用户项目） |
+| 说明 | 快照创建时填写的说明信息 |
+| 文件数 | 该快照包含的文件数量 |
+| 创建时间 | 快照创建时间 |
 
-### 9.4 无结果时的输出
+底部还会显示总数统计：`共 X 条快照`
+
+### 10.4 无结果时的输出
 
 ```text
 暂无本地快照
@@ -726,9 +738,9 @@ export EDITOR=nano
 
 如果你刚初始化项目或刚清空本地数据库，这是正常现象。
 
-## 11. `snapshot restore`：恢复快照
+## 12. `snapshot restore`：恢复快照
 
-### 11.1 预览模式（推荐先预览）
+### 12.1 预览模式（推荐先预览）
 
 在正式恢复前，建议先用 `--dry-run` 查看会变更哪些文件：
 
@@ -747,7 +759,7 @@ export EDITOR=nano
   跳过: C:\Users\xxx\.claude\skills\README.md (内容相同)
 ```
 
-### 11.2 全量恢复
+### 12.2 全量恢复
 
 ```powershell
 .\ai-sync.exe snapshot restore "升级前备份"
@@ -755,7 +767,7 @@ export EDITOR=nano
 
 系统会先展示变更摘要，输入 `y` 确认后执行恢复。恢复前自动备份当前配置到 `~/.ai-sync-manager/backup/<timestamp>/`。
 
-### 11.3 选择性恢复
+### 12.3 选择性恢复
 
 只恢复指定的文件：
 
@@ -763,7 +775,7 @@ export EDITOR=nano
 .\ai-sync.exe snapshot restore "升级前备份" --files settings.json,CLAUDE.md
 ```
 
-### 11.4 跳过确认
+### 12.4 跳过确认
 
 ```powershell
 .\ai-sync.exe snapshot restore "升级前备份" --force
@@ -771,7 +783,7 @@ export EDITOR=nano
 
 使用 `--force` 跳过确认步骤（仍会自动备份）。
 
-### 11.5 参数说明
+### 12.5 参数说明
 
 ```text
 用法: ai-sync snapshot restore <id-or-name> [flags]
@@ -789,7 +801,7 @@ Flags:
 - `--dry-run`：仅预览变更，不实际写入文件
 - `--force`：跳过确认步骤，但仍自动备份当前配置
 
-### 11.6 恢复输出示例
+### 12.6 恢复输出示例
 
 ```text
 快照: 升级前备份 (550e8400-...)
@@ -803,7 +815,7 @@ Flags:
   备份: C:\Users\xxx\.ai-sync-manager\backup\20260411-143022\
 ```
 
-### 11.7 常见失败
+### 12.7 常见失败
 
 - 快照 ID 或名称不存在
 - 快照中没有可恢复的文件
@@ -826,6 +838,7 @@ Flags:
 - 扫描结果页
 - 创建快照页
 - 快照列表页
+- Setting 编辑页
 
 ### 10.3 首页操作
 
@@ -904,11 +917,12 @@ Flags:
 
 ### 10.6 快照列表页
 
-从首页选择“查看快照”后，会进入快照列表页。
+从首页选择”查看快照”后，会进入快照列表页。
 
 页面展示：
 
-- 已存在快照的 ID 与说明
+- 以表格形式展示快照信息
+- 包含 ID、名称、项目、说明、文件数、创建时间
 - 如果为空，显示 `暂无本地快照`
 
 返回方式：
@@ -917,7 +931,76 @@ Flags:
 - `q`
 - `esc`
 
-### 10.7 TUI 的适用定位
+### 10.7 Setting 编辑页
+
+通过 CLI 命令 `ai-sync setting edit <name> -e` 进入 setting 编辑页面。
+
+#### 页面结构
+
+编辑器页面展示以下内容：
+
+```
+AI 配置编辑器
+
+配置名称: <name> | 当前生效: <是/否>
+
+配置名称: <输入框>
+Token: <输入框>
+API 地址: <输入框>
+Opus 模型: <输入框>
+Sonnet 模型: <输入框>
+
+[快捷键提示]
+```
+
+#### 快捷键操作
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Tab` / `↓` | 切换到下一个字段 |
+| `Shift+Tab` / `↑` | 切换到上一个字段 |
+| `Ctrl+S` | 保存修改并退出 |
+| `Esc` / `Ctrl+C` | 不保存直接退出 |
+
+#### 字段说明
+
+| 字段 | 说明 |
+|------|------|
+| 配置名称 | 修改配置的名称（必须唯一） |
+| Token | 认证 Token，显示 `<unchanged>` 时表示保持原值 |
+| API 地址 | API base URL |
+| Opus 模型 | Opus 模型名称 |
+| Sonnet 模型 | Sonnet 模型名称 |
+
+#### Token 特殊显示
+
+- Token 字段默认显示为脱敏格式：`sk-a****xxxx`
+- 保持原值时显示为 `<unchanged>` 占位符
+- 新输入的值将完整保存
+
+#### 保存行为
+
+- 按 `Ctrl+S` 保存修改：
+  - 自动跳过空值字段（不修改）
+  - 输入 `<unchanged>` 的字段保持原值
+  - 保存成功后自动退出
+- 保存失败时会在状态栏显示错误信息
+
+#### 自定义编辑器
+
+通过设置 `EDITOR` 环境变量可使用外部编辑器：
+
+```powershell
+# Windows
+set EDITOR=code
+.\ai-sync.exe setting edit <name> -e
+
+# Linux/macOS
+export EDITOR=nano
+./ai-sync setting edit <name> -e
+```
+
+### 10.8 TUI 的适用定位
 
 当前 TUI 适合做这些事情：
 
