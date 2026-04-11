@@ -1,0 +1,531 @@
+# 快照对比功能实施计划
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** 实现 `snapshot diff` 命令，支持快照 vs 快照、快照 vs 文件系统两种对比场景，分级输出（摘要/内容diff/并排），改造 `restore --dry-run` 复用 diff 输出。
+
+**Architecture:** 分层调用链 CLI→UseCase→Service→Comparator/DAO，复用已有 comparator.go 核心对比逻辑，新增 diff 输出渲染层。
+
+**Tech Stack:** Go 1.25+, Cobra CLI, lipgloss 着色, gotextdiff 行级 diff, SQLite (GORM)
+
+---
+
+### Task 1: 引入 diff 依赖库
+
+**Files:**
+- Modify: `go.mod`, `go.sum`
+
+**Step 1: 添加 gotextdiff 依赖**
+
+```bash
+go get github.com/hexops/gotextdiff
+go get github.com/hexops/gotextdiff/formatter
+```
+
+`gotextdiff` 轻量且原生支持 unified diff 输出，无需重型依赖。
+
+**Step 2: 验证编译**
+
+Run: `go build ./...`
+Expected: 编译通过
+
+---
+
+### Task 2: 新增 diff 类型定义
+
+**Files:**
+- Create: `internal/types/snapshot/diff.go`
+
+**Step 1: 创建 diff.go**
+
+```go
+package snapshot
+
+// DiffFileChange represents a single file's diff result.
+type DiffFileChange struct {
+    Path     string     // 文件相对路径
+    Status   FileStatus // added / modified / deleted / unchanged
+    IsBinary bool       // 是否二进制文件
+    OldSize  int64      // 变更前大小（字节）
+    NewSize  int64      // 变更后大小（字节）
+    AddLines int        // 新增行数（二进制文件为 0）
+    DelLines int        // 删除行数（二进制文件为 0）
+    ToolType string     // 所属工具类型
+    Hunks    []DiffHunk // 差异块（仅 -v 模式填充）
+}
+
+// FileStatus represents the change status of a file.
+type FileStatus string
+
+const (
+    FileAdded     FileStatus = "added"
+    FileModified  FileStatus = "modified"
+    FileDeleted   FileStatus = "deleted"
+    FileUnchanged FileStatus = "unchanged"
+)
+
+// DiffHunk represents a contiguous block of changes.
+type DiffHunk struct {
+    OldStart int        // 旧文件起始行号
+    OldCount int        // 旧文件行数
+    NewStart int        // 新文件起始行号
+    NewCount int        // 新文件行数
+    Lines    []DiffLine // 差异行（含上下文）
+}
+
+// DiffLine represents a single line in a diff hunk.
+type DiffLine struct {
+    Type      DiffLineType // 行类型
+    Content   string       // 行内容
+    OldLineNo int          // 旧文件行号（上下文和删除行有效）
+    NewLineNo int          // 新文件行号（上下文和新增行有效）
+}
+
+// DiffLineType represents the type of a diff line.
+type DiffLineType int
+
+const (
+    LineContext DiffLineType = iota // 上下文行
+    LineAdded                       // 新增行
+    LineDeleted                     // 删除行
+)
+
+// DiffResult is the complete result of a diff operation.
+type DiffResult struct {
+    SourceName string          // 源快照名称
+    TargetName string          // 目标快照名称（或 "当前文件系统"）
+    Files      []DiffFileChange // 变更文件列表
+    Stats      DiffStats       // 变更统计
+    HasDiff    bool            // 是否存在差异
+}
+
+// DiffStats holds aggregate statistics for a diff.
+type DiffStats struct {
+    TotalFiles    int // 变更文件总数
+    AddedFiles    int // 新增文件数
+    ModifiedFiles int // 修改文件数
+    DeletedFiles  int // 删除文件数
+    AddLines      int // 总新增行数
+    DelLines      int // 总删除行数
+}
+```
+
+**Step 2: 验证编译**
+
+Run: `go build ./internal/types/snapshot/...`
+Expected: 编译通过
+
+---
+
+### Task 3: 扩展 UseCase 层接口
+
+**Files:**
+- Modify: `internal/app/usecase/local_workflow.go` — 新增 DiffSnapshotsInput 和方法
+- Modify: `internal/cli/cobra/root.go` — Workflow 接口新增 DiffSnapshots
+
+**Step 1: 在 local_workflow.go 中新增 DiffSnapshotsInput**
+
+```go
+// DiffSnapshotsInput is the input for comparing snapshots.
+type DiffSnapshotsInput struct {
+    SourceID    string // 源快照 ID 或名称
+    TargetID    string // 目标快照 ID 或名称（空则对比文件系统）
+    Verbose     bool   // 是否显示内容级 diff
+    SideBySide  bool   // 是否并排显示
+    Tool        string // 按工具类型过滤（空则不过滤）
+    PathPattern string // 按路径模式过滤（空则不过滤）
+    Context     int    // 上下文行数（默认 5）
+}
+```
+
+**Step 2: 在 SnapshotManager 接口中添加 DiffSnapshots 方法**
+
+```go
+type SnapshotManager interface {
+    // ... existing methods ...
+    DiffSnapshots(sourceID, targetID string, verbose bool, tool string, pathPattern string, context int) (*typesSnapshot.DiffResult, error)
+}
+```
+
+**Step 3: 在 root.go 的 Workflow 接口中添加**
+
+```go
+DiffSnapshots(ctx context.Context, input usecase.DiffSnapshotsInput) (*typesSnapshot.DiffResult, error)
+```
+
+**Step 4: 验证编译（此时会失败，实现未完成）**
+
+直接进入 Task 4。
+
+---
+
+### Task 4: 实现 Service 层 DiffSnapshots
+
+**Files:**
+- Modify: `internal/service/snapshot/service.go` — 新增 DiffSnapshots 方法
+
+**Step 1: 实现 DiffSnapshots 方法**
+
+```go
+// DiffSnapshots compares two snapshots (or a snapshot with the filesystem)
+// and returns structured diff results.
+func (s *Service) DiffSnapshots(sourceID, targetID string, verbose bool, tool string, pathPattern string, context int) (*typesSnapshot.DiffResult, error) {
+    // 第一步：加载源快照
+    source, err := s.GetSnapshot(sourceID)
+    if err != nil {
+        return nil, fmt.Errorf("获取源快照失败: %w", err)
+    }
+
+    var result *typesSnapshot.DiffResult
+
+    if targetID == "" {
+        // 第二步a：快照 vs 文件系统
+        result, err = s.diffWithFilesystem(source, verbose, context)
+    } else {
+        // 第二步b：快照 vs 快照
+        target, err := s.GetSnapshot(targetID)
+        if err != nil {
+            return nil, fmt.Errorf("获取目标快照失败: %w", err)
+        }
+        result, err = s.diffSnapshots(source, target, verbose, context)
+    }
+
+    if err != nil {
+        return nil, err
+    }
+
+    // 第三步：应用过滤
+    result.Files = s.filterDiffFiles(result.Files, tool, pathPattern)
+
+    // 第四步：重新计算统计
+    result.Stats = s.computeStats(result.Files)
+    result.HasDiff = len(result.Files) > 0
+
+    return result, nil
+}
+```
+
+**Step 2: 实现辅助方法**
+
+- `diffWithFilesystem`: 构建文件索引 → 逐文件对比内容哈希 → 对新/删/改文件构建 DiffFileChange
+- `diffSnapshots`: 构建两个快照的文件索引 → 逐文件对比 → 构建 DiffFileChange
+- `computeFileDiff`: 对修改文件使用 gotextdiff 计算行级差异，构建 []DiffHunk
+- `filterDiffFiles`: 按 --tool 和 --path 过滤
+- `computeStats`: 从过滤后的文件列表计算统计数据
+
+**Step 3: 验证编译**
+
+Run: `go build ./internal/service/snapshot/...`
+Expected: 编译通过
+
+---
+
+### Task 5: 实现 UseCase 层 DiffSnapshots
+
+**Files:**
+- Modify: `internal/app/usecase/local_workflow.go` — 新增 DiffSnapshots 方法
+
+**Step 1: 实现 DiffSnapshots**
+
+```go
+func (w *LocalWorkflow) DiffSnapshots(_ context.Context, input DiffSnapshotsInput) (*typesSnapshot.DiffResult, error) {
+    // 第一步：参数校验
+    if strings.TrimSpace(input.SourceID) == "" {
+        return nil, &UserError{
+            Message:    "对比快照失败：请指定源快照 ID 或名称",
+            Suggestion: "使用 snapshot list 查看快照列表",
+        }
+    }
+
+    // 第二步：解析 ID（支持名称查找）
+    sourceID, err := w.resolveSnapshotID(input.SourceID)
+    if err != nil {
+        return nil, err
+    }
+
+    var targetID string
+    if input.TargetID != "" {
+        targetID, err = w.resolveSnapshotID(input.TargetID)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    // 第三步：设置默认上下文行数
+    context := input.Context
+    if context <= 0 {
+        context = 5
+    }
+
+    // 第四步：调用 Service
+    result, err := w.snapshots.DiffSnapshots(sourceID, targetID, input.Verbose, input.Tool, input.PathPattern, context)
+    if err != nil {
+        return nil, &UserError{
+            Message:    "对比快照失败",
+            Suggestion: "请检查快照是否存在",
+            Err:        err,
+        }
+    }
+
+    return result, nil
+}
+```
+
+**Step 2: 提取 resolveSnapshotID 公共方法**
+
+从 RestoreSnapshot 中提取 ID 解析逻辑为独立方法，供 Diff 和 Restore 复用：
+
+```go
+func (w *LocalWorkflow) resolveSnapshotID(idOrName string) (string, error) {
+    id := strings.TrimSpace(idOrName)
+    if isUUIDFormat(id) {
+        return id, nil
+    }
+    // ... 名称查找逻辑 ...
+}
+```
+
+**Step 3: 验证编译**
+
+Run: `go build ./internal/app/usecase/...`
+Expected: 编译通过
+
+---
+
+### Task 6: 新增 diff 输出渲染
+
+**Files:**
+- Create: `internal/cli/output/diff.go`
+
+**Step 1: 实现 renderDiffSummary**
+
+`git diff --stat` 风格，使用 lipgloss 着色。文件名根据状态（added=绿、deleted=红、modified=白）着色，二进制文件显示大小变化。
+
+**Step 2: 实现 renderUnifiedDiff**
+
+标准 unified diff 格式，5 行上下文。`@@ ... @@` 青色，`-` 行红色，`+` 行绿色，上下文白色。二进制文件显示 `Binary files differ`。
+
+**Step 3: 实现 renderSideBySide**
+
+左右分栏显示，自动检测终端宽度。差异行着色 + `|` 分隔符。窄终端（< 80 列）输出提示。
+
+**Step 4: 验证编译**
+
+Run: `go build ./internal/cli/output/...`
+Expected: 编译通过
+
+---
+
+### Task 7: 创建 CLI 命令 snapshot_diff.go
+
+**Files:**
+- Create: `internal/cli/cobra/snapshot_diff.go`
+- Modify: `internal/cli/cobra/snapshot.go` — 注册 diff 子命令
+
+**Step 1: 创建命令文件**
+
+```go
+func newSnapshotDiffCommand(deps Dependencies) *spcobra.Command {
+    var verbose bool
+    var sideBySide bool
+    var tool string
+    var pathPattern string
+    var color string
+
+    command := &spcobra.Command{
+        Use:   "diff <source-id> [<target-id>]",
+        Short: "对比快照差异",
+        Long: `对比两个快照之间的差异，或快照与当前文件系统的差异。
+
+参数个数决定对比类型：
+  1个参数 → 快照 vs 当前文件系统
+  2个参数 → 快照 vs 快照`,
+        Args: spcobra.RangeArgs(1, 2),
+        RunE: func(cmd *spcobra.Command, args []string) error {
+            targetID := ""
+            if len(args) > 1 {
+                targetID = args[1]
+            }
+
+            result, err := deps.Workflow.DiffSnapshots(cmd.Context(), usecase.DiffSnapshotsInput{
+                SourceID:    args[0],
+                TargetID:    targetID,
+                Verbose:     verbose,
+                SideBySide:  sideBySide,
+                Tool:        tool,
+                PathPattern: pathPattern,
+                Context:     5,
+            })
+            if err != nil {
+                return err
+            }
+
+            // 根据 color 参数决定是否着色
+            useColor := shouldUseColor(color, cmd)
+
+            // 渲染输出
+            if !verbose {
+                renderDiffSummary(cmd.OutOrStdout(), result, useColor)
+            } else if sideBySide {
+                renderSideBySideDiff(cmd.OutOrStdout(), result, useColor)
+            } else {
+                renderUnifiedDiff(cmd.OutOrStdout(), result, useColor)
+            }
+
+            // 退出码：有差异返回 1
+            if result.HasDiff {
+                return exitCode(1)
+            }
+            return nil
+        },
+    }
+
+    flags := command.Flags()
+    flags.BoolVarP(&verbose, "verbose", "v", false, "显示内容级差异（上下5行）")
+    flags.BoolVar(&sideBySide, "side-by-side", false, "并排显示差异（配合 -v 使用）")
+    flags.StringVar(&tool, "tool", "", "按工具类型过滤（如 claude、codex）")
+    flags.StringVar(&pathPattern, "path", "", "按路径模式过滤（如 \"mcp/*\"）")
+    flags.StringVar(&color, "color", "auto", "颜色控制：always/auto/never")
+
+    return command
+}
+```
+
+**Step 2: 在 snapshot.go 中注册 diff 子命令**
+
+```go
+command.AddCommand(
+    newSnapshotCreateCommand(deps),
+    newSnapshotListCommand(deps),
+    newSnapshotDeleteCommand(deps),
+    newSnapshotRestoreCommand(deps),
+    newSnapshotDiffCommand(deps),
+)
+```
+
+**Step 3: 验证完整编译**
+
+Run: `go build ./...`
+Expected: 编译通过
+
+---
+
+### Task 8: 改造 restore --dry-run 输出
+
+**Files:**
+- Modify: `internal/cli/cobra/snapshot_restore.go` — dry-run 分支复用 diff 渲染
+
+**Step 1: 修改 dry-run 分支**
+
+将 `printRestorePreview` 替换为 diff 渲染：
+
+```go
+if dryRun {
+    result, err := deps.Workflow.RestoreSnapshot(cmd.Context(), input)
+    if err != nil {
+        return err
+    }
+
+    // 使用 diff 渲染输出
+    diffResult, _ := deps.Workflow.DiffSnapshots(cmd.Context(), usecase.DiffSnapshotsInput{
+        SourceID: args[0],
+        TargetID: "",
+        Verbose:  true,
+        Context:  5,
+    })
+    if diffResult != nil {
+        renderUnifiedDiff(cmd.OutOrStdout(), diffResult, true)
+    }
+
+    // 追加恢复摘要
+    printRestoreSummary(cmd.OutOrStdout(), result)
+    return nil
+}
+```
+
+**Step 2: 验证编译**
+
+Run: `go build ./...`
+Expected: 编译通过
+
+---
+
+### Task 9: 端到端测试
+
+**Step 1: 编译并运行**
+
+```bash
+make build
+./bin/ai-sync.exe snapshot list                              # 获取快照 ID
+./bin/ai-sync.exe snapshot diff <id1> <id2>                  # 摘要模式
+./bin/ai-sync.exe snapshot diff <id1> <id2> -v               # 内容 diff
+./bin/ai-sync.exe snapshot diff <id1> <id2> -v --side-by-side # 并排显示
+./bin/ai-sync.exe snapshot diff <id1>                        # 快照 vs 文件系统
+./bin/ai-sync.exe snapshot diff <id1> --tool claude          # 工具过滤
+./bin/ai-sync.exe snapshot diff <id1> --path "mcp/*"         # 路径过滤
+./bin/ai-sync.exe snapshot restore <id> --dry-run             # 改造后的预览
+```
+
+**Step 2: 验收测试**
+
+| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
+|----------|-----------|----------|----------|
+| 无差异对比 | diff 两个相同快照 | 退出码0，输出"无差异" | 通过 |
+| 摘要模式 | diff <id1> <id2> | 显示变更文件列表和统计 | 通过 |
+| 内容 diff | diff <id1> <id2> -v | 显示 unified diff | 通过 |
+| 并排显示 | diff <id1> <id2> -v --side-by-side | 左右分栏 | 通过 |
+| 快照vs磁盘 | diff <id> | 显示与当前文件差异 | 通过 |
+| 工具过滤 | diff <id1> <id2> --tool claude | 只看 claude 文件 | 通过 |
+| 路径过滤 | diff <id1> <id2> --path "mcp/*" | 只看匹配路径 | 通过 |
+| 二进制文件 | diff 含二进制文件 | 标记 Binary files differ | 通过 |
+| 快照不存在 | diff 不存在的ID | 退出码2，错误提示 | 通过 |
+| restore dry-run | restore <id> --dry-run | 显示 diff + 恢复摘要 | 通过 |
+
+---
+
+### Task 10: 文档更新
+
+**Files:**
+- Modify: `CLAUDE.md` — 更新 CLI 命令速查表、项目结构
+- Modify: `docs/使用指南/快照功能使用指南.md` — 新增 diff 命令说明
+- Modify: `docs/文档索引.md` — 如有新文档需更新索引
+
+**Step 1: 更新 CLAUDE.md 命令速查表**
+
+在 snapshot restore 行后添加：
+
+```
+| snapshot diff | `ai-sync snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 |
+```
+
+**Step 2: 更新快照功能使用指南**
+
+新增 diff 命令的使用说明，含参数解释和输出示例。
+
+**Step 3: Commit**
+
+```bash
+git add -A
+git commit -m "feat: 新增快照对比功能 (snapshot diff)
+
+完成了什么：
+- 新增 snapshot diff 命令，支持快照vs快照、快照vs文件系统两种对比
+- 分级输出：默认摘要、-v 内容diff（上下5行）、--side-by-side 并排显示
+- 支持 --tool 和 --path 过滤，标准 diff 着色
+- 改造 restore --dry-run 复用 diff 输出
+- 退出码：0=无差异 1=有差异 2=错误
+
+有什么作用：
+- 用户可在恢复前直观了解快照之间的配置差异
+
+| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
+|----------|-----------|----------|----------|
+| 摘要模式 | diff <id1> <id2> | 显示变更统计 | 通过 |
+| 内容diff | diff <id1> <id2> -v | 显示unified diff | 通过 |
+| 并排显示 | diff -v --side-by-side | 左右分栏 | 通过 |
+| 快照vs磁盘 | diff <id> | 显示文件系统差异 | 通过 |
+| 工具过滤 | --tool claude | 只看claude变更 | 通过 |
+| 路径过滤 | --path \"mcp/*\" | 只看匹配路径 | 通过 |
+| 二进制文件 | 含二进制文件 | 标记Binary | 通过 |
+| restore预览 | restore --dry-run | diff+恢复摘要 | 通过 |"
+```
