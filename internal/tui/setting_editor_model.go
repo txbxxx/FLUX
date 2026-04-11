@@ -216,10 +216,20 @@ func (m *SettingEditorModel) focusPrev() {
 
 // saveChanges 保存更改。
 func (m *SettingEditorModel) saveChanges() (tea.Model, tea.Cmd) {
+	// 获取token输入框的值
+	tokenValue := (*m.inputs[1]).Value()
+
+	// 如果 token 值与脱敏显示值匹配或是占位符，说明用户没有修改，使用原始完整token
+	// 为什么：maskTokenForEditor 会将token脱敏显示（如 4e5b****QEXh），如果用户没有修改该字段，
+	// 直接保存脱敏值会导致token失效。因此需要检测并还原原始值。
+	if tokenValue == maskTokenForEditor(m.original.Token) || tokenValue == "<unchanged>" {
+		tokenValue = m.original.Token
+	}
+
 	input := &usecase.EditAISettingInput{
 		Name:        m.original.Name,
 		NewName:     (*m.inputs[0]).Value(),
-		Token:       (*m.inputs[1]).Value(),
+		Token:       tokenValue,
 		BaseURL:     (*m.inputs[2]).Value(),
 		OpusModel:   (*m.inputs[3]).Value(),
 		SonnetModel: (*m.inputs[4]).Value(),
