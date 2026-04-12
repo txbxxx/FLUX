@@ -111,7 +111,10 @@ func TestConfigAccessorResolveRejectsPathOutsideAllowedRoots(t *testing.T) {
 	}
 }
 
-func TestConfigAccessorReadFileRejectsBinaryContent(t *testing.T) {
+// TestConfigAccessorReadFileScrubNullBytes 验证含空字节的文件会被自动清理后返回。
+// 为什么：修复 get -e 编辑后再次打开报"无法读取文件"的 bug，
+// settings.json 因损坏嵌入空字节时，应清理后返回而非直接拒绝。
+func TestConfigAccessorReadFileScrubNullBytes(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
@@ -129,15 +132,16 @@ func TestConfigAccessorReadFileRejectsBinaryContent(t *testing.T) {
 
 	target, err := accessor.Resolve(ToolTypeCodex, filepath.Join("skills", "bin.dat"))
 	if err != nil {
-		t.Fatalf("expected binary file to resolve: %v", err)
+		t.Fatalf("expected file to resolve: %v", err)
 	}
 
-	_, err = accessor.ReadFile(target)
-	if err == nil {
-		t.Fatal("expected binary file to be rejected")
+	content, err := accessor.ReadFile(target)
+	if err != nil {
+		t.Fatalf("expected scrubbed file to be readable: %v", err)
 	}
-	if !strings.Contains(err.Error(), "二进制") {
-		t.Fatalf("expected binary error, got %v", err)
+	// 空字节被清理后，剩余 \x01\x02 作为文本返回
+	if content != "\x01\x02" {
+		t.Fatalf("expected scrubbed content '\\x01\\x02', got %q", content)
 	}
 }
 

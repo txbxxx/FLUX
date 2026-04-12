@@ -219,8 +219,8 @@ func (a *ConfigAccessor) ListDir(target *ConfigTarget) ([]ConfigEntry, error) {
 
 // ReadFile 读取配置文件的内容。
 //
-// 通过检查前 512 字节中是否存在空字节来检测二进制文件，检测到时返回错误。
-// 内容以 UTF-8 字符串形式返回。
+// 通过检查前 512 字节中是否存在空字节来检测二进制文件。
+// 对于仅包含零星空字节的配置文件，会自动清理后再返回，而不是直接拒绝。
 func (a *ConfigAccessor) ReadFile(target *ConfigTarget) (string, error) {
 	if target == nil {
 		return "", errors.New("目标不能为空")
@@ -233,8 +233,16 @@ func (a *ConfigAccessor) ReadFile(target *ConfigTarget) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("读取文件失败: %w", err)
 	}
+
+	// 检测并处理二进制内容
+	// 为什么：某些配置文件可能包含零星的空字节（如 settings.json 被损坏时），
+	// 直接拒绝会导致用户无法编辑修复。因此先尝试清理空字节，只在大量空字节时才拒绝。
 	if isBinaryContent(content) {
-		return "", fmt.Errorf("目标是二进制文件，无法直接读取：%s", target.RelativePath)
+		cleaned := scrubNullBytes(content)
+		if isBinaryContent(cleaned) {
+			return "", fmt.Errorf("目标是二进制文件，无法直接读取：%s", target.RelativePath)
+		}
+		content = cleaned
 	}
 
 	return string(content), nil
@@ -343,6 +351,19 @@ func isBinaryContent(content []byte) bool {
 		}
 	}
 	return false
+}
+
+// scrubNullBytes 清理字节切片中的空字节，返回不含 \x00 的新切片。
+// 为什么：某些配置文件可能因外部操作损坏而嵌入了空字节（如 settings.json），
+// 清理后仍可作为文本文件正常使用。
+func scrubNullBytes(content []byte) []byte {
+	cleaned := make([]byte, 0, len(content))
+	for _, b := range content {
+		if b != 0 {
+			cleaned = append(cleaned, b)
+		}
+	}
+	return cleaned
 }
 
 func dirExists(path string) bool {
