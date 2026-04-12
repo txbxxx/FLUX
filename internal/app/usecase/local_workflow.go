@@ -563,11 +563,8 @@ func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotIn
 	}
 	trimmedName := strings.TrimSpace(input.Name)
 	if trimmedName == "" {
-		return nil, &UserError{
-			Message:    "创建快照失败：名称不能为空",
-			Suggestion: "请通过 --name 指定快照名称",
-			Err:        errors.New("empty name"),
-		}
+		// 自动生成快照名称：snapshot-YYYYMMDD-HHMMSS
+		trimmedName = "snapshot-" + time.Now().Format("20060102-150405")
 	}
 	// 名称唯一性校验：遍历已有快照检查是否重名。
 	existingSnapshots, listErr := w.snapshots.ListSnapshots(0, 0)
