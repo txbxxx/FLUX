@@ -50,11 +50,9 @@ func newSnapshotCreateCommand(deps Dependencies) *spcobra.Command {
 	flags := command.Flags()
 	flags.StringVarP(&tools, "tools", "t", "", "指定要备份的工具，多个用逗号分隔（如 codex,claude）")
 	flags.StringVarP(&message, "message", "m", "", "快照说明（必填）")
-	flags.StringVarP(&name, "name", "n", "", "快照名称（必填，必须唯一）")
+	flags.StringVarP(&name, "name", "n", "", "快照名称（可选，不填则自动生成）")
 	flags.StringVarP(&projectName, "project", "p", "", "项目名称（必填，如 codex-global、claude-global 或用户注册的项目）")
-		_ = command.MarkFlagRequired("name")
-
-	return command
+		return command
 }
 
 // splitCSV 将逗号分隔的 CLI 字符串参数拆分为字符串切片。

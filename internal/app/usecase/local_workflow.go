@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -369,16 +370,29 @@ func (w *LocalWorkflow) RemoveCustomRule(_ context.Context, input RemoveCustomRu
 func (w *LocalWorkflow) AddProject(_ context.Context, input AddProjectInput) error {
 	toolType, err := resolveToolType(input.App)
 	if err != nil {
-		return err
+		return &UserError{Message: "添加项目失败：工具名无效", Suggestion: "工具名只支持 codex 或 claude", Err: err}
 	}
 	if w.rules == nil {
 		return newRulesUnavailableError()
 	}
-	if strings.TrimSpace(input.ProjectName) == "" || strings.TrimSpace(input.ProjectPath) == "" {
-		return &UserError{Message: "添加项目失败：项目名和路径不能为空", Suggestion: "请提供项目名和绝对路径"}
+	if strings.TrimSpace(input.ProjectName) == "" {
+		return &UserError{Message: "添加项目失败：项目名不能为空", Suggestion: "请提供项目名（用于标识此项目）"}
+	}
+	if strings.TrimSpace(input.ProjectPath) == "" {
+		return &UserError{Message: "添加项目失败：项目路径不能为空", Suggestion: "请提供项目根目录的绝对路径"}
 	}
 	if err := w.rules.AddProject(toolType, strings.TrimSpace(input.ProjectName), strings.TrimSpace(input.ProjectPath)); err != nil {
-		return &UserError{Message: "添加项目失败", Suggestion: "请检查工具名、项目名和路径后重试", Err: err}
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "必须是目录") {
+			return &UserError{Message: "添加项目失败：" + errMsg, Suggestion: "请确保路径指向一个存在的目录"}
+		}
+		if strings.Contains(errMsg, "不存在") {
+			return &UserError{Message: "添加项目失败：" + errMsg, Suggestion: "请确保路径指向一个存在的目录"}
+		}
+		if strings.Contains(errMsg, "已存在") {
+			return &UserError{Message: "添加项目失败：" + errMsg, Suggestion: "请使用其他项目名，或先删除已存在的同名项目"}
+		}
+		return &UserError{Message: "添加项目失败：" + errMsg, Suggestion: "请检查项目路径是否有效后重试", Err: err}
 	}
 	return nil
 }
@@ -538,13 +552,10 @@ func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotIn
 			Err:        errors.New("empty tools"),
 		}
 	}
+	// 名称为空时自动生成
 	trimmedName := strings.TrimSpace(input.Name)
 	if trimmedName == "" {
-		return nil, &UserError{
-			Message:    "创建快照失败：名称不能为空",
-			Suggestion: "请通过 --name 指定快照名称",
-			Err:        errors.New("empty name"),
-		}
+		trimmedName = fmt.Sprintf("snapshot-%s", time.Now().Format("20060102-150405"))
 	}
 	// 名称唯一性校验：遍历已有快照检查是否重名。
 	existingSnapshots, listErr := w.snapshots.ListSnapshots(0, 0)
@@ -1102,7 +1113,11 @@ func (w *LocalWorkflow) DiffSnapshots(_ context.Context, input DiffSnapshotsInpu
 	// 第二步：解析源快照 ID（支持名称查找）
 	sourceID, err := w.resolveSnapshotID(input.SourceID)
 	if err != nil {
-		return nil, err
+		return nil, &UserError{
+			Message:    "对比快照失败：源快照 [" + input.SourceID + "] " + extractErrorReason(err),
+			Suggestion: "请使用 snapshot list 查看可用快照，确认源快照存在",
+			Err:        err,
+		}
 	}
 
 	// 第三步：解析目标快照 ID（如果提供）
@@ -1110,7 +1125,11 @@ func (w *LocalWorkflow) DiffSnapshots(_ context.Context, input DiffSnapshotsInpu
 	if input.TargetID != "" {
 		targetID, err = w.resolveSnapshotID(input.TargetID)
 		if err != nil {
-			return nil, err
+			return nil, &UserError{
+				Message:    "对比快照失败：目标快照 [" + input.TargetID + "] " + extractErrorReason(err),
+				Suggestion: "请使用 snapshot list 查看可用快照，确认目标快照存在",
+				Err:        err,
+			}
 		}
 	}
 
@@ -1155,4 +1174,17 @@ func (w *LocalWorkflow) resolveSnapshotID(idOrName string) (string, error) {
 		Message:    "未找到名称为 \"" + id + "\" 的快照",
 		Suggestion: "使用 snapshot list 查看所有快照",
 	}
+}
+
+// extractErrorReason 从 error 中提取简短的错误原因描述。
+func extractErrorReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	// 移除 "ai-sync-manager/internal/app/usecase." 前缀
+	if strings.HasPrefix(msg, "未找到名称为") {
+		return msg
+	}
+	return "未找到"
 }
