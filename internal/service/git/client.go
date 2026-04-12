@@ -543,6 +543,23 @@ func (c *GitClient) GetHeadHash(path string) (string, error) {
 	return ref.Hash().String(), nil
 }
 
+// GetRemoteHeadHash returns the remote tracking branch's HEAD hash.
+// This is useful for comparing local and remote state after a fetch.
+func (c *GitClient) GetRemoteHeadHash(path, remoteName, branch string) (string, error) {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return "", fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	refName := plumbing.ReferenceName("refs/remotes/" + remoteName + "/" + branch)
+	ref, err := repo.Reference(refName, true)
+	if err != nil {
+		return "", fmt.Errorf("获取远端引用失败: %w", err)
+	}
+
+	return ref.Hash().String(), nil
+}
+
 // Log returns commit history from the repository.
 func (c *GitClient) Log(ctx context.Context, opts *LogOptions) ([]CommitInfo, error) {
 	if opts == nil {

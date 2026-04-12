@@ -129,9 +129,18 @@ func printSyncPullResult(w io.Writer, result *typesSync.SyncPullResult) {
 		fmt.Fprintf(w, "拉取成功\n\n")
 		fmt.Fprintf(w, "  项目:   %s\n", result.Project)
 		fmt.Fprintf(w, "  文件:   %d 个已更新\n", result.FilesUpdated)
-		if result.HasConflicts {
-			fmt.Fprintf(w, "  冲突:   %d 个文件需要处理\n", result.ConflictCount)
+	} else if result.HasConflicts {
+		fmt.Fprintf(w, "拉取完成，发现冲突\n\n")
+		fmt.Fprintf(w, "  项目:   %s\n", result.Project)
+		fmt.Fprintf(w, "  冲突:   %d 个文件需要处理\n\n", result.ConflictCount)
+		for i, conflict := range result.Conflicts {
+			fmt.Fprintf(w, "  [%d] %s\n", i+1, conflict.Path)
+			fmt.Fprintf(w, "      类型: %s\n", conflict.ConflictType)
+			fmt.Fprintf(w, "      本地: %s\n", conflict.LocalSummary)
+			fmt.Fprintf(w, "      远端: %s\n", conflict.RemoteSummary)
 		}
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "请手动解决冲突后重新执行 ai-sync sync pull")
 	} else {
 		fmt.Fprintf(w, "拉取失败: %s\n", result.Error)
 	}
