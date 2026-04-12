@@ -148,7 +148,9 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	})
 	if err != nil {
 		// commit 失败可能是因为没有变更
-		if strings.Contains(err.Error(), "nothing to commit") {
+		// 为什么：go-git 返回 "cannot create empty commit: clean working tree"，而不是 "nothing to commit"
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "nothing to commit") || strings.Contains(errMsg, "empty commit") {
 			return &typesSync.SyncPushResult{
 				Success:     true,
 				Project:     projectName,
