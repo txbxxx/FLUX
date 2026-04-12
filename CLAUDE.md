@@ -13,9 +13,9 @@
 
 本地优先的 AI 工具配置管理器，聚焦于本地配置的扫描、快照、浏览和编辑。
 
-**当前能力**：扫描本机 AI 工具配置 · 创建/列出本地快照 · 浏览配置目录与文件 · 终端内直接编辑配置文件 · 自定义扫描规则
+**当前能力**：扫描本机 AI 工具配置 · 创建/列出/更新本地快照 · 浏览配置目录与文件 · 终端内直接编辑配置文件 · 自定义扫描规则 · **远端仓库同步（push/pull）** · **冲突检测** · **历史版本查看与恢复**
 
-**暂未覆盖**：远端仓库同步（push/pull/diff/apply/rollback）· 图形化凭证管理 · 快照应用（回滚）· 快照对比 · 大量文件收集可能较慢
+**暂未覆盖**：图形化凭证管理 · 大量文件收集可能较慢
 
 ---
 
@@ -47,7 +47,11 @@ ai-sync-manager/
 │   │   ├── runtime/runtime.go      # 运行时：日志、数据库、服务初始化
 │   │   └── usecase/
 │   │       ├── local_workflow.go   # 本地工作流：快照、扫描、浏览编排
-│   │       └── config_browser.go   # 配置浏览器：目录浏览、文件读写
+│   │       ├── config_browser.go   # 配置浏览器：目录浏览、文件读写
+│   │       ├── update_method.go    # 快照更新：重新扫描并更新快照
+│   │       ├── remote_method.go    # 远端仓库管理：add/list/remove
+│   │       ├── sync_method.go      # 同步推送拉取：push/pull
+│   │       └── history_method.go   # 历史版本：history + restore --version
 │   │
 │   ├── cli/cobra/                  # Cobra 命令定义
 │   │   ├── root.go                 # 根命令 + Workflow 接口
@@ -57,8 +61,12 @@ ai-sync-manager/
 │   │   ├── snapshot_create.go      # snapshot create
 │   │   ├── snapshot_list.go        # snapshot list
 │   │   ├── snapshot_delete.go      # snapshot delete
+│   │   ├── snapshot_update.go     # snapshot update
+│   │   ├── snapshot_history.go    # snapshot history
 │   │   ├── snapshot_restore.go     # snapshot restore
 │   │   ├── snapshot_diff.go       # snapshot diff
+│   │   ├── remote.go              # remote add/list/remove 命令
+│   │   ├── sync.go                # sync push/pull/status 命令
 │   │   ├── setting.go              # setting 命令组
 │   │   └── tui.go                  # tui 命令
 │   │
@@ -94,23 +102,29 @@ ai-sync-manager/
 │   │   │   ├── applier.go          # 快照应用（预留）
 │   │   │   ├── comparator.go       # 快照对比（预留）
 │   │   │   └── types.go            # 类型定义
-│   │   ├── git/                    # Git 操作（预留）
-│   │   ├── sync/                   # 同步服务（预留）
+│   │   ├── git/                    # Git 操作（基于 go-git）
+│   │   │   ├── client.go          # Git 客户端：clone/pull/push/commit/log 等
+│   │   │   └── types.go           # Git 类型定义
+│   │   ├── sync/                   # 同步服务
 │   │   └── crypto/                 # AES-256-GCM 加密
 │   │
 │   └── models/                     # 数据模型 + DAO（同文件，仅表结构+CRUD）
 │       ├── snapshot.go             # Snapshot + SnapshotDAO
 │       ├── registered_project.go   # RegisteredProject + DAO
 │       ├── custom_sync_rule.go     # CustomSyncRule + DAO
-│       ├── sync_task.go            # SyncTask（预留）
-│       ├── remote_config.go        # RemoteConfig（预留）
+│       ├── sync_task.go            # SyncTask
+│       ├── remote_config.go        # RemoteConfig + DAO
 │       ├── app_config.go           # 应用配置/统计模型
 │       └── utils.go                # 工具函数
 │
 │   └── types/                      # 对外返回结构体（按功能分子目录）
 │       ├── snapshot/               # 快照相关返回结构体
+│       │   ├── update.go          # UpdateSnapshotResult
+│       │   └── history.go        # HistoryEntry/HistoryResult
 │       ├── scan/                   # 扫描相关返回结构体
 │       ├── config/                 # 配置浏览相关返回结构体
+│       ├── remote/               # 远端仓库相关返回结构体
+│       ├── sync/                 # 同步操作相关返回结构体
 │       └── common/                 # 通用/共享返回结构体
 │
 ├── pkg/
@@ -359,8 +373,16 @@ feat: get 命令支持省略 path 参数
 | snapshot create | `ai-sync snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
 | snapshot list | `ai-sync snapshot list` | `-l` 条数 `-o` 偏移 |
 | snapshot delete | `ai-sync snapshot delete <id-or-name>` | — |
-| snapshot restore | `ai-sync snapshot restore <id-or-name>` | `--files` 选择性恢复 `--dry-run` 预览 `--force` 跳过确认 |
-| snapshot diff | `ai-sync snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 |
+| snapshot update | `ai-sync snapshot update <id-or-name>` | `-m` 更新说明 |
+| snapshot history | `ai-sync snapshot history <id-or-name>` | `-l` 显示条数 |
+| snapshot restore | `ai-sync snapshot restore <id-or-name>` | `--files` 选择性 `--dry-run` 预览 `--force` 跳过确认 `--version` 恢复历史版本 |
+| snapshot diff | `ai-sync snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 过滤 `--path` 过滤 `--color` 颜色 |
+| remote add | `ai-sync remote add <url>` | `--name` 名称 `--branch` 分支 `--token` Token |
+| remote list | `ai-sync remote list` | — |
+| remote remove | `ai-sync remote remove <name>` | — |
+| sync push | `ai-sync sync push` | `--project/-p` 项目 `--all` 推送全部 |
+| sync pull | `ai-sync sync pull` | `--project/-p` 项目 `--all` 拉取全部 |
+| sync status | `ai-sync sync status` | `--project/-p` 项目 |
 | tui | `ai-sync tui` | — |
 
 ---
