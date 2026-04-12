@@ -223,7 +223,11 @@ func (w *LocalWorkflow) SaveConfig(_ context.Context, input SaveConfigInput) err
 		}
 	}
 
-	if err := w.accessor.WriteFile(target, input.Content); err != nil {
+	// 清理文件内容中的控制字符和空字节，防止编辑器引入的异常字符损坏文件
+	// 为什么：Windows 终端和 Bubbletea 框架在输入处理时可能引入空字节或控制字符，
+	// 读取路径通过 sanitizeContent 清理，写入路径也需要同样处理以保持对称。
+	cleanedContent := sanitizeContent(input.Content)
+	if err := w.accessor.WriteFile(target, cleanedContent); err != nil {
 		return &UserError{
 			Message:    "无法保存配置",
 			Suggestion: "请检查文件是否被占用、是否有写入权限",
