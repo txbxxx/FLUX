@@ -90,6 +90,9 @@ type Workflow interface {
 		SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
 		SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
 		SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
+		// 历史版本
+		SnapshotHistory(ctx context.Context, input SnapshotHistoryInput) (*typesSnapshot.HistoryResult, error)
+		RestoreFromHistory(ctx context.Context, input RestoreFromHistoryInput) (*typesSnapshot.RestoreResult, error)
 }
 
 // LocalWorkflow 是 Workflow 的本地实现，编排本地扫描、快照、配置浏览等流程。
@@ -1175,4 +1178,20 @@ func (w *LocalWorkflow) resolveSnapshotID(idOrName string) (string, error) {
 		Message:    "未找到名称为 \"" + id + "\" 的快照",
 		Suggestion: "使用 snapshot list 查看所有快照",
 	}
+}
+
+// SnapshotHistoryInput is the input for viewing snapshot history.
+type SnapshotHistoryInput struct {
+	IDOrName string // Snapshot ID or name
+	Limit    int    // Max entries to return (0 = default 20)
+}
+
+// RestoreFromHistoryInput is the input for restoring a snapshot from a specific history version.
+type RestoreFromHistoryInput struct {
+	IDOrName  string   // Snapshot ID or name
+	CommitHash string  // Git commit hash to restore from
+	Files     []string // Specific files to restore (empty = all)
+	DryRun    bool     // Preview mode
+	Force     bool     // Skip confirmation
+	BackupDir string   // Backup base directory
 }
