@@ -10,6 +10,8 @@ import (
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
 	typesScan "ai-sync-manager/internal/types/scan"
+typesRemote "ai-sync-manager/internal/types/remote"
+	typesSync "ai-sync-manager/internal/types/sync"
 	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
@@ -65,10 +67,15 @@ type Workflow interface {
 	CreateSnapshot(ctx context.Context, input CreateSnapshotInput) (*SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input ListSnapshotsInput) (*ListSnapshotsResult, error)
 	DeleteSnapshot(ctx context.Context, input DeleteSnapshotInput) error
+	UpdateSnapshot(ctx context.Context, input UpdateSnapshotInput) (*typesSnapshot.UpdateSnapshotResult, error)
 	RestoreSnapshot(ctx context.Context, input RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error)
 	DiffSnapshots(ctx context.Context, input DiffSnapshotsInput) (*typesSnapshot.DiffResult, error)
 	GetConfig(ctx context.Context, input GetConfigInput) (*GetConfigResult, error)
 	SaveConfig(ctx context.Context, input SaveConfigInput) error
+		// 远端仓库管理
+		AddRemote(ctx context.Context, input typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error)
+		ListRemotes(ctx context.Context) (*typesRemote.ListRemotesResult, error)
+		RemoveRemote(ctx context.Context, input typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error)
 	// AI setting 相关方法
 	CreateAISetting(ctx context.Context, input CreateAISettingInput) (*CreateAISettingResult, error)
 	ListAISettings(ctx context.Context, input ListAISettingsInput) (*ListAISettingsResult, error)
@@ -79,16 +86,23 @@ type Workflow interface {
 	// 新增批量方法
 	GetAISettingsBatch(ctx context.Context, input GetAISettingsBatchInput) (*GetAISettingsBatchResult, error)
 	DeleteAISettingsBatch(ctx context.Context, input DeleteAISettingsBatchInput) (*DeleteAISettingsBatchResult, error)
+		// 同步操作
+		SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
+		SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
+		SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
 }
 
 // LocalWorkflow 是 Workflow 的本地实现，编排本地扫描、快照、配置浏览等流程。
 // 它不直接访问数据库，而是通过 Detector、SnapshotManager、ScanRuleManager 等接口协调工作。
 type LocalWorkflow struct {
-	detector         Detector         // 工具检测器，负责扫描本机配置
-	snapshots        SnapshotManager  // 快照管理器，负责快照的持久化
-	accessor         ConfigAccessor   // 配置访问器，负责文件的读写浏览
-	rules            ScanRuleManager  // 规则管理器，负责持久化规则和项目的增删查（可选依赖）
-	aiSettingManager AISettingManager // AI 配置管理器（可选依赖）
+	detector         Detector              // 工具检测器，负责扫描本机配置
+	snapshots        SnapshotManager       // 快照管理器，负责快照的持久化
+	accessor         ConfigAccessor        // 配置访问器，负责文件的读写浏览
+	rules            ScanRuleManager       // 规则管理器，负责持久化规则和项目的增删查（可选依赖）
+	aiSettingManager AISettingManager      // AI 配置管理器（可选依赖）
+	remoteConfigs    RemoteConfigManager   // 远端配置管理器（可选依赖）
+	remoteTester     RemoteConnectionTester // 远端连通性测试（可选依赖）
+	dataDir          string                // 应用数据目录（用于 repos 路径）
 }
 
 // --- 数据结构定义 ---
@@ -209,6 +223,12 @@ type ListSnapshotsResult struct {
 // DeleteSnapshotInput 是删除快照的输入参数。
 type DeleteSnapshotInput struct {
 	IDOrName string // 快照 ID 或名称
+}
+
+// UpdateSnapshotInput 更新快照的输入参数。
+type UpdateSnapshotInput struct {
+	IDOrName string // 快照 ID 或名称
+	Message  string // 更新说明（可选，默认保留原 message）
 }
 
 // DiffSnapshotsInput is the input for comparing snapshots.

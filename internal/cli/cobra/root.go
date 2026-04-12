@@ -13,6 +13,8 @@ import (
 
 	"ai-sync-manager/internal/app/usecase"
 	"ai-sync-manager/internal/cli/output"
+typesRemote "ai-sync-manager/internal/types/remote"
+	typesSync "ai-sync-manager/internal/types/sync"
 	typesSnapshot "ai-sync-manager/internal/types/snapshot"
 )
 
@@ -29,10 +31,15 @@ type Workflow interface {
 	CreateSnapshot(ctx context.Context, input usecase.CreateSnapshotInput) (*usecase.SnapshotSummary, error)
 	ListSnapshots(ctx context.Context, input usecase.ListSnapshotsInput) (*usecase.ListSnapshotsResult, error)
 	DeleteSnapshot(ctx context.Context, input usecase.DeleteSnapshotInput) error
+	UpdateSnapshot(ctx context.Context, input usecase.UpdateSnapshotInput) (*typesSnapshot.UpdateSnapshotResult, error)
 	RestoreSnapshot(ctx context.Context, input usecase.RestoreSnapshotInput) (*typesSnapshot.RestoreResult, error)
 	DiffSnapshots(ctx context.Context, input usecase.DiffSnapshotsInput) (*typesSnapshot.DiffResult, error)
 	GetConfig(ctx context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error)
 	SaveConfig(ctx context.Context, input usecase.SaveConfigInput) error
+		// 远端仓库管理
+		AddRemote(ctx context.Context, input typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error)
+		ListRemotes(ctx context.Context) (*typesRemote.ListRemotesResult, error)
+		RemoveRemote(ctx context.Context, input typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error)
 	CreateAISetting(ctx context.Context, input usecase.CreateAISettingInput) (*usecase.CreateAISettingResult, error)
 	ListAISettings(ctx context.Context, input usecase.ListAISettingsInput) (*usecase.ListAISettingsResult, error)
 	GetAISetting(ctx context.Context, input usecase.GetAISettingInput) (*usecase.GetAISettingResult, error)
@@ -42,6 +49,10 @@ type Workflow interface {
 	// 新增批量方法
 	GetAISettingsBatch(ctx context.Context, input usecase.GetAISettingsBatchInput) (*usecase.GetAISettingsBatchResult, error)
 	DeleteAISettingsBatch(ctx context.Context, input usecase.DeleteAISettingsBatchInput) (*usecase.DeleteAISettingsBatchResult, error)
+		// 同步操作
+		SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
+		SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
+		SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
 }
 
 // TUIRunner / EditorRunner 抽象终端交互能力，避免 cobra 直接依赖具体实现。
@@ -85,6 +96,8 @@ func NewRootCommand(deps Dependencies) *spcobra.Command {
 		newSnapshotCommand(deps),
 		newTUICommand(deps),
 		newGetCommand(deps),
+		newRemoteCommand(deps),
+		newSyncCommand(deps),
 		newSettingCommand(deps),
 	)
 
