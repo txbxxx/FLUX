@@ -782,6 +782,63 @@ func parseUnifiedDiffLines(lines []string) []typesSnapshot.DiffHunk {
 	return hunks
 }
 
+// CollectForUpdate re-collects files for an existing snapshot's project.
+// Returns the collected files, the project path, and any error.
+func (s *Service) CollectForUpdate(projectName string, tools []string) ([]models.SnapshotFile, string, error) {
+	projectPath, err := s.resolveProjectPath(projectName, tools)
+	if err != nil {
+		return nil, "", err
+	}
+
+	collectOpts := CollectOptions{
+		Tools:       tools,
+		ProjectPath: projectPath,
+	}
+
+	result, err := s.collector.Collect(collectOpts)
+	if err != nil {
+		return nil, "", fmt.Errorf("收集配置文件失败: %w", err)
+	}
+
+	if len(result.Files) == 0 {
+		return nil, "", fmt.Errorf("未找到任何配置文件")
+	}
+
+	return result.Files, projectPath, nil
+}
+
+// DiffFileSets compares old and new file sets and returns change counts.
+func DiffFileSets(oldFiles, newFiles []models.SnapshotFile) (added, updated, removed, unchanged int) {
+	oldMap := make(map[string]string, len(oldFiles))
+	for _, f := range oldFiles {
+		oldMap[f.Path] = f.Hash
+	}
+
+	newMap := make(map[string]string, len(newFiles))
+	for _, f := range newFiles {
+		newMap[f.Path] = f.Hash
+	}
+
+	for path, hash := range newMap {
+		oldHash, exists := oldMap[path]
+		if !exists {
+			added++
+		} else if oldHash != hash {
+			updated++
+		} else {
+			unchanged++
+		}
+	}
+
+	for path := range oldMap {
+		if _, exists := newMap[path]; !exists {
+			removed++
+		}
+	}
+
+	return
+}
+
 // countLineChanges counts added and deleted lines between two byte contents.
 func countLineChanges(oldContent, newContent []byte) (addLines, delLines int) {
 	edits := myers.ComputeEdits("a", string(oldContent), string(newContent))

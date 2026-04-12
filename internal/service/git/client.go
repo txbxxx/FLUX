@@ -13,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/utils/merkletrie"
 	"go.uber.org/zap"
 )
 
@@ -489,4 +490,222 @@ func AddRemote(path, name, url string) error {
 	}
 
 	return nil
+}
+
+// Fetch pulls remote changes without merging, similar to git fetch.
+func (c *GitClient) Fetch(ctx context.Context, opts *FetchOptions) (*OperationResult, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("fetch 选项不能为空")
+	}
+
+	repo, err := git.PlainOpen(opts.Path)
+	if err != nil {
+		return nil, fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	auth, err := NewAuthMethod(opts.Auth)
+	if err != nil {
+		return nil, fmt.Errorf("创建认证方法失败: %w", err)
+	}
+
+	remoteName := opts.Remote
+	if remoteName == "" {
+		remoteName = "origin"
+	}
+
+	fetchOpts := &git.FetchOptions{
+		RemoteName: remoteName,
+		Auth:       auth,
+	}
+
+	if err := repo.Fetch(fetchOpts); err != nil {
+		if err == git.NoErrAlreadyUpToDate {
+			return &OperationResult{Success: true, Message: "已是最新"}, nil
+		}
+		return nil, fmt.Errorf("fetch 失败: %w", err)
+	}
+
+	return &OperationResult{Success: true, Message: "fetch 成功"}, nil
+}
+
+// GetHeadHash returns the current HEAD commit hash.
+func (c *GitClient) GetHeadHash(path string) (string, error) {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return "", fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	ref, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("获取 HEAD 失败: %w", err)
+	}
+
+	return ref.Hash().String(), nil
+}
+
+// GetRemoteHeadHash returns the remote tracking branch's HEAD hash.
+// This is useful for comparing local and remote state after a fetch.
+func (c *GitClient) GetRemoteHeadHash(path, remoteName, branch string) (string, error) {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return "", fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	refName := plumbing.ReferenceName("refs/remotes/" + remoteName + "/" + branch)
+	ref, err := repo.Reference(refName, true)
+	if err != nil {
+		return "", fmt.Errorf("获取远端引用失败: %w", err)
+	}
+
+	return ref.Hash().String(), nil
+}
+
+// Log returns commit history from the repository.
+func (c *GitClient) Log(ctx context.Context, opts *LogOptions) ([]CommitInfo, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("log 选项不能为空")
+	}
+
+	repo, err := git.PlainOpen(opts.Path)
+	if err != nil {
+		return nil, fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	commitIter, err := repo.Log(&git.LogOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("获取日志失败: %w", err)
+	}
+	defer commitIter.Close()
+
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var commits []CommitInfo
+	for i := 0; i < limit; i++ {
+		commit, err := commitIter.Next()
+		if err != nil {
+			break
+		}
+
+		commits = append(commits, CommitInfo{
+			Hash:    commit.Hash.String(),
+			Message: commit.Message,
+			Author:  commit.Author.Name,
+			Date:    commit.Author.When,
+		})
+	}
+
+	return commits, nil
+}
+
+// GetFileContent reads a file's content at a specific commit reference.
+func (c *GitClient) GetFileContent(ctx context.Context, path, filePath, ref string) ([]byte, error) {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return nil, fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	var hash plumbing.Hash
+	if ref != "" {
+		hash = plumbing.NewHash(ref)
+	} else {
+		h, err := repo.Head()
+		if err != nil {
+			return nil, fmt.Errorf("获取 HEAD 失败: %w", err)
+		}
+		hash = h.Hash()
+	}
+
+	commit, err := repo.CommitObject(hash)
+	if err != nil {
+		return nil, fmt.Errorf("获取 commit 失败: %w", err)
+	}
+
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("获取 tree 失败: %w", err)
+	}
+
+	file, err := tree.File(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("获取文件失败: %w", err)
+	}
+
+	content, err := file.Contents()
+	if err != nil {
+		return nil, fmt.Errorf("读取文件内容失败: %w", err)
+	}
+
+	return []byte(content), nil
+}
+
+// GetChangedFiles returns the list of files changed between two commits.
+func (c *GitClient) GetChangedFiles(path, beforeHash, afterHash string) ([]FileDiff, error) {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return nil, fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	beforeTree, err := c.getCommitTree(repo, beforeHash)
+	if err != nil {
+		return nil, err
+	}
+
+	afterTree, err := c.getCommitTree(repo, afterHash)
+	if err != nil {
+		return nil, err
+	}
+
+	if beforeTree == nil && afterTree == nil {
+		return nil, nil
+	}
+
+	// Use go-git's diff to find changes
+	changes, err := object.DiffTree(beforeTree, afterTree)
+	if err != nil {
+		return nil, fmt.Errorf("对比 tree 失败: %w", err)
+	}
+
+	var diffs []FileDiff
+	for _, change := range changes {
+		diff := FileDiff{
+			Path: change.To.Name,
+		}
+
+		action, err := change.Action()
+		if err != nil {
+			continue
+		}
+
+		switch action {
+		case merkletrie.Insert:
+			diff.Status = "added"
+		case merkletrie.Modify:
+			diff.Status = "modified"
+		case merkletrie.Delete:
+			diff.Status = "deleted"
+			diff.Path = change.From.Name
+		}
+
+		diffs = append(diffs, diff)
+	}
+
+	return diffs, nil
+}
+
+// getCommitTree returns the tree object for a given commit hash.
+func (c *GitClient) getCommitTree(repo *git.Repository, hashStr string) (*object.Tree, error) {
+	if hashStr == "" {
+		return nil, nil
+	}
+
+	hash := plumbing.NewHash(hashStr)
+	commit, err := repo.CommitObject(hash)
+	if err != nil {
+		return nil, fmt.Errorf("获取 commit %s 失败: %w", hashStr[:8], err)
+	}
+
+	return commit.Tree()
 }

@@ -9,6 +9,7 @@ import (
 	"ai-sync-manager/internal/app/usecase"
 	clicobra "ai-sync-manager/internal/cli/cobra"
 	"ai-sync-manager/internal/service/setting"
+	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/tool"
 	"ai-sync-manager/internal/tui"
 )
@@ -36,9 +37,13 @@ func main() {
 
 	accessor := tool.NewConfigAccessor(rt.RuleResolver)
 	aiSettingService := setting.NewAISettingManager(rt.AISettingDAO)
+	remoteConfigDAO := models.NewRemoteConfigDAO(rt.DB)
+	remoteConfigAdapter := usecase.NewRemoteConfigDAOAdapter(remoteConfigDAO)
 	workflow := usecase.NewLocalWorkflow(rt.Detector, rt.SnapshotService, accessor).
 		WithScanRuleManager(rt.RuleManager).
-		WithAISettingManager(aiSettingService)
+		WithAISettingManager(aiSettingService).
+		WithRemoteConfigs(remoteConfigAdapter).
+		WithDataDir(rt.DataDir)
 	runner := tui.NewRunner(workflow, rt.DataDir, os.Stdin, os.Stdout)
 	editor := tui.NewConfigEditor(os.Stdin, os.Stdout)
 
