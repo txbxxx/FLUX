@@ -119,3 +119,35 @@ type OperationResult struct {
 	Message string `json:"message"`         // 结果消息
 	Error   string `json:"error,omitempty"` // 错误信息（如果失败）
 }
+
+// FetchOptions fetch 选项
+type FetchOptions struct {
+	Path   string         `json:"path"`            // 仓库路径
+	Auth   *GitAuthConfig `json:"auth,omitempty"`  // 认证配置
+	Remote string         `json:"remote,omitempty"` // 远端名称（默认 origin）
+}
+
+// LogOptions 日志查询选项
+type LogOptions struct {
+	Path     string    `json:"path"`               // 仓库路径
+	FilePath string    `json:"file_path,omitempty"` // 文件路径过滤（可选）
+	Since    time.Time `json:"since,omitempty"`    // 起始时间（可选）
+	Until    time.Time `json:"until,omitempty"`    // 截止时间（可选）
+	Limit    int       `json:"limit,omitempty"`    // 最大返回数量（默认 50）
+}
+
+// CommitInfo 提交信息
+type CommitInfo struct {
+	Hash    string    `json:"hash"`    // 提交哈希
+	Message string    `json:"message"` // 提交消息
+	Author  string    `json:"author"`  // 作者
+	Date    time.Time `json:"date"`    // 提交时间
+}
+
+// FileDiff 文件差异描述
+type FileDiff struct {
+	Path    string `json:"path"`    // 文件路径
+	Status  string `json:"status"`  // added / modified / deleted
+	OldHash string `json:"old_hash"` // 变更前哈希
+	NewHash string `json:"new_hash"` // 变更后哈希
+}

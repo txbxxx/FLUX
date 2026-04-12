@@ -9,15 +9,8 @@ import (
 
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/internal/service/git"
-	"ai-sync-manager/internal/service/sync"
 	typesSync "ai-sync-manager/internal/types/sync"
 )
-
-// SyncService defines the interface for sync-level operations (packaging, git interaction).
-type SyncService interface {
-	PushSnapshot(ctx context.Context, snapshot *models.Snapshot, options sync.SyncOptions) (*sync.PushResult, error)
-	ValidateRemoteConfig(ctx context.Context, config *models.RemoteConfig) error
-}
 
 // SyncPush pushes the latest snapshot of a project to its configured remote repository.
 //
@@ -201,7 +194,14 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 }
 
 // SyncPull pulls the latest configuration from remote and updates SQLite.
+//
+// 流程（无冲突场景）：
+//  1. 获取远端配置
+//  2. 确保 repo 存在，执行 git pull
+//  3. 获取变更文件列表
+//  4. 读取变更文件内容 → 更新 SQLite
 func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error) {
+	// 第一步：参数校验
 	projectName := strings.TrimSpace(input.Project)
 	if projectName == "" {
 		return nil, &UserError{
@@ -210,10 +210,141 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		}
 	}
 
-	return nil, &UserError{
-		Message:    "拉取功能正在开发中",
-		Suggestion: "请等待下一版本更新",
+	if w.remoteConfigs == nil {
+		return nil, &UserError{
+			Message:    "拉取失败：远端配置服务不可用",
+			Suggestion: "请先执行 ai-sync remote add <url>",
+		}
 	}
+
+	// 第二步：获取远端配置
+	configs, err := w.remoteConfigs.ListRemoteConfigs()
+	if err != nil || len(configs) == 0 {
+		return nil, &UserError{
+			Message:    "拉取失败：未配置远端仓库",
+			Suggestion: "请先执行 ai-sync remote add <url>",
+		}
+	}
+
+	var remoteConfig *models.RemoteConfig
+	for _, cfg := range configs {
+		if cfg.Status == models.StatusActive {
+			remoteConfig = cfg
+			break
+		}
+	}
+	if remoteConfig == nil {
+		return nil, &UserError{
+			Message:    "拉取失败：没有可用的活跃远端配置",
+			Suggestion: "请先执行 ai-sync remote add 添加一个有效的远端仓库",
+		}
+	}
+
+	// 第三步：确保仓库存在并 pull
+	dataDir := w.dataDir
+	repoPath := filepath.Join(dataDir, "repos", projectName)
+	gitClient := git.NewGitClient()
+
+	if !git.IsRepository(repoPath) {
+		return nil, &UserError{
+			Message:    "拉取失败：本地仓库不存在",
+			Suggestion: "请先执行 ai-sync sync push --project " + projectName + " 初始化仓库",
+		}
+	}
+
+	// 记录 pull 前的 HEAD
+	beforeHash, _ := gitClient.GetHeadHash(repoPath)
+
+	// 执行 pull
+	_, err = gitClient.Pull(ctx, &git.PullOptions{
+		Path:       repoPath,
+		Auth:       convertAuthFromModel(&remoteConfig.Auth),
+		RemoteName: "origin",
+		Branch:     remoteConfig.Branch,
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "already up-to-date") {
+			return &typesSync.SyncPullResult{
+				Success:      true,
+				Project:      projectName,
+				FilesUpdated: 0,
+			}, nil
+		}
+		return nil, &UserError{
+			Message:    "拉取失败：Git pull 失败",
+			Suggestion: "请检查网络连接和仓库权限",
+			Err:        err,
+		}
+	}
+
+	// 第四步：获取变更文件列表
+	afterHash, _ := gitClient.GetHeadHash(repoPath)
+	if beforeHash == "" || afterHash == "" || beforeHash == afterHash {
+		return &typesSync.SyncPullResult{
+			Success:      true,
+			Project:      projectName,
+			FilesUpdated: 0,
+		}, nil
+	}
+
+	changedFiles, err := gitClient.GetChangedFiles(repoPath, beforeHash, afterHash)
+	if err != nil || len(changedFiles) == 0 {
+		return &typesSync.SyncPullResult{
+			Success:      true,
+			Project:      projectName,
+			FilesUpdated: 0,
+		}, nil
+	}
+
+	// 第五步：过滤本 project 子目录的文件并更新 SQLite
+	projectPrefix := projectName + "/"
+	var updatedCount int
+
+	for _, cf := range changedFiles {
+		// 只处理项目子目录下的文件
+		if !strings.HasPrefix(cf.Path, projectPrefix) {
+			continue
+		}
+
+		// 从工作目录读取文件内容
+		content, readErr := os.ReadFile(filepath.Join(repoPath, cf.Path))
+		if readErr != nil {
+			continue
+		}
+
+		// 找到对应的快照并更新文件
+		if w.snapshots != nil {
+			items, listErr := w.snapshots.ListSnapshots(0, 0)
+			if listErr != nil {
+				continue
+			}
+			for _, item := range items {
+				if item.Project == projectName {
+					snapshot, getErr := w.snapshots.GetSnapshot(item.ID)
+					if getErr != nil {
+						continue
+					}
+					// 更新对应文件的内容
+					relativePath := strings.TrimPrefix(cf.Path, projectPrefix)
+					for i, f := range snapshot.Files {
+						if f.Path == relativePath {
+							snapshot.Files[i].Content = content
+							_ = w.snapshots.UpdateSnapshot(snapshot)
+							updatedCount++
+							break
+						}
+					}
+					break // 只更新最新的快照
+				}
+			}
+		}
+	}
+
+	return &typesSync.SyncPullResult{
+		Success:      true,
+		Project:      projectName,
+		FilesUpdated: updatedCount,
+	}, nil
 }
 
 // SyncStatus checks the sync status of a project.
