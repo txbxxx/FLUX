@@ -376,7 +376,11 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 	}
 
 	// 第五步：读取现有配置并保留其他字段
-	if content, err := os.ReadFile(settingsPath); err == nil {
+	if rawContent, err := os.ReadFile(settingsPath); err == nil {
+		// 清理可能存在的空字节和控制字符，防止 JSON 解析失败导致合并逻辑被跳过
+		// 为什么：get -e 编辑器可能在文件中引入空字节，导致 json.Unmarshal 失败，
+		// 而 if err == nil 会静默跳过合并，造成其他配置字段丢失。
+		content := []byte(sanitizeContent(string(rawContent)))
 		var existing map[string]any
 		if err := json.Unmarshal(content, &existing); err == nil {
 			// 合并 env 字段
@@ -461,6 +465,8 @@ func (w *LocalWorkflow) getCurrentSettingInfo() (*currentSettingInfo, error) {
 		return nil, err
 	}
 
+	// 清理可能存在的空字节和控制字符，防止 JSON 解析失败
+	content = []byte(sanitizeContent(string(content)))
 	return parseCurrentSettingInfo(content)
 }
 
