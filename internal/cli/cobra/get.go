@@ -2,6 +2,7 @@ package cobra
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -10,6 +11,17 @@ import (
 	"ai-sync-manager/internal/app/usecase"
 )
 
+// validateGetArgs validates arguments for the get command with user-friendly Chinese error messages.
+func validateGetArgs(cmd *spcobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("请指定项目名称，例如：ai-sync get claude 或 ai-sync get claude settings.json\n查看支持的项目：ai-sync scan list")
+	}
+	if len(args) > 2 {
+		return fmt.Errorf("参数过多，get 命令接受 1-2 个参数：<project> [path]")
+	}
+	return nil
+}
+
 func newGetCommand(deps Dependencies) *spcobra.Command {
 	var edit bool
 	var snapshot string
@@ -17,7 +29,7 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 	command := &spcobra.Command{
 		Use:   "get <project> [path]",
 		Short: "查看或编辑指定 AI 工具配置",
-		Args:  spcobra.MinimumNArgs(1),
+		Args:  validateGetArgs,
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			path := ""
 			if len(args) > 1 {

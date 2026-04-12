@@ -83,6 +83,7 @@ func NewSnapshotDAO(db *database.DB) *SnapshotDAO {
 }
 
 // Create writes the snapshot record and its associated files in a single transaction.
+// 分批插入文件以避免 SQLite SQL 变量数量限制（每批 500 个文件）。
 func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
 	row := snapshotToRow(snapshot)
 	fileRows := snapshotFilesToRows(snapshot.ID, snapshot.Files)
@@ -92,8 +93,17 @@ func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
 			return err
 		}
 		if len(fileRows) > 0 {
-			if err := tx.Omit("id").Create(&fileRows).Error; err != nil {
-				return err
+			// 分批插入以避免 SQLite SQL 变量数量限制
+			const batchSize = 500
+			for i := 0; i < len(fileRows); i += batchSize {
+				end := i + batchSize
+				if end > len(fileRows) {
+					end = len(fileRows)
+				}
+				batch := fileRows[i:end]
+				if err := tx.Omit("id").Create(&batch).Error; err != nil {
+					return err
+				}
 			}
 		}
 		return nil
