@@ -387,6 +387,11 @@ func (c *GitClient) Commit(ctx context.Context, opts *CommitOptions) (*CommitRes
 		},
 	})
 	if err != nil {
+		// clean working tree is not a real error
+		if strings.Contains(err.Error(), "empty commit") || strings.Contains(err.Error(), "nothing to commit") {
+			logger.Debug("no changes to commit")
+			return nil, fmt.Errorf("提交失败: %w", err)
+		}
 		logger.Error("提交失败", zap.Error(err))
 		return nil, fmt.Errorf("提交失败: %w", err)
 	}
