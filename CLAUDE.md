@@ -1,4 +1,4 @@
-# AI Sync Manager
+# Flux
 
 > **本地优先的 AI 工具配置管理器** — 纯终端形态的 CLI + TUI 应用
 >
@@ -37,8 +37,8 @@
 ## 项目结构
 
 ```
-ai-sync-manager/
-├── cmd/ai-sync/                    # CLI 入口
+flux/
+├── cmd/fl/                         # CLI 入口
 │   ├── main.go                     # 组装依赖、启动 CLI/TUI
 │   └── main_test.go
 │
@@ -257,14 +257,14 @@ func (w *LocalWorkflow) Scan(ctx context.Context, input ScanInput) (*ScanResult,
 ### 错误处理
 
 ```go
-import "ai-sync-manager/pkg/errors"
+import "flux/pkg/errors"
 return errors.Wrap(err, "创建快照失败")
 ```
 
 ### 日志
 
 ```go
-import "ai-sync-manager/pkg/logger"
+import "flux/pkg/logger"
 logger.Info("操作开始", zap.String("snapshot_id", id), zap.Int("file_count", n))
 ```
 
@@ -388,30 +388,30 @@ feat: get 命令支持省略 path 参数
 
 | 命令 | 用法 | 关键 flag |
 |------|------|-----------|
-| scan | `ai-sync scan [app-or-project...]` | — |
-| scan add | `ai-sync scan add <app> <path>` | `--project/-p` 注册项目 |
-| scan remove | `ai-sync scan remove <app> <path>` | `--project/-p` 删除项目 |
-| scan list | `ai-sync scan list [app-or-project]` | `--verbose/-v` 显示详细配置项 |
-| scan rules | `ai-sync scan rules [app-or-project]` | — |
-| get | `ai-sync get <project> [path]` | `--edit/-e` 编辑模式 `--snapshot/-s` 浏览快照 |
-| setting create | `ai-sync setting create` | `--name` 名称 `--token` 令牌 `--api` API地址 `--opus-model` Opus模型 `--sonnet-model` Sonnet模型 |
-| setting list | `ai-sync setting list` | `-l` 条数 `-o` 偏移 |
-| setting get | `ai-sync setting get <name>` | — |
-| setting delete | `ai-sync setting delete <name>` | — |
-| setting switch | `ai-sync setting switch <name>` | — |
-| snapshot create | `ai-sync snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
-| snapshot list | `ai-sync snapshot list` | `-l` 条数 `-o` 偏移 |
-| snapshot delete | `ai-sync snapshot delete <id-or-name>` | — |
-| snapshot restore | `ai-sync snapshot restore <id-or-name>` | `--files` 选择性恢复 `--dry-run` 预览 `--force` 跳过确认 |
-| snapshot diff | `ai-sync snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 |
-| tui | `ai-sync tui` | — |
+| scan | `fl scan [app-or-project...]` | — |
+| scan add | `fl scan add <app> <path>` | `--project/-p` 注册项目 |
+| scan remove | `fl scan remove <app> <path>` | `--project/-p` 删除项目 |
+| scan list | `fl scan list [app-or-project]` | `--verbose/-v` 显示详细配置项 |
+| scan rules | `fl scan rules [app-or-project]` | — |
+| get | `fl get <project> [path]` | `--edit/-e` 编辑模式 `--snapshot/-s` 浏览快照 |
+| setting create | `fl setting create` | `--name` 名称 `--token` 令牌 `--api` API地址 `--opus-model` Opus模型 `--sonnet-model` Sonnet模型 |
+| setting list | `fl setting list` | `-l` 条数 `-o` 偏移 |
+| setting get | `fl setting get <name>` | — |
+| setting delete | `fl setting delete <name>` | — |
+| setting switch | `fl setting switch <name>` | — |
+| snapshot create | `fl snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
+| snapshot list | `fl snapshot list` | `-l` 条数 `-o` 偏移 |
+| snapshot delete | `fl snapshot delete <id-or-name>` | — |
+| snapshot restore | `fl snapshot restore <id-or-name>` | `--files` 选择性恢复 `--dry-run` 预览 `--force` 跳过确认 |
+| snapshot diff | `fl snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 |
+| tui | `fl tui` | — |
 
 ---
 
 ## 常用命令
 
 ```bash
-make build                          # 构建 bin/ai-sync.exe
+make build                          # 构建 bin/fl.exe
 make build CLI_NAME=my-tool         # 自定义名称
 make run                            # 构建并运行
 make run ARGS=scan                  # 带参数运行
@@ -421,7 +421,7 @@ make clean                          # 清理
 go test ./...                       # 全部测试
 go test ./internal/service/snapshot/... -v -cover  # 特定包
 go test -coverprofile=coverage.out ./...            # 覆盖率
-go run -buildvcs=false ./cmd/ai-sync <command>      # 直接运行
+go run -buildvcs=false ./cmd/fl <command>      # 直接运行
 ```
 
 ---
