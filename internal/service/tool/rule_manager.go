@@ -11,8 +11,6 @@ import (
 	"flux/internal/models"
 	typesScan "flux/internal/types/scan"
 	"flux/pkg/database"
-
-	"github.com/google/uuid"
 )
 
 // RuleManager 负责统一处理规则持久化和路径规范化。

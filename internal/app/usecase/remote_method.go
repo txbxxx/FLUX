@@ -10,8 +10,6 @@ import (
 
 	"flux/internal/models"
 	typesRemote "flux/internal/types/remote"
-
-	"github.com/google/uuid"
 )
 
 // RemoteConfigManager abstracts remote configuration persistence.
