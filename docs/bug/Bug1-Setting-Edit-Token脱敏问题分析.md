@@ -7,7 +7,7 @@
 - **修复版本**: V1.1
 
 ## 问题描述
-使用 `ai-sync setting edit GLM_lite -e` 编辑配置后，数据库中保存的 token 值变成了加密显示格式（如 `4e5b****QEXh`），导致实际使用时 token 无效。
+使用 `fl setting edit GLM_lite -e` 编辑配置后，数据库中保存的 token 值变成了加密显示格式（如 `4e5b****QEXh`），导致实际使用时 token 无效。
 
 ## 根本原因分析
 

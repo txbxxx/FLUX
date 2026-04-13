@@ -541,7 +541,7 @@ await ConfigureEncryption({
 // 使用文件密钥
 await ConfigureEncryption({
   enabled: true,
-  key_path: "~/.ai-sync-manager/key"
+  key_path: "~/.fl-manager/key"
 })
 
 // 自动生成密钥

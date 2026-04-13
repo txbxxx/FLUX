@@ -113,7 +113,7 @@
 ### 运行测试
 
 ```bash
-cd D:/workspace/ai-sync-manager
+cd D:/workspace/fl-manager
 
 # 运行 Git 模块测试
 go test ./internal/service/git/... -v -cover
@@ -127,7 +127,7 @@ go test ./internal/service/git/... -coverprofile=git_coverage.out
 ## 验证
 
 ```bash
-cd D:/workspace/ai-sync-manager
+cd D:/workspace/fl-manager
 
 # 编译
 go build -v ./...
