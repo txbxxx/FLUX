@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/tool"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/internal/service/tool"
+	"flux/pkg/logger"
 
 	"go.uber.org/zap"
 )

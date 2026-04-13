@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-sync-manager/internal/service/tool"
+	"flux/internal/service/tool"
 )
 
 // ConfigTargetKind 表示配置目标的类型：文件或目录。
@@ -101,7 +101,7 @@ func (w *LocalWorkflow) GetConfig(_ context.Context, input GetConfigInput) (*Get
 	if target.IsDir && input.Edit {
 		return nil, &UserError{
 			Message:    "目录无法编辑，请指定文件",
-			Suggestion: "例如: ai-sync get claude settings.json --edit",
+			Suggestion: "例如: fl get claude settings.json --edit",
 			Err:        errors.New("directory edit unsupported"),
 		}
 	}

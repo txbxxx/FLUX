@@ -1,7 +1,7 @@
 GO ?= go
-CMD_PATH ?= ./cmd/ai-sync
+CMD_PATH ?= ./cmd/fl
 OUTPUT_DIR ?= bin
-CLI_NAME ?= ai-sync
+CLI_NAME ?= fl
 GOEXE ?= .exe
 ARGS ?= --help
 
@@ -11,7 +11,7 @@ BINARY_PATH := $(OUTPUT_DIR)/$(BINARY_NAME)
 .PHONY: help build run test fmt clean
 
 help:
-	@echo "AI Sync Manager - available targets:"
+	@echo "Flux - available targets:"
 	@echo ""
 	@echo "  make build                  - build the default CLI binary"
 	@echo "  make build CLI_NAME=my-cli - build with a custom CLI name"

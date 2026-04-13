@@ -6,7 +6,7 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	typesSync "ai-sync-manager/internal/types/sync"
+	typesSync "flux/internal/types/sync"
 )
 
 // newSyncCommand creates the sync command group.
@@ -15,7 +15,7 @@ func newSyncCommand(deps Dependencies) *spcobra.Command {
 		Use:   "sync",
 		Short: "同步配置到远端仓库",
 		RunE: func(cmd *spcobra.Command, _ []string) error {
-			fmt.Fprintln(cmd.ErrOrStderr(), "请指定 sync 操作，例如: ai-sync sync push")
+			fmt.Fprintln(cmd.ErrOrStderr(), "请指定 sync 操作，例如: fl sync push")
 			return errCommandHandled
 		},
 	}
@@ -140,7 +140,7 @@ func printSyncPullResult(w io.Writer, result *typesSync.SyncPullResult) {
 			fmt.Fprintf(w, "      远端: %s\n", conflict.RemoteSummary)
 		}
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, "请手动解决冲突后重新执行 ai-sync sync pull")
+		fmt.Fprintln(w, "请手动解决冲突后重新执行 fl sync pull")
 	} else {
 		fmt.Fprintf(w, "拉取失败: %s\n", result.Error)
 	}

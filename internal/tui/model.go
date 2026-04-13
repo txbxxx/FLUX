@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"ai-sync-manager/internal/app/usecase"
+	"flux/internal/app/usecase"
 )
 
 type Workflow interface {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"ai-sync-manager/internal/service/tool"
+	"flux/internal/service/tool"
 )
 
 type stubConfigAccessor struct {

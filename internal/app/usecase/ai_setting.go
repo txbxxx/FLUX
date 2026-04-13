@@ -10,9 +10,8 @@ import (
 	"strings"
 	"time"
 
-	typesCommon "ai-sync-manager/internal/types/common"
-	typesSetting "ai-sync-manager/internal/types/setting"
-
+	typesCommon "flux/internal/types/common"
+	typesSetting "flux/internal/types/setting"
 )
 
 // AISettingManager AI 配置管理接口。
@@ -264,12 +263,12 @@ func (w *LocalWorkflow) GetAISetting(_ context.Context, input GetAISettingInput)
 		AISettingDetail: typesSetting.AISettingDetail{
 			ID:          setting.ID,
 			Name:        setting.Name,
-			Token:        setting.Token,
-			BaseURL:      setting.BaseURL,
-			OpusModel:    setting.OpusModel,
-			SonnetModel:  setting.SonnetModel,
-			CreatedAt:    setting.CreatedAt,
-			UpdatedAt:    setting.UpdatedAt,
+			Token:       setting.Token,
+			BaseURL:     setting.BaseURL,
+			OpusModel:   setting.OpusModel,
+			SonnetModel: setting.SonnetModel,
+			CreatedAt:   setting.CreatedAt,
+			UpdatedAt:   setting.UpdatedAt,
 		},
 		IsCurrent: isCurrent,
 	}, nil
@@ -367,8 +366,8 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 	// 第四步：构建新的 settings.json 内容
 	newSettings := map[string]any{
 		"env": map[string]string{
-			"ANTHROPIC_AUTH_TOKEN":         target.Token,
-			"ANTHROPIC_BASE_URL":           target.BaseURL,
+			"ANTHROPIC_AUTH_TOKEN":           target.Token,
+			"ANTHROPIC_BASE_URL":             target.BaseURL,
 			"ANTHROPIC_DEFAULT_OPUS_MODEL":   target.OpusModel,
 			"ANTHROPIC_DEFAULT_SONNET_MODEL": target.SonnetModel,
 		},
@@ -424,8 +423,8 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 
 	return &SwitchAISettingResult{
 		PreviousName: previousName,
-		NewName:     target.Name,
-		BackupPath:  backupPath,
+		NewName:      target.Name,
+		BackupPath:   backupPath,
 	}, nil
 }
 
@@ -567,7 +566,6 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-
 // GetAISettingsBatchInput 批量获取配置的输入。
 type GetAISettingsBatchInput struct {
 	Names []string // 配置名称列表，至少一个
@@ -575,8 +573,8 @@ type GetAISettingsBatchInput struct {
 
 // GetAISettingsBatchResult 批量获取配置的返回值。
 type GetAISettingsBatchResult struct {
-	Items   []*GetAISettingResult // 成功获取的配置列表
-	Failed  []string               // 获取失败的配置名称列表
+	Items  []*GetAISettingResult // 成功获取的配置列表
+	Failed []string              // 获取失败的配置名称列表
 }
 
 // DeleteAISettingsBatchInput 批量删除配置的输入。

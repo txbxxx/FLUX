@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"ai-sync-manager/internal/app/usecase"
+	"flux/internal/app/usecase"
 )
 
 type stubWorkflow struct {
@@ -118,7 +118,7 @@ func TestScanViewShowsChineseSummary(t *testing.T) {
 func TestModelCreateSnapshotSuccessMovesToSnapshots(t *testing.T) {
 	model := NewModel(&stubWorkflow{
 		createResult: &usecase.SnapshotSummary{
-			ID:          0,
+			ID:        0,
 			Name:      "Snapshot 1",
 			Message:   "created from tui",
 			Project:   "codex",
@@ -130,7 +130,7 @@ func TestModelCreateSnapshotSuccessMovesToSnapshots(t *testing.T) {
 			Total: 1,
 			Items: []usecase.SnapshotSummary{
 				{
-					ID:          0,
+					ID:        0,
 					Name:      "Snapshot 1",
 					Message:   "created from tui",
 					Project:   "codex",

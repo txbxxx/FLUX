@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 
 	"gorm.io/gorm"
 )
@@ -13,15 +13,15 @@ import (
 // RemoteConfig 远端仓库配置
 type RemoteConfig struct {
 	ID         uint         `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"` // 配置 ID
-	Name       string       `json:"name" db:"name"`                         // 配置名称
-	URL        string       `json:"url" db:"url"`                           // 仓库 URL
-	Auth       AuthConfig   `json:"auth" db:"auth"`                         // 认证配置
-	Branch     string       `json:"branch" db:"branch"`                     // 分支名
-	IsDefault  bool         `json:"is_default" db:"is_default"`             // 是否为默认配置
-	CreatedAt  time.Time    `json:"created_at" db:"created_at"`             // 创建时间
-	UpdatedAt  time.Time    `json:"updated_at" db:"updated_at"`             // 更新时间
-	LastSynced *time.Time   `json:"last_synced,omitempty" db:"last_synced"` // 最后同步时间
-	Status     ConfigStatus `json:"status" db:"status"`                     // 配置状态
+	Name       string       `json:"name" db:"name"`                                       // 配置名称
+	URL        string       `json:"url" db:"url"`                                         // 仓库 URL
+	Auth       AuthConfig   `json:"auth" db:"auth"`                                       // 认证配置
+	Branch     string       `json:"branch" db:"branch"`                                   // 分支名
+	IsDefault  bool         `json:"is_default" db:"is_default"`                           // 是否为默认配置
+	CreatedAt  time.Time    `json:"created_at" db:"created_at"`                           // 创建时间
+	UpdatedAt  time.Time    `json:"updated_at" db:"updated_at"`                           // 更新时间
+	LastSynced *time.Time   `json:"last_synced,omitempty" db:"last_synced"`               // 最后同步时间
+	Status     ConfigStatus `json:"status" db:"status"`                                   // 配置状态
 }
 
 // AuthConfig 认证配置

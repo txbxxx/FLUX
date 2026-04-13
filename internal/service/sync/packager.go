@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/pkg/logger"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"

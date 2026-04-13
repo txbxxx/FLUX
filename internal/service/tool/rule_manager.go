@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/pkg/database"
-	typesScan "ai-sync-manager/internal/types/scan"
+	"flux/internal/models"
+	typesScan "flux/internal/types/scan"
+	"flux/pkg/database"
 )
 
 // RuleManager 负责统一处理规则持久化和路径规范化。

@@ -7,8 +7,8 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/app/usecase"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 // newSnapshotHistoryCommand creates the snapshot history sub-command.
@@ -22,7 +22,7 @@ func newSnapshotHistoryCommand(deps Dependencies) *spcobra.Command {
 
 展示每次推送的时间、提交说明和版本哈希，
 可通过 restore --version <hash> 恢复到指定版本。`,
-		Args: validateExactOneArg("ai-sync snapshot history <id-or-name>"),
+		Args: validateExactOneArg("fl snapshot history <id-or-name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			result, err := deps.Workflow.SnapshotHistory(cmd.Context(), usecase.SnapshotHistoryInput{
 				IDOrName: args[0],
@@ -72,5 +72,5 @@ func printSnapshotHistory(w io.Writer, result *typesSnapshot.HistoryResult) {
 		fmt.Fprintf(w, "      %s\n\n", firstLine)
 	}
 
-	fmt.Fprintln(w, "使用 ai-sync snapshot restore <id> --version <hash> 恢复指定版本")
+	fmt.Fprintln(w, "使用 fl snapshot restore <id> --version <hash> 恢复指定版本")
 }

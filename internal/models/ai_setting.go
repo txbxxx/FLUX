@@ -3,19 +3,19 @@ package models
 import (
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 )
 
 // AISetting 表示保存的 AI 配置。
 type AISetting struct {
-	ID        uint      `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"`
-	Name      string    `json:"name" db:"name" gorm:"column:name;not null;uniqueIndex"`
-	Token     string    `json:"token" db:"token" gorm:"column:token;not null"`
-	BaseURL   string    `json:"base_url" db:"base_url" gorm:"column:base_url"`
-	OpusModel string    `json:"opus_model" db:"opus_model" gorm:"column:opus_model"`
-	SonnetModel string `json:"sonnet_model" db:"sonnet_model" gorm:"column:sonnet_model"`
-	CreatedAt time.Time `json:"created_at" db:"created_at" gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
+	ID          uint      `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"`
+	Name        string    `json:"name" db:"name" gorm:"column:name;not null;uniqueIndex"`
+	Token       string    `json:"token" db:"token" gorm:"column:token;not null"`
+	BaseURL     string    `json:"base_url" db:"base_url" gorm:"column:base_url"`
+	OpusModel   string    `json:"opus_model" db:"opus_model" gorm:"column:opus_model"`
+	SonnetModel string    `json:"sonnet_model" db:"sonnet_model" gorm:"column:sonnet_model"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
 }
 
 // AISettingDAO AI 配置数据访问对象。

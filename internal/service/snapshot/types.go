@@ -1,9 +1,9 @@
 package snapshot
 
 import (
-	"ai-sync-manager/internal/models"
+	"flux/internal/models"
 
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 // CollectOptions 文件收集选项

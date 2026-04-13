@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"ai-sync-manager/internal/service/tool"
+	"flux/internal/service/tool"
 )
 
 // TestSaveConfigSanitizesContentBeforeWriting 验证 SaveConfig 在写入前清理了空字节和控制字符。

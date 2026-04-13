@@ -7,7 +7,7 @@
 - **修复版本**: V1.1
 
 ## 问题描述
-执行 `ai-sync get claude-global settings.json -e` 后，编辑的文件内容会以异常方式显示，用户描述为"二进制"显示。
+执行 `fl get claude-global settings.json -e` 后，编辑的文件内容会以异常方式显示，用户描述为"二进制"显示。
 
 ## 根本原因分析
 

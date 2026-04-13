@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/models"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 // UpdateSnapshot updates an existing snapshot by re-scanning the associated project's

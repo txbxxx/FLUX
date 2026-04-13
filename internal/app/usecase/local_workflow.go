@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/tool"
-	typesScan "ai-sync-manager/internal/types/scan"
-typesRemote "ai-sync-manager/internal/types/remote"
-	typesSync "ai-sync-manager/internal/types/sync"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/models"
+	"flux/internal/service/tool"
+	typesRemote "flux/internal/types/remote"
+	typesScan "flux/internal/types/scan"
+	typesSnapshot "flux/internal/types/snapshot"
+	typesSync "flux/internal/types/sync"
 )
 
 // DefaultListLimit 快照列表默认分页大小。
@@ -74,10 +74,10 @@ type Workflow interface {
 	DiffSnapshots(ctx context.Context, input DiffSnapshotsInput) (*typesSnapshot.DiffResult, error)
 	GetConfig(ctx context.Context, input GetConfigInput) (*GetConfigResult, error)
 	SaveConfig(ctx context.Context, input SaveConfigInput) error
-		// 远端仓库管理
-		AddRemote(ctx context.Context, input typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error)
-		ListRemotes(ctx context.Context) (*typesRemote.ListRemotesResult, error)
-		RemoveRemote(ctx context.Context, input typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error)
+	// 远端仓库管理
+	AddRemote(ctx context.Context, input typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error)
+	ListRemotes(ctx context.Context) (*typesRemote.ListRemotesResult, error)
+	RemoveRemote(ctx context.Context, input typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error)
 	// AI setting 相关方法
 	CreateAISetting(ctx context.Context, input CreateAISettingInput) (*CreateAISettingResult, error)
 	ListAISettings(ctx context.Context, input ListAISettingsInput) (*ListAISettingsResult, error)
@@ -88,26 +88,26 @@ type Workflow interface {
 	// 新增批量方法
 	GetAISettingsBatch(ctx context.Context, input GetAISettingsBatchInput) (*GetAISettingsBatchResult, error)
 	DeleteAISettingsBatch(ctx context.Context, input DeleteAISettingsBatchInput) (*DeleteAISettingsBatchResult, error)
-		// 同步操作
-		SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
-		SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
-		SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
-		// 历史版本
-		SnapshotHistory(ctx context.Context, input SnapshotHistoryInput) (*typesSnapshot.HistoryResult, error)
-		RestoreFromHistory(ctx context.Context, input RestoreFromHistoryInput) (*typesSnapshot.RestoreResult, error)
+	// 同步操作
+	SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
+	SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
+	SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
+	// 历史版本
+	SnapshotHistory(ctx context.Context, input SnapshotHistoryInput) (*typesSnapshot.HistoryResult, error)
+	RestoreFromHistory(ctx context.Context, input RestoreFromHistoryInput) (*typesSnapshot.RestoreResult, error)
 }
 
 // LocalWorkflow 是 Workflow 的本地实现，编排本地扫描、快照、配置浏览等流程。
 // 它不直接访问数据库，而是通过 Detector、SnapshotManager、ScanRuleManager 等接口协调工作。
 type LocalWorkflow struct {
-	detector         Detector              // 工具检测器，负责扫描本机配置
-	snapshots        SnapshotManager       // 快照管理器，负责快照的持久化
-	accessor         ConfigAccessor        // 配置访问器，负责文件的读写浏览
-	rules            ScanRuleManager       // 规则管理器，负责持久化规则和项目的增删查（可选依赖）
-	aiSettingManager AISettingManager      // AI 配置管理器（可选依赖）
-	remoteConfigs    RemoteConfigManager   // 远端配置管理器（可选依赖）
+	detector         Detector               // 工具检测器，负责扫描本机配置
+	snapshots        SnapshotManager        // 快照管理器，负责快照的持久化
+	accessor         ConfigAccessor         // 配置访问器，负责文件的读写浏览
+	rules            ScanRuleManager        // 规则管理器，负责持久化规则和项目的增删查（可选依赖）
+	aiSettingManager AISettingManager       // AI 配置管理器（可选依赖）
+	remoteConfigs    RemoteConfigManager    // 远端配置管理器（可选依赖）
 	remoteTester     RemoteConnectionTester // 远端连通性测试（可选依赖）
-	dataDir          string                // 应用数据目录（用于 repos 路径）
+	dataDir          string                 // 应用数据目录（用于 repos 路径）
 }
 
 // --- 数据结构定义 ---
@@ -115,15 +115,15 @@ type LocalWorkflow struct {
 
 // ToolSummary 是 scan 结果中单个工具/项目的摘要，供 CLI/TUI 渲染。
 type ToolSummary struct {
-	Tool        string            // 工具类型：codex 或 claude
-	Scope       string            // 作用域：global 或 project
-	ProjectName string            // 项目名（全局项目为 codex-global / claude-global）
-	Status      string            // 安装状态：installed / partial / not_installed
-	Path        string            // 配置目录的绝对路径
-	ConfigCount int               // 命中的配置文件数量
-	ResultText  string            // 面向用户的状态描述（如"可同步"、"不可同步"）
-	Reason      string            // 不可同步时的原因说明
-	Items       []ToolConfigItem  // 具体命中的配置文件列表
+	Tool        string           // 工具类型：codex 或 claude
+	Scope       string           // 作用域：global 或 project
+	ProjectName string           // 项目名（全局项目为 codex-global / claude-global）
+	Status      string           // 安装状态：installed / partial / not_installed
+	Path        string           // 配置目录的绝对路径
+	ConfigCount int              // 命中的配置文件数量
+	ResultText  string           // 面向用户的状态描述（如"可同步"、"不可同步"）
+	Reason      string           // 不可同步时的原因说明
+	Items       []ToolConfigItem // 具体命中的配置文件列表
 }
 
 // ToolConfigItem 描述单个命中的配置文件，用于 scan 结果的分组展示。
@@ -187,10 +187,10 @@ type RegisteredProjectItem struct {
 
 // ListScanRulesResult 是查看扫描规则的返回值。
 type ListScanRulesResult struct {
-	App                  string                 // 匹配到的工具类型
-	DefaultGlobalRules   []RuleItem             // 内置全局规则
-	ProjectRuleTemplates []RuleItem             // 内置项目规则模板
-	CustomRules          []RuleItem             // 用户自定义规则
+	App                  string                  // 匹配到的工具类型
+	DefaultGlobalRules   []RuleItem              // 内置全局规则
+	ProjectRuleTemplates []RuleItem              // 内置项目规则模板
+	CustomRules          []RuleItem              // 用户自定义规则
 	RegisteredProjects   []RegisteredProjectItem // 已注册项目列表
 }
 
@@ -557,7 +557,7 @@ func matchesRegisteredProjectFilter(project typesScan.RegisteredProjectRecord, f
 //     b. 查数据库中已注册项目的 ToolType 字段
 //  3. 都没有则报错，提示用户指定
 //
-// 这样用户只需要 `ai-sync snapshot create -m 说明 -p claude` 即可，
+// 这样用户只需要 `fl snapshot create -m 说明 -p claude` 即可，
 // 不需要再手动传 `-t claude`。
 func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotInput) (*SnapshotSummary, error) {
 	// 第一步：自动推导工具类型（当用户未指定 -t 时）
@@ -759,7 +759,7 @@ func matchesScanFilter(item ToolSummary, filter string) bool {
 	if item.Scope != string(tool.ScopeProject) {
 		return false
 	}
-	// 匹配项目名（如 demo、ai-sync-manager）
+	// 匹配项目名（如 demo、flux）
 	if strings.EqualFold(item.ProjectName, filter) {
 		return true
 	}
@@ -1209,12 +1209,12 @@ type SnapshotHistoryInput struct {
 
 // RestoreFromHistoryInput is the input for restoring a snapshot from a specific history version.
 type RestoreFromHistoryInput struct {
-	IDOrName  string   // Snapshot ID or name
-	CommitHash string  // Git commit hash to restore from
-	Files     []string // Specific files to restore (empty = all)
-	DryRun    bool     // Preview mode
-	Force     bool     // Skip confirmation
-	BackupDir string   // Backup base directory
+	IDOrName   string   // Snapshot ID or name
+	CommitHash string   // Git commit hash to restore from
+	Files      []string // Specific files to restore (empty = all)
+	DryRun     bool     // Preview mode
+	Force      bool     // Skip confirmation
+	BackupDir  string   // Backup base directory
 }
 
 // extractErrorReason 从 error 中提取简短的错误原因描述。
@@ -1223,7 +1223,7 @@ func extractErrorReason(err error) string {
 		return ""
 	}
 	msg := err.Error()
-	// 移除 "ai-sync-manager/internal/app/usecase." 前缀
+	// 移除 "flux/internal/app/usecase." 前缀
 	if strings.HasPrefix(msg, "未找到名称为") {
 		return msg
 	}

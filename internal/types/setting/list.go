@@ -12,7 +12,7 @@ type AISettingListItem struct {
 
 // AISettingListResult 表示配置列表的查询结果。
 type AISettingListResult struct {
-	Items      []AISettingListItem `json:"items"`
-	Total      int                `json:"total"`
-	Current    string             `json:"current"` // 当前配置名称
+	Items   []AISettingListItem `json:"items"`
+	Total   int                 `json:"total"`
+	Current string              `json:"current"` // 当前配置名称
 }

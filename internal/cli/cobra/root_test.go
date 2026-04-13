@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/internal/app/usecase"
-	typesRemote "ai-sync-manager/internal/types/remote"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
-	typesSync "ai-sync-manager/internal/types/sync"
+	"flux/internal/app/usecase"
+	typesRemote "flux/internal/types/remote"
+	typesSnapshot "flux/internal/types/snapshot"
+	typesSync "flux/internal/types/sync"
 )
 
 type stubWorkflow struct {
@@ -472,7 +472,7 @@ func TestExecuteScanRulesCommandPassesRegisteredProjectName(t *testing.T) {
 				{Path: "AGENTS.md", Kind: "file"},
 			},
 			RegisteredProjects: []usecase.RegisteredProjectItem{
-				{Name: "ai-sync-manager", Path: `D:\workspace\ai-sync-manager`},
+				{Name: "flux", Path: `D:\workspace\flux`},
 			},
 		},
 	}
@@ -483,15 +483,15 @@ func TestExecuteScanRulesCommandPassesRegisteredProjectName(t *testing.T) {
 		TUI:      &stubTUIRunner{},
 		Out:      &stdout,
 		Err:      &stderr,
-	}, []string{"scan", "rules", "ai-sync-manager"})
+	}, []string{"scan", "rules", "flux"})
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
-	if workflow.listRulesInput.App != "ai-sync-manager" {
+	if workflow.listRulesInput.App != "flux" {
 		t.Fatalf("unexpected list input: %+v", workflow.listRulesInput)
 	}
-	if !strings.Contains(stdout.String(), "Codex 规则") || !strings.Contains(stdout.String(), `D:\workspace\ai-sync-manager`) {
+	if !strings.Contains(stdout.String(), "Codex 规则") || !strings.Contains(stdout.String(), `D:\workspace\flux`) {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 }
@@ -529,7 +529,7 @@ func TestExecuteScanCommandPrintsNotSyncableReason(t *testing.T) {
 func TestExecuteSnapshotCreateParsesFlags(t *testing.T) {
 	workflow := &stubWorkflow{
 		createResult: &usecase.SnapshotSummary{
-			ID:          0,
+			ID:        0,
 			Name:      "Daily backup",
 			Message:   "before change",
 			Project:   "codex-global",
@@ -718,10 +718,10 @@ func TestExecuteCommandPrintsFriendlyError(t *testing.T) {
 
 func TestPrintError(t *testing.T) {
 	tests := []struct {
-		name   string
-		err    error
-		want   []string
-		dont   []string
+		name string
+		err  error
+		want []string
+		dont []string
 	}{
 		{
 			name: "UserError 有 Err 时追加原始错误",

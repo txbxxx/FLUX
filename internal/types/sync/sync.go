@@ -3,7 +3,7 @@ package sync
 import (
 	"time"
 
-	"ai-sync-manager/internal/models"
+	"flux/internal/models"
 )
 
 // ConflictPolicy defines how file conflicts are handled.
@@ -103,16 +103,16 @@ type TaskMetadata struct {
 
 // SyncHistory records a completed sync operation.
 type SyncHistory struct {
-	ID          uint                `json:"id"`           // 记录 ID
-	TaskID      uint                `json:"task_id"`      // 任务 ID
-	Type        models.SyncTaskType `json:"type"`         // 任务类型
-	Status      models.SyncTaskStatus `json:"status"`     // 任务状态
-	Direction   models.SyncDirection `json:"direction"`    // 同步方向
-	StartedAt   time.Time           `json:"started_at"`   // 开始时间
-	CompletedAt *time.Time          `json:"completed_at"` // 完成时间
-	Duration    string              `json:"duration"`     // 执行时长
-	Success     bool                `json:"success"`      // 是否成功
-	Error       string              `json:"error"`        // 错误信息
+	ID          uint                  `json:"id"`           // 记录 ID
+	TaskID      uint                  `json:"task_id"`      // 任务 ID
+	Type        models.SyncTaskType   `json:"type"`         // 任务类型
+	Status      models.SyncTaskStatus `json:"status"`       // 任务状态
+	Direction   models.SyncDirection  `json:"direction"`    // 同步方向
+	StartedAt   time.Time             `json:"started_at"`   // 开始时间
+	CompletedAt *time.Time            `json:"completed_at"` // 完成时间
+	Duration    string                `json:"duration"`     // 执行时长
+	Success     bool                  `json:"success"`      // 是否成功
+	Error       string                `json:"error"`        // 错误信息
 }
 
 // RepositoryTestResult holds the result of testing a remote repository connection.

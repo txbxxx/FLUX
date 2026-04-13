@@ -1,4 +1,4 @@
-# AI Sync Manager
+# Flux
 
 > **本地优先的 AI 工具配置管理器** — 纯终端形态的 CLI + TUI 应用
 >
@@ -34,8 +34,8 @@
 ## 项目结构
 
 ```
-ai-sync-manager/
-├── cmd/ai-sync/                    # CLI 入口
+flux/
+├── cmd/fl/                         # CLI 入口
 │   ├── main.go                     # 组装依赖、启动 CLI/TUI
 │   └── main_test.go
 │
@@ -234,14 +234,14 @@ func (w *LocalWorkflow) Scan(ctx context.Context, input ScanInput) (*ScanResult,
 ### 错误处理
 
 ```go
-import "ai-sync-manager/pkg/errors"
+import "flux/pkg/errors"
 return errors.Wrap(err, "创建快照失败")
 ```
 
 ### 日志
 
 ```go
-import "ai-sync-manager/pkg/logger"
+import "flux/pkg/logger"
 logger.Info("操作开始", zap.String("snapshot_id", id), zap.Int("file_count", n))
 ```
 
@@ -307,13 +307,13 @@ feat: get 命令支持省略 path 参数
 - accessor 支持空路径时返回根目录
 
 有什么作用：
-- 用户执行 "ai-sync get claude" 即可查看根目录
+- 用户执行 "fl get claude" 即可查看根目录
 
 | 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
 |----------|-----------|----------|----------|
-| 省略 path | ai-sync get claude | 列出根目录 | 通过 |
-| 指定 path | ai-sync get claude settings.json | 显示文件内容 | 通过 |
-| 编辑模式 | ai-sync get claude settings.json -e | 进入编辑器 | 通过 |
+| 省略 path | fl get claude | 列出根目录 | 通过 |
+| 指定 path | fl get claude settings.json | 显示文件内容 | 通过 |
+| 编辑模式 | fl get claude settings.json -e | 进入编辑器 | 通过 |
 | go test | go test ./... | 全部通过 | 通过 |
 ```
 
@@ -323,22 +323,22 @@ feat: get 命令支持省略 path 参数
 
 | 命令 | 用法 | 关键 flag |
 |------|------|-----------|
-| scan | `ai-sync scan [app-or-project...]` | — |
-| scan add | `ai-sync scan add <app> <path>` | `--project/-p` 注册项目 |
-| scan remove | `ai-sync scan remove <app> <path>` | `--project/-p` 删除项目 |
-| scan list | `ai-sync scan list [app-or-project]` | — |
-| scan rules | `ai-sync scan rules [app-or-project]` | — |
-| get | `ai-sync get <project> [path]` | `--edit/-e` 编辑模式 |
-| snapshot create | `ai-sync snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
-| snapshot list | `ai-sync snapshot list` | `-l` 条数 `-o` 偏移 |
-| tui | `ai-sync tui` | — |
+| scan | `fl scan [app-or-project...]` | — |
+| scan add | `fl scan add <app> <path>` | `--project/-p` 注册项目 |
+| scan remove | `fl scan remove <app> <path>` | `--project/-p` 删除项目 |
+| scan list | `fl scan list [app-or-project]` | — |
+| scan rules | `fl scan rules [app-or-project]` | — |
+| get | `fl get <project> [path]` | `--edit/-e` 编辑模式 |
+| snapshot create | `fl snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
+| snapshot list | `fl snapshot list` | `-l` 条数 `-o` 偏移 |
+| tui | `fl tui` | — |
 
 ---
 
 ## 常用命令
 
 ```bash
-make build                          # 构建 bin/ai-sync.exe
+make build                          # 构建 bin/fl.exe
 make build CLI_NAME=my-tool         # 自定义名称
 make run                            # 构建并运行
 make run ARGS=scan                  # 带参数运行
@@ -348,7 +348,7 @@ make clean                          # 清理
 go test ./...                       # 全部测试
 go test ./internal/service/snapshot/... -v -cover  # 特定包
 go test -coverprofile=coverage.out ./...            # 覆盖率
-go run -buildvcs=false ./cmd/ai-sync <command>      # 直接运行
+go run -buildvcs=false ./cmd/fl <command>      # 直接运行
 ```
 
 ---

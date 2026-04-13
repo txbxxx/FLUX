@@ -25,7 +25,6 @@ func NewSnapshot(message string, projectName string) *Snapshot {
 	}
 }
 
-
 // generateSnapshotName 从消息生成展示用名称。
 func generateSnapshotName(message string) string {
 	// 这里仅做简单截断，避免名称过长影响列表展示。

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 )
 
 // CustomSyncRule 表示用户登记的绝对路径文件规则。
 type CustomSyncRule struct {
-	ID           uint     `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"`
+	ID           uint      `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"`
 	ToolType     string    `json:"tool_type" db:"tool_type" gorm:"column:tool_type;not null"`
 	AbsolutePath string    `json:"absolute_path" db:"absolute_path" gorm:"column:absolute_path;not null"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at" gorm:"column:created_at;autoCreateTime"`

@@ -7,8 +7,8 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	typesRemote "ai-sync-manager/internal/types/remote"
+	"flux/internal/app/usecase"
+	typesRemote "flux/internal/types/remote"
 )
 
 // newRemoteCommand creates the remote command group.
@@ -17,7 +17,7 @@ func newRemoteCommand(deps Dependencies) *spcobra.Command {
 		Use:   "remote",
 		Short: "管理远端 Git 仓库",
 		RunE: func(cmd *spcobra.Command, _ []string) error {
-			fmt.Fprintln(cmd.ErrOrStderr(), "请指定 remote 操作，例如: ai-sync remote add <url>")
+			fmt.Fprintln(cmd.ErrOrStderr(), "请指定 remote 操作，例如: fl remote add <url>")
 			return errCommandHandled
 		},
 	}
@@ -43,7 +43,7 @@ func newRemoteAddCommand(deps Dependencies) *spcobra.Command {
 	command := &spcobra.Command{
 		Use:   "add <url>",
 		Short: "添加远端仓库",
-		Args:  validateExactOneArg("ai-sync remote add <url>"),
+		Args:  validateExactOneArg("fl remote add <url>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			result, err := deps.Workflow.AddRemote(cmd.Context(), typesRemote.AddRemoteInput{
 				URL:      args[0],
@@ -102,7 +102,7 @@ func newRemoteRemoveCommand(deps Dependencies) *spcobra.Command {
 		Use:   "remove <name>",
 		Short: "删除远端仓库配置",
 		Aliases: []string{"rm"},
-		Args:  validateExactOneArg("ai-sync remote remove <name>"),
+		Args:  validateExactOneArg("fl remote remove <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			_, err := deps.Workflow.RemoveRemote(cmd.Context(), typesRemote.RemoveRemoteInput{
 				Name:  args[0],
@@ -149,7 +149,7 @@ func printRemoteList(w io.Writer, result *typesRemote.ListRemotesResult) {
 	if len(result.Remotes) == 0 {
 		fmt.Fprintln(w, "暂无配置的远端仓库。")
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, "使用 ai-sync remote add <url> 添加远端仓库。")
+		fmt.Fprintln(w, "使用 fl remote add <url> 添加远端仓库。")
 		return
 	}
 

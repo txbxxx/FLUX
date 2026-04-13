@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	typesRemote "ai-sync-manager/internal/types/remote"
+	"flux/internal/models"
+	typesRemote "flux/internal/types/remote"
 )
 
 // RemoteConfigManager abstracts remote configuration persistence.
@@ -85,14 +85,14 @@ func (w *LocalWorkflow) AddRemote(ctx context.Context, input typesRemote.AddRemo
 	if url == "" {
 		return nil, &UserError{
 			Message:    "添加远端仓库失败：请提供仓库地址",
-			Suggestion: "例如: ai-sync remote add https://github.com/user/configs.git",
+			Suggestion: "例如: fl remote add https://github.com/user/configs.git",
 		}
 	}
 
 	// 新增：URL 格式校验
 	if !isValidGitURL(url) {
 		return nil, &UserError{
-			Message: "添加远端仓库失败：仓库地址格式不正确",
+			Message:    "添加远端仓库失败：仓库地址格式不正确",
 			Suggestion: "支持的格式：\n  HTTPS: https://github.com/user/repo.git\n  SSH:   git@github.com:user/repo.git\n  本地:  /path/to/repo.git",
 		}
 	}
@@ -295,7 +295,6 @@ func deriveRemoteName(url string) string {
 	}
 	return s
 }
-
 
 // WithRemoteConfigs injects the remote configuration manager dependency.
 func (w *LocalWorkflow) WithRemoteConfigs(mgr RemoteConfigManager) *LocalWorkflow {

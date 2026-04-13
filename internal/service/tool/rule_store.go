@@ -1,6 +1,6 @@
 package tool
 
-import "ai-sync-manager/internal/models"
+import "flux/internal/models"
 
 // RuleStore 聚合自定义绝对文件规则与已注册项目。
 type RuleStore struct {

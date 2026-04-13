@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/pkg/database"
+	"flux/internal/models"
+	"flux/pkg/database"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +20,7 @@ func TestPackager_ValidateSnapshotForPush(t *testing.T) {
 
 	// 有效快照
 	validSnapshot := &models.Snapshot{
-		ID:          0,
+		ID: 0,
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -34,7 +34,7 @@ func TestPackager_ValidateSnapshotForPush(t *testing.T) {
 
 	// 无效快照 - 无文件
 	invalidSnapshot2 := &models.Snapshot{
-		ID:          0,
+		ID:    0,
 		Files: []models.SnapshotFile{},
 	}
 
@@ -43,7 +43,7 @@ func TestPackager_ValidateSnapshotForPush(t *testing.T) {
 
 	// 无效快照 - 文件路径为空
 	invalidSnapshot3 := &models.Snapshot{
-		ID:          0,
+		ID: 0,
 		Files: []models.SnapshotFile{
 			{
 				Path:         "",
@@ -57,7 +57,7 @@ func TestPackager_ValidateSnapshotForPush(t *testing.T) {
 
 	// 无效快照 - 原始路径为空
 	invalidSnapshot4 := &models.Snapshot{
-		ID:          0,
+		ID: 0,
 		Files: []models.SnapshotFile{
 			{
 				Path:         "test",
@@ -239,7 +239,7 @@ func TestService_PushSnapshot(t *testing.T) {
 
 	ctx := context.Background()
 	snapshot := &models.Snapshot{
-		ID:          0,
+		ID:        0,
 		Name:      "Test Push",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
@@ -450,13 +450,13 @@ func TestService_convertToRemoteCommits(t *testing.T) {
 
 	snapshots := []*models.Snapshot{
 		{
-			ID:          1,
+			ID:         1,
 			CommitHash: "abc123",
 			Message:    "First snapshot",
 			CreatedAt:  time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC),
 		},
 		{
-			ID:          2,
+			ID:         2,
 			CommitHash: "def456",
 			Message:    "Second snapshot",
 			CreatedAt:  time.Date(2026, 3, 20, 11, 0, 0, 0, time.UTC),
@@ -489,7 +489,7 @@ func TestService_isSnapshotNew(t *testing.T) {
 
 	// 创建已存在的快照
 	existingSnapshot := &models.Snapshot{
-		ID:          0,
+		ID:        0,
 		Name:      "Existing",
 		Message:   "Test",
 		CreatedAt: time.Now(),
@@ -517,7 +517,7 @@ func TestService_saveRemoteSnapshot(t *testing.T) {
 	service := NewService(db)
 
 	remoteSnapshot := &models.Snapshot{
-		ID:          0,
+		ID:        0,
 		Name:      "Remote Snapshot",
 		Message:   "From remote",
 		CreatedAt: time.Now(),
@@ -637,7 +637,7 @@ func TestSyncStatus(t *testing.T) {
 		LocalBehind: 1,
 		RemoteSnapshots: []RemoteSnapshotInfo{
 			{
-				ID:          "test-snap-1",
+				ID:         "test-snap-1",
 				Name:       "Snapshot 1",
 				CommitHash: "abc123",
 				Author:     "Test Author",

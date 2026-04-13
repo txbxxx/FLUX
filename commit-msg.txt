@@ -1,0 +1,12 @@
+fix: 修复 sed 替换导致的字符串语法错误
+
+完成了什么：
+- 修复 testutil.go 中被错误替换的字符串，如 "fl"-test" → "fl-test"
+- 涉及 internal/service/tool/testutil.go
+- 涉及 internal/service/git/testutil.go
+- 涉及 internal/service/git/client_test.go
+- 涉及 internal/service/tool/detector_test.go
+- 涉及 internal/cli/cobra/setting_editor.go
+
+有什么作用：
+- 修复构建错误

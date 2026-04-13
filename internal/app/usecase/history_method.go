@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-sync-manager/internal/service/git"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/service/git"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 // SnapshotHistory shows the version history of a snapshot from the git repository.
@@ -53,7 +53,7 @@ func (w *LocalWorkflow) SnapshotHistory(ctx context.Context, input SnapshotHisto
 	if !git.IsRepository(repoPath) {
 		return nil, &UserError{
 			Message:    "查看历史失败：项目仓库不存在",
-			Suggestion: "请先执行 ai-sync sync push --project " + projectName + " 创建仓库",
+			Suggestion: "请先执行 fl sync push --project " + projectName + " 创建仓库",
 		}
 	}
 
@@ -139,7 +139,7 @@ func (w *LocalWorkflow) RestoreFromHistory(ctx context.Context, input RestoreFro
 	if !git.IsRepository(repoPath) {
 		return nil, &UserError{
 			Message:    "历史恢复失败：项目仓库不存在",
-			Suggestion: "请先执行 ai-sync sync push --project " + projectName,
+			Suggestion: "请先执行 fl sync push --project " + projectName,
 		}
 	}
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 
 	"gorm.io/gorm"
 )
@@ -14,15 +14,15 @@ import (
 // Snapshot 配置快照
 type Snapshot struct {
 	ID          uint             `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"` // 快照唯一 ID
-	Name        string           `json:"name" db:"name"`                         // 快照名称
-	Description string           `json:"description" db:"description"`           // 快照描述
-	Message     string           `json:"message" db:"message"`                   // 提交消息
-	CreatedAt   time.Time        `json:"created_at" db:"created_at"`             // 创建时间
-	Project     string           `json:"project" db:"tools"` // 关联的项目名称（db tag 保留 "tools" 复用现有列，不改变表结构）
-	Metadata    SnapshotMetadata `json:"metadata" db:"metadata"`                 // 快照元数据
-	Files       []SnapshotFile   `json:"files" db:"files"`                       // 包含的文件列表
-	CommitHash  string           `json:"commit_hash,omitempty" db:"commit_hash"` // Git 提交哈希（如果已推送）
-	Tags        []string         `json:"tags,omitempty" db:"tags"`               // 标签
+	Name        string           `json:"name" db:"name"`                                       // 快照名称
+	Description string           `json:"description" db:"description"`                         // 快照描述
+	Message     string           `json:"message" db:"message"`                                 // 提交消息
+	CreatedAt   time.Time        `json:"created_at" db:"created_at"`                           // 创建时间
+	Project     string           `json:"project" db:"tools"`                                   // 关联的项目名称（db tag 保留 "tools" 复用现有列，不改变表结构）
+	Metadata    SnapshotMetadata `json:"metadata" db:"metadata"`                               // 快照元数据
+	Files       []SnapshotFile   `json:"files" db:"files"`                                     // 包含的文件列表
+	CommitHash  string           `json:"commit_hash,omitempty" db:"commit_hash"`               // Git 提交哈希（如果已推送）
+	Tags        []string         `json:"tags,omitempty" db:"tags"`                             // 标签
 }
 
 // SnapshotMetadata 快照元数据

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/pkg/logger"
+	"flux/pkg/logger"
 
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
@@ -44,7 +44,7 @@ func InitDB(dataDir string) (*DB, error) {
 		return nil, fmt.Errorf("创建数据目录失败: %w", err)
 	}
 
-	dbPath := filepath.Join(dataDir, "ai-sync-manager.db")
+	dbPath := filepath.Join(dataDir, "flux.db")
 	db := &DB{
 		path:   dbPath,
 		closed: false,
@@ -1147,14 +1147,14 @@ type syncHistoryRecord struct {
 func (syncHistoryRecord) TableName() string { return "sync_history" }
 
 type aiSettingRecord struct {
-	ID        uint      `gorm:"column:id;primaryKey;autoIncrement"`
-	Name      string    `gorm:"column:name;not null;uniqueIndex"`
-	Token     string    `gorm:"column:token;not null"`
-	BaseURL   string    `gorm:"column:base_url"`
-	OpusModel string    `gorm:"column:opus_model"`
-	SonnetModel string `gorm:"column:sonnet_model"`
-	CreatedAt time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt time.Time `gorm:"column:updated_at;not null;autoUpdateTime"`
+	ID          uint      `gorm:"column:id;primaryKey;autoIncrement"`
+	Name        string    `gorm:"column:name;not null;uniqueIndex"`
+	Token       string    `gorm:"column:token;not null"`
+	BaseURL     string    `gorm:"column:base_url"`
+	OpusModel   string    `gorm:"column:opus_model"`
+	SonnetModel string    `gorm:"column:sonnet_model"`
+	CreatedAt   time.Time `gorm:"column:created_at;not null"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;not null;autoUpdateTime"`
 }
 
 func (aiSettingRecord) TableName() string { return "ai_settings" }

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/pkg/logger"
 
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	typesSnapshot "flux/internal/types/snapshot"
 
 	"go.uber.org/zap"
 )
@@ -176,7 +176,7 @@ func (a *Applier) createBackup(paths []string, backupDir string) (string, error)
 	if backupDir == "" {
 		// 使用临时目录
 		tmpDir := os.TempDir()
-		backupDir = filepath.Join(tmpDir, fmt.Sprintf("ai-sync-manager-backup-%d", getCurrentTimestamp()))
+		backupDir = filepath.Join(tmpDir, fmt.Sprintf("flux-backup-%d", getCurrentTimestamp()))
 	}
 
 	for _, path := range paths {

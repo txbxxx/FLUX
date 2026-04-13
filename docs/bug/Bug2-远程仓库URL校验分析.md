@@ -14,7 +14,7 @@
 使用 `remote add` 命令时，传入无效参数（如 `-`）也能成功添加远端仓库：
 
 ```powershell
-PS G:\ProjectCode\AToSync> .\bin\ai-sync.exe remote add -
+PS G:\ProjectCode\AToSync> .\bin\fl.exe remote add -
 远端仓库已添加
 
   名称:   -
@@ -46,7 +46,7 @@ url := strings.TrimSpace(input.URL)
 if url == "" {
     return nil, &UserError{
         Message:    "添加远端仓库失败：请提供仓库地址",
-        Suggestion: "例如: ai-sync remote add https://github.com/user/configs.git",
+        Suggestion: "例如: fl remote add https://github.com/user/configs.git",
     }
 }
 ```

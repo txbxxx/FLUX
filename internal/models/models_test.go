@@ -333,7 +333,7 @@ func TestFormatBytes(t *testing.T) {
 // TestCloneSnapshot 测试克隆快照
 func TestCloneSnapshot(t *testing.T) {
 	original := &Snapshot{
-		ID:          0,
+		ID:        0,
 		Name:      "Test Snapshot",
 		Message:   "Test message",
 		Project:   "codex-global",

@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"testing"
 
-	"ai-sync-manager/pkg/utils"
+	"flux/pkg/utils"
 
 	"github.com/stretchr/testify/assert"
 )

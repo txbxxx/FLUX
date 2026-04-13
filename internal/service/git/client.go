@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/pkg/logger"
+	"flux/pkg/logger"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"

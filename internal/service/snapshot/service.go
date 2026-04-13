@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/tool"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
-	"ai-sync-manager/pkg/database"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/internal/service/tool"
+	typesSnapshot "flux/internal/types/snapshot"
+	"flux/pkg/database"
+	"flux/pkg/logger"
 
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
@@ -422,17 +422,17 @@ func (s *Service) RestoreSnapshot(id string, files []string, options typesSnapsh
 
 	// 第四步：转换为 RestoreResult
 	result := &typesSnapshot.RestoreResult{
-		SnapshotID:    fmt.Sprintf("%d", snapshot.ID),
-		SnapshotName:  snapshot.Name,
-		AppliedFiles:  applyResult.AppliedFiles,
-		SkippedFiles:  applyResult.SkippedFiles,
-		Errors:        applyResult.Errors,
-		BackupPath:    applyResult.BackupPath,
-		TotalFiles:    applyResult.Summary.TotalFiles,
-		AppliedCount:  len(applyResult.AppliedFiles),
-		SkippedCount:  len(applyResult.SkippedFiles),
-		ErrorCount:    len(applyResult.Errors),
-		DryRun:        options.DryRun,
+		SnapshotID:   fmt.Sprintf("%d", snapshot.ID),
+		SnapshotName: snapshot.Name,
+		AppliedFiles: applyResult.AppliedFiles,
+		SkippedFiles: applyResult.SkippedFiles,
+		Errors:       applyResult.Errors,
+		BackupPath:   applyResult.BackupPath,
+		TotalFiles:   applyResult.Summary.TotalFiles,
+		AppliedCount: len(applyResult.AppliedFiles),
+		SkippedCount: len(applyResult.SkippedFiles),
+		ErrorCount:   len(applyResult.Errors),
+		DryRun:       options.DryRun,
 	}
 
 	logger.Info("快照恢复完成",

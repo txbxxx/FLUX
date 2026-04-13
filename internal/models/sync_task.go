@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 
 	"gorm.io/gorm"
 )
@@ -14,16 +14,16 @@ import (
 // SyncTask 同步任务
 type SyncTask struct {
 	ID          uint           `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"` // 任务唯一 ID
-	Type        SyncTaskType   `json:"type" db:"type"`                           // 任务类型
-	Status      SyncTaskStatus `json:"status" db:"status"`                       // 任务状态
-	SnapshotID  *uint          `json:"snapshot_id,omitempty" db:"snapshot_id"`   // 关联快照 ID
-	Direction   SyncDirection  `json:"direction" db:"direction"`                 // 同步方向
-	CreatedAt   time.Time      `json:"created_at" db:"created_at"`               // 创建时间
-	StartedAt   *time.Time     `json:"started_at,omitempty" db:"started_at"`     // 开始时间
-	CompletedAt *time.Time     `json:"completed_at,omitempty" db:"completed_at"` // 完成时间
-	Progress    TaskProgress   `json:"progress" db:"progress"`                   // 进度信息
-	Error       string         `json:"error,omitempty" db:"error"`               // 错误信息
-	Metadata    TaskMetadata   `json:"metadata" db:"metadata"`                   // 任务元数据
+	Type        SyncTaskType   `json:"type" db:"type"`                                       // 任务类型
+	Status      SyncTaskStatus `json:"status" db:"status"`                                   // 任务状态
+	SnapshotID  *uint          `json:"snapshot_id,omitempty" db:"snapshot_id"`               // 关联快照 ID
+	Direction   SyncDirection  `json:"direction" db:"direction"`                             // 同步方向
+	CreatedAt   time.Time      `json:"created_at" db:"created_at"`                           // 创建时间
+	StartedAt   *time.Time     `json:"started_at,omitempty" db:"started_at"`                 // 开始时间
+	CompletedAt *time.Time     `json:"completed_at,omitempty" db:"completed_at"`             // 完成时间
+	Progress    TaskProgress   `json:"progress" db:"progress"`                               // 进度信息
+	Error       string         `json:"error,omitempty" db:"error"`                           // 错误信息
+	Metadata    TaskMetadata   `json:"metadata" db:"metadata"`                               // 任务元数据
 }
 
 // SyncTaskType 任务类型

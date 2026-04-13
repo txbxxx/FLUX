@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"ai-sync-manager/pkg/config"
-	"ai-sync-manager/pkg/utils"
+	"flux/pkg/config"
+	"flux/pkg/utils"
 )
 
 // toolsConfig 全局工具配置，由 Runtime 注入。

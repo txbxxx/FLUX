@@ -11,11 +11,11 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/cli/output"
-typesRemote "ai-sync-manager/internal/types/remote"
-	typesSync "ai-sync-manager/internal/types/sync"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/app/usecase"
+	"flux/internal/cli/output"
+	typesRemote "flux/internal/types/remote"
+	typesSnapshot "flux/internal/types/snapshot"
+	typesSync "flux/internal/types/sync"
 )
 
 var errCommandHandled = errors.New("command handled")
@@ -36,10 +36,10 @@ type Workflow interface {
 	DiffSnapshots(ctx context.Context, input usecase.DiffSnapshotsInput) (*typesSnapshot.DiffResult, error)
 	GetConfig(ctx context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error)
 	SaveConfig(ctx context.Context, input usecase.SaveConfigInput) error
-		// 远端仓库管理
-		AddRemote(ctx context.Context, input typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error)
-		ListRemotes(ctx context.Context) (*typesRemote.ListRemotesResult, error)
-		RemoveRemote(ctx context.Context, input typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error)
+	// 远端仓库管理
+	AddRemote(ctx context.Context, input typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error)
+	ListRemotes(ctx context.Context) (*typesRemote.ListRemotesResult, error)
+	RemoveRemote(ctx context.Context, input typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error)
 	CreateAISetting(ctx context.Context, input usecase.CreateAISettingInput) (*usecase.CreateAISettingResult, error)
 	ListAISettings(ctx context.Context, input usecase.ListAISettingsInput) (*usecase.ListAISettingsResult, error)
 	GetAISetting(ctx context.Context, input usecase.GetAISettingInput) (*usecase.GetAISettingResult, error)
@@ -49,10 +49,10 @@ type Workflow interface {
 	// 新增批量方法
 	GetAISettingsBatch(ctx context.Context, input usecase.GetAISettingsBatchInput) (*usecase.GetAISettingsBatchResult, error)
 	DeleteAISettingsBatch(ctx context.Context, input usecase.DeleteAISettingsBatchInput) (*usecase.DeleteAISettingsBatchResult, error)
-		// 同步操作
-		SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
-		SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
-		SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
+	// 同步操作
+	SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
+	SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
+	SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
 	// 历史版本
 	SnapshotHistory(ctx context.Context, input usecase.SnapshotHistoryInput) (*typesSnapshot.HistoryResult, error)
 	RestoreFromHistory(ctx context.Context, input usecase.RestoreFromHistoryInput) (*typesSnapshot.RestoreResult, error)
@@ -82,7 +82,7 @@ type Dependencies struct {
 // NewRootCommand 组装顶层命令并注入所有子命令。
 func NewRootCommand(deps Dependencies) *spcobra.Command {
 	root := &spcobra.Command{
-		Use:           "ai-sync",
+		Use:           "fl",
 		Short:         "AI tool config snapshot manager",
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -147,7 +147,7 @@ func errorWriter(w io.Writer) io.Writer {
 
 // printUsage 输出顶层简版帮助。
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "请指定子命令，例如: ai-sync scan")
+	fmt.Fprintln(w, "请指定子命令，例如: fl scan")
 }
 
 // printScanResult 负责把扫描结果渲染为统一表格。

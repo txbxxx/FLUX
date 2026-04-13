@@ -39,8 +39,8 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// 数据库配置
-	if cfg.Database.Filename != "ai-sync-manager.db" {
-		t.Errorf("Database.Filename = %q, want %q", cfg.Database.Filename, "ai-sync-manager.db")
+	if cfg.Database.Filename != "flux.db" {
+		t.Errorf("Database.Filename = %q, want %q", cfg.Database.Filename, "flux.db")
 	}
 	if cfg.Database.MaxOpenConns != 1 {
 		t.Errorf("Database.MaxOpenConns = %d, want 1", cfg.Database.MaxOpenConns)
@@ -169,8 +169,8 @@ sync:
 	if defaults.App.Version != "1.0.0-alpha" {
 		t.Errorf("App.Version should remain %q", "1.0.0-alpha")
 	}
-	if defaults.Database.Filename != "ai-sync-manager.db" {
-		t.Errorf("Database.Filename should remain %q", "ai-sync-manager.db")
+	if defaults.Database.Filename != "flux.db" {
+		t.Errorf("Database.Filename should remain %q", "flux.db")
 	}
 	if defaults.Sync.DefaultRemote != "origin" {
 		t.Errorf("Sync.DefaultRemote should remain %q", "origin")
@@ -227,7 +227,7 @@ func TestGetConnMaxLifetime(t *testing.T) {
 
 func TestLoadNoUserFile(t *testing.T) {
 	homeDir, _ := os.UserHomeDir()
-	userPath := filepath.Join(homeDir, ".ai-sync-manager", "config.yaml")
+	userPath := filepath.Join(homeDir, ".flux", "config.yaml")
 
 	if _, err := os.Stat(userPath); err == nil {
 		t.Skip("用户配置文件已存在，跳过")

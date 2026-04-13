@@ -21,7 +21,7 @@ type ResolvedRuleMatch struct {
 
 // ResolvedProjectMatch 记录某个已注册项目命中的全部规则结果。
 type ResolvedProjectMatch struct {
-	ProjectName string              // 项目名称（如 "demo"、"ai-sync-manager"）
+	ProjectName string              // 项目名称（如 "demo"、"flux"）
 	ProjectPath string              // 项目根目录的绝对路径
 	Matches     []ResolvedRuleMatch // 该项目下所有命中的配置文件/目录
 }

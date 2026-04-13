@@ -1,0 +1,17 @@
+rename: 项目重命名为 Flux
+
+完成了什么：
+- 将项目从 ai-sync-manager / ai-sync 重命名为 Flux / fl
+- 修改 go.mod module 名为 flux
+- 批量替换所有 Go import 路径
+- 重命名 CLI 入口目录 cmd/ai-sync -> cmd/fl
+- 更新 Makefile、CLAUDE.md、README.md、AGENTS.md
+- 更新所有中文文档中的命令引用
+- 更新 CLI 命令字符串为 fl
+- 修复 isValidGitURL 函数重复声明问题
+
+有什么作用：
+- 项目已完全重命名为 Flux/Flux (CLI: fl)
+
+可能的影响：
+- 内部 .ai-sync 目录暂未重命名（保持向后兼容）

@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/git"
-	"ai-sync-manager/pkg/database"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/internal/service/git"
+	"flux/pkg/database"
+	"flux/pkg/logger"
 
 	"go.uber.org/zap"
 )
@@ -339,7 +339,7 @@ func (s *Service) getRepoPath(snapshot *models.Snapshot, options SyncOptions) st
 	if snapshot.Metadata.ProjectPath != "" {
 		return filepath.Join(snapshot.Metadata.ProjectPath, ".sync-repo")
 	}
-	return filepath.Join(os.TempDir(), "ai-sync-manager", "sync-repo")
+	return filepath.Join(os.TempDir(), "flux", "sync-repo")
 }
 
 // convertAuth 转换认证配置

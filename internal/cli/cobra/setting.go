@@ -7,8 +7,8 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/cli/output"
+	"flux/internal/app/usecase"
+	"flux/internal/cli/output"
 )
 
 func newSettingCommand(deps Dependencies) *spcobra.Command {
@@ -82,7 +82,7 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	getCommand := &spcobra.Command{
 		Use:   "get <name> [name...]",
 		Short: "获取指定配置的详情",
-		Args:  validateAtLeastOneArg("ai-sync setting get <name>"),
+		Args:  validateAtLeastOneArg("fl setting get <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			// 判断是否为批量操作
 			if len(args) > 1 {
@@ -114,7 +114,7 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	deleteCommand := &spcobra.Command{
 		Use:   "delete <name> [name...]",
 		Short: "删除指定的配置",
-		Args:  validateAtLeastOneArg("ai-sync setting delete <name>"),
+		Args:  validateAtLeastOneArg("fl setting delete <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			// 判断是否为批量操作
 			if len(args) > 1 {
@@ -159,7 +159,7 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	switchCommand := &spcobra.Command{
 		Use:   "switch <name>",
 		Short: "切换到指定的配置",
-		Args:  validateExactOneArg("ai-sync setting switch <name>"),
+		Args:  validateExactOneArg("fl setting switch <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			result, err := deps.Workflow.SwitchAISetting(cmd.Context(), usecase.SwitchAISettingInput{
 				Name: args[0],
@@ -262,7 +262,7 @@ func printSwitchResult(w io.Writer, result *usecase.SwitchAISettingResult) {
 
 // printSettingUsage 输出简版帮助。
 func printSettingUsage(w io.Writer) {
-	fmt.Fprintln(w, "请指定子命令，例如: ai-sync setting list")
+	fmt.Fprintln(w, "请指定子命令，例如: fl setting list")
 }
 
 // printBatchSettingDetails 输出批量获取配置的结果。

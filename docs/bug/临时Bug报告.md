@@ -14,7 +14,7 @@
 
 ### 问题描述
 
-使用ai-sync setting edit GLM_lite -e编辑配置后，数据库中保存的token值变成了加密显示格式（如4e5b****QEXh），导致实际使用时token无效。
+使用fl setting edit GLM_lite -e编辑配置后，数据库中保存的token值变成了加密显示格式（如4e5b****QEXh），导致实际使用时token无效。
 
 ### 根本原因分析
 
@@ -42,7 +42,7 @@
 
 ### 问题描述
 
-执行ai-sync get claude-global settings.json -e后，编辑的文件内容会以异常方式显示。
+执行fl get claude-global settings.json -e后，编辑的文件内容会以异常方式显示。
 
 ### 可能原因
 

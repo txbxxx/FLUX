@@ -141,7 +141,7 @@ coverage: 49.4% of statements
 
 ### 运行测试
 ```bash
-cd D:/workspace/ai-sync-manager
+cd D:/workspace/fl-manager
 go test ./internal/service/sync/... -v -cover
 # ✓ 所有测试通过
 # ✓ 覆盖率: 49.4%
@@ -175,7 +175,7 @@ func (p *Packager) createMetadataFile(snapshot *models.Snapshot) ([]byte, error)
 // 集中管理所有快照的元数据
 type SnapshotManifest map[string]SnapshotMetadata
 
-// 清单文件位置: .ai-sync/manifest.json
+// 清单文件位置: .fl/manifest.json
 // 包含所有快照的摘要信息，便于快速查询
 ```
 
@@ -231,7 +231,7 @@ func (s *Service) convertAuth(auth *models.AuthConfig) *git.GitAuthConfig {
 
 ```
 remote-repo/
-├── .ai-sync/
+├── .fl/
 │   ├── manifest.json          # 快照清单
 │   └── snapshots/
 │       ├── {snapshot_id}/
@@ -246,7 +246,7 @@ remote-repo/
 ## 验证
 
 ```bash
-cd D:/workspace/ai-sync-manager
+cd D:/workspace/fl-manager
 
 # 编译
 go build -v ./...

@@ -14,9 +14,9 @@ import (
 	spcobra "github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/tui"
-	typesSetting "ai-sync-manager/internal/types/setting"
+	"flux/internal/app/usecase"
+	"flux/internal/tui"
+	typesSetting "flux/internal/types/setting"
 )
 
 // EditorConfig 编辑器配置。
@@ -73,7 +73,7 @@ func runEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string)
 
 	// 使用固定文件名而非随机名称，让 notepad 认为这是正常文件
 	ext := "." + format
-	tempFileName := "ai-sync-edit-" + name + ext
+	tempFileName := "fl-edit-" + name + ext
 	tempPath := filepath.Join(tempDir, tempFileName)
 
 	// 删除旧文件（如果存在）

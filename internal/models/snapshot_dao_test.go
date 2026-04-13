@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 	testify "github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +19,7 @@ func TestSnapshotDAO_Create_WritesFiles(t *testing.T) {
 	dao := NewSnapshotDAO(db)
 
 	snapshot := &Snapshot{
-		ID:          0,
+		ID:        0,
 		Name:      "DAO Files Test",
 		Message:   "testing file persistence",
 		CreatedAt: time.Now(),
@@ -90,7 +90,7 @@ func TestSnapshotDAO_Create_DoesNotDuplicateFiles(t *testing.T) {
 	dao := NewSnapshotDAO(db)
 
 	snapshot := &Snapshot{
-		ID:          0,
+		ID:        0,
 		Name:      "No Dup Test",
 		Message:   "test",
 		CreatedAt: time.Now(),
