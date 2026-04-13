@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 )
 
 // AISetting 表示保存的 AI 配置。

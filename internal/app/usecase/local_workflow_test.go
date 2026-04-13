@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/tool"
-	typesScan "ai-sync-manager/internal/types/scan"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/models"
+	"flux/internal/service/tool"
+	typesScan "flux/internal/types/scan"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 type stubDetector struct {
@@ -306,16 +306,16 @@ func TestLocalWorkflowScanFiltersRegisteredProjectByName(t *testing.T) {
 	workflow := NewLocalWorkflow(&stubDetector{
 		result: &tool.ToolDetectionResult{
 			ProjectInstallations: []*tool.ToolInstallation{
-				{ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, ProjectName: "ai-sync-manager", ProjectPath: "/workspace/ai-sync-manager"},
+				{ToolType: tool.ToolTypeCodex, Status: tool.StatusInstalled, ProjectName: "flux", ProjectPath: "/workspace/flux"},
 			},
 		},
 	}, &stubSnapshotService{})
 
-	result, err := workflow.Scan(context.Background(), ScanInput{Apps: []string{"ai-sync-manager"}})
+	result, err := workflow.Scan(context.Background(), ScanInput{Apps: []string{"flux"}})
 	if err != nil {
 		t.Fatalf("Scan() error = %v", err)
 	}
-	if len(result.Tools) != 1 || result.Tools[0].ProjectName != "ai-sync-manager" || result.Tools[0].Scope != "project" {
+	if len(result.Tools) != 1 || result.Tools[0].ProjectName != "flux" || result.Tools[0].Scope != "project" {
 		t.Fatalf("expected only the registered project entry, got %+v", result.Tools)
 	}
 }
@@ -370,20 +370,20 @@ func TestLocalWorkflowListRulesSupportsRegisteredProjectNameFilter(t *testing.T)
 			{ToolType: "claude", AbsolutePath: `C:\Users\tester\.claude.json`},
 		},
 		projects: []typesScan.RegisteredProjectRecord{
-			{ToolType: "codex", ProjectName: "ai-sync-manager", ProjectPath: `D:\workspace\ai-sync-manager`},
+			{ToolType: "codex", ProjectName: "flux", ProjectPath: `D:\workspace\flux`},
 			{ToolType: "claude", ProjectName: "demo", ProjectPath: `D:\workspace\demo`},
 		},
 	}
 	workflow := NewLocalWorkflow(&stubDetector{}, &stubSnapshotService{}).WithScanRuleManager(ruleManager)
 
-	result, err := workflow.ListScanRules(context.Background(), ListScanRulesInput{App: "ai-sync-manager"})
+	result, err := workflow.ListScanRules(context.Background(), ListScanRulesInput{App: "flux"})
 	if err != nil {
 		t.Fatalf("ListScanRules() error = %v", err)
 	}
 	if result.App != "codex" {
 		t.Fatalf("expected codex rules for project filter, got %+v", result)
 	}
-	if len(result.RegisteredProjects) != 1 || result.RegisteredProjects[0].Name != "ai-sync-manager" {
+	if len(result.RegisteredProjects) != 1 || result.RegisteredProjects[0].Name != "flux" {
 		t.Fatalf("expected only matched project, got %+v", result.RegisteredProjects)
 	}
 	if len(result.DefaultGlobalRules) == 0 || len(result.ProjectRuleTemplates) == 0 {

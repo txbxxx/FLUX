@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/pkg/logger"
+	"flux/pkg/logger"
 
 	"github.com/stretchr/testify/assert"
 )

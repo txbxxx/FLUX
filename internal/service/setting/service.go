@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/types/setting"
+	"flux/internal/models"
+	"flux/internal/types/setting"
 )
 
 // DAO 定义配置数据访问接口。

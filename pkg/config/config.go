@@ -98,10 +98,10 @@ func DefaultConfig() *Config {
 	if err != nil {
 		// 嵌入 YAML 不应出错，如果出错则返回代码内硬编码的最小配置
 		homeDir, _ := os.UserHomeDir()
-		dataDir := filepath.Join(homeDir, ".ai-sync-manager")
+		dataDir := filepath.Join(homeDir, ".flux")
 		return &Config{
 			App:      AppConfig{Version: "1.0.0-alpha", DataDir: dataDir},
-			Database: DatabaseConfig{Filename: "ai-sync-manager.db", MaxOpenConns: 1, MaxIdleConns: 1, ConnMaxLifetime: "1h"},
+			Database: DatabaseConfig{Filename: "flux.db", MaxOpenConns: 1, MaxIdleConns: 1, ConnMaxLifetime: "1h"},
 			Sync:     SyncConfig{DefaultBranch: "main", DefaultRemote: "origin"},
 		}
 	}
@@ -123,7 +123,7 @@ func userConfigPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(homeDir, ".ai-sync-manager", "config.yaml")
+	return filepath.Join(homeDir, ".flux", "config.yaml")
 }
 
 // Load 加载配置：先加载嵌入的默认值，再用用户配置覆盖。

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/pkg/database"
-	typesScan "ai-sync-manager/internal/types/scan"
+	"flux/internal/models"
+	"flux/pkg/database"
+	typesScan "flux/internal/types/scan"
 
 	"github.com/google/uuid"
 )

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/git"
-	typesSync "ai-sync-manager/internal/types/sync"
+	"flux/internal/models"
+	"flux/internal/service/git"
+	typesSync "flux/internal/types/sync"
 )
 
 // SyncPush pushes the latest snapshot of a project to its configured remote repository.

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	typesCommon "ai-sync-manager/internal/types/common"
-	typesSetting "ai-sync-manager/internal/types/setting"
+	typesCommon "flux/internal/types/common"
+	typesSetting "flux/internal/types/setting"
 
 	"github.com/google/uuid"
 )

@@ -6,8 +6,8 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/app/usecase"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 // newSnapshotUpdateCommand 创建 snapshot update 子命令。

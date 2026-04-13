@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/tool"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
-	"ai-sync-manager/pkg/database"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/internal/service/tool"
+	typesSnapshot "flux/internal/types/snapshot"
+	"flux/pkg/database"
+	"flux/pkg/logger"
 
 	"github.com/google/uuid"
 	"github.com/hexops/gotextdiff"

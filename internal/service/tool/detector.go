@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/pkg/logger"
-	"ai-sync-manager/pkg/utils"
+	"flux/pkg/logger"
+	"flux/pkg/utils"
 
 	"go.uber.org/zap"
 )

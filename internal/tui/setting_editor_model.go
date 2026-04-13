@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"ai-sync-manager/internal/app/usecase"
+	"flux/internal/app/usecase"
 )
 
 // SettingEditorKeyMap 定义 setting 编辑器的按键绑定。

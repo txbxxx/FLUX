@@ -1,6 +1,6 @@
 package tool
 
-import "ai-sync-manager/pkg/config"
+import "flux/pkg/config"
 
 // SyncRuleDefinition 表示统一规则层的单条规则定义。
 // 无论是内置默认规则还是从 YAML 配置加载的自定义规则，最终都统一为此结构体。

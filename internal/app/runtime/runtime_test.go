@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ai-sync-manager/pkg/logger"
+	"flux/pkg/logger"
 )
 
 func TestNewDisablesConsoleOutputWhenRequested(t *testing.T) {

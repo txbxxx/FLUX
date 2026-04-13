@@ -3,7 +3,7 @@ package scan
 import (
 	"time"
 
-	"ai-sync-manager/internal/models"
+	"flux/internal/models"
 )
 
 // ToolStatistics holds statistics for a single tool.

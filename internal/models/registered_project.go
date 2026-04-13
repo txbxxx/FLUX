@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 )
 
 // RegisteredProject 表示用户登记参与扫描的项目。

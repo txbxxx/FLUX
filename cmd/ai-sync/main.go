@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	appruntime "ai-sync-manager/internal/app/runtime"
-	"ai-sync-manager/internal/app/usecase"
-	clicobra "ai-sync-manager/internal/cli/cobra"
-	"ai-sync-manager/internal/service/setting"
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/tool"
-	"ai-sync-manager/internal/tui"
+	appruntime "flux/internal/app/runtime"
+	"flux/internal/app/usecase"
+	clicobra "flux/internal/cli/cobra"
+	"flux/internal/service/setting"
+	"flux/internal/models"
+	"flux/internal/service/tool"
+	"flux/internal/tui"
 )
 
 const version = "1.0.0-alpha"

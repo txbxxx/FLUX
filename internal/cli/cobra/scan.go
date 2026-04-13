@@ -3,7 +3,7 @@ package cobra
 import (
 	"fmt"
 
-	"ai-sync-manager/internal/app/usecase"
+	"flux/internal/app/usecase"
 
 	spcobra "github.com/spf13/cobra"
 )

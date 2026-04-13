@@ -5,7 +5,7 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
+	"flux/internal/app/usecase"
 )
 
 // newSnapshotCreateCommand 创建 snapshot create 子命令。

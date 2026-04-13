@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 )
 
 // CustomSyncRule 表示用户登记的绝对路径文件规则。

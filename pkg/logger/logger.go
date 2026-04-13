@@ -29,7 +29,7 @@ type Config struct {
 // 默认同时写文件和控制台，方便 CLI/TUI 调试。
 func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
-	logDir := filepath.Join(homeDir, ".ai-sync-manager", "logs")
+	logDir := filepath.Join(homeDir, ".flux", "logs")
 
 	return &Config{
 		Level:      "info",

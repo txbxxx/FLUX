@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-sync-manager/internal/app/usecase"
+	"flux/internal/app/usecase"
 )
 
 func renderScanPage(m *Model) string {

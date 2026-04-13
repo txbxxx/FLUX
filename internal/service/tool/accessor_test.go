@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 )
 
 func TestConfigAccessorListDirReturnsImmediateEntries(t *testing.T) {

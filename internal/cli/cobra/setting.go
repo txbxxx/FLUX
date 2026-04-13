@@ -7,8 +7,8 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/cli/output"
+	"flux/internal/app/usecase"
+	"flux/internal/cli/output"
 )
 
 func newSettingCommand(deps Dependencies) *spcobra.Command {

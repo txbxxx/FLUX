@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/pkg/logger"
 
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	typesSnapshot "flux/internal/types/snapshot"
 
 	"go.uber.org/zap"
 )

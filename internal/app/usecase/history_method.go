@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-sync-manager/internal/service/git"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/service/git"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 // SnapshotHistory shows the version history of a snapshot from the git repository.

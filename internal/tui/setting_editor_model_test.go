@@ -3,9 +3,9 @@ package tui
 import (
 	"testing"
 
-	typesSetting "ai-sync-manager/internal/types/setting"
+	typesSetting "flux/internal/types/setting"
 
-	"ai-sync-manager/internal/app/usecase"
+	"flux/internal/app/usecase"
 )
 
 // TestMaskTokenForEditor 测试token脱敏显示功能

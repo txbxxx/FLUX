@@ -1,7 +1,7 @@
 package sync
 
 import (
-	"ai-sync-manager/internal/models"
+	"flux/internal/models"
 )
 
 // SyncOptions 同步选项

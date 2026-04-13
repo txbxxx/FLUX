@@ -14,9 +14,9 @@ import (
 	spcobra "github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/tui"
-	typesSetting "ai-sync-manager/internal/types/setting"
+	"flux/internal/app/usecase"
+	"flux/internal/tui"
+	typesSetting "flux/internal/types/setting"
 )
 
 // EditorConfig 编辑器配置。

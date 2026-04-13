@@ -6,7 +6,7 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	typesSync "ai-sync-manager/internal/types/sync"
+	typesSync "flux/internal/types/sync"
 )
 
 // newSyncCommand creates the sync command group.

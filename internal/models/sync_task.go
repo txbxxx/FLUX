@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 
 	"gorm.io/gorm"
 )

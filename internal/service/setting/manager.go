@@ -1,8 +1,8 @@
 package setting
 
 import (
-	"ai-sync-manager/internal/models"
-	typesSetting "ai-sync-manager/internal/types/setting"
+	"flux/internal/models"
+	typesSetting "flux/internal/types/setting"
 )
 
 // AISettingManager 实现 usecase.AISettingManager 接口。

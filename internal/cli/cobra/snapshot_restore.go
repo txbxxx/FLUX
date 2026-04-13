@@ -9,9 +9,9 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/cli/output"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/app/usecase"
+	"flux/internal/cli/output"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 // newSnapshotRestoreCommand creates the snapshot restore sub-command.
@@ -34,7 +34,7 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
   - 预览模式：通过 --dry-run 仅查看变更，不实际写入
   - 历史版本：通过 --version <hash> 恢复到指定历史版本
 
-恢复前会自动备份当前配置到 ~/.ai-sync-manager/backup/<timestamp>/。`,
+恢复前会自动备份当前配置到 ~/.flux/backup/<timestamp>/。`,
 		Args: validateExactOneArg("ai-sync snapshot restore <id-or-name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			// 历史版本恢复模式

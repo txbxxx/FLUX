@@ -7,7 +7,7 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
+	"flux/internal/app/usecase"
 )
 
 // newSettingEditCommand 创建 edit 子命令。

@@ -3,7 +3,7 @@ package sync
 import (
 	"time"
 
-	"ai-sync-manager/internal/models"
+	"flux/internal/models"
 )
 
 // ConflictPolicy defines how file conflicts are handled.

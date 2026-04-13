@@ -11,11 +11,11 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	"ai-sync-manager/internal/cli/output"
-typesRemote "ai-sync-manager/internal/types/remote"
-	typesSync "ai-sync-manager/internal/types/sync"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/app/usecase"
+	"flux/internal/cli/output"
+typesRemote "flux/internal/types/remote"
+	typesSync "flux/internal/types/sync"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 var errCommandHandled = errors.New("command handled")

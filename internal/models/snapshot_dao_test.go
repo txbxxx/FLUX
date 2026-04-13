@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 	testify "github.com/stretchr/testify/assert"
 )
 

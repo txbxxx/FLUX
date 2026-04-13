@@ -12,9 +12,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/types/common"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/internal/types/common"
+	"flux/pkg/logger"
 
 	"go.uber.org/zap"
 )
@@ -349,7 +349,7 @@ func (s *Service) generateAndSaveKey(keyPath string) ([]byte, error) {
 // getDataDir 获取数据目录
 func getDataDir() string {
 	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".ai-sync-manager")
+	return filepath.Join(homeDir, ".flux")
 }
 
 // IsEnabled 检查加密是否启用

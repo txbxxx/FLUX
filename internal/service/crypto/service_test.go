@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/types/common"
+	"flux/internal/models"
+	"flux/internal/types/common"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

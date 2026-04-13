@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/snapshot"
-	"ai-sync-manager/internal/service/tool"
-	"ai-sync-manager/pkg/config"
-	"ai-sync-manager/pkg/database"
-	"ai-sync-manager/pkg/logger"
+	"flux/internal/models"
+	"flux/internal/service/snapshot"
+	"flux/internal/service/tool"
+	"flux/pkg/config"
+	"flux/pkg/database"
+	"flux/pkg/logger"
 )
 
 type Options struct {
@@ -132,9 +132,9 @@ func expandHome(path string) string {
 func DefaultDataDir() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return ".ai-sync-manager"
+		return ".flux"
 	}
-	return filepath.Join(homeDir, ".ai-sync-manager")
+	return filepath.Join(homeDir, ".flux")
 }
 
 // Close 负责关闭数据库并刷新日志缓冲。

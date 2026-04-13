@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	typesSnapshot "flux/internal/types/snapshot"
 
 	"github.com/charmbracelet/lipgloss"
 )

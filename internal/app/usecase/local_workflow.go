@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/internal/service/tool"
-	typesScan "ai-sync-manager/internal/types/scan"
-typesRemote "ai-sync-manager/internal/types/remote"
-	typesSync "ai-sync-manager/internal/types/sync"
-	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	"flux/internal/models"
+	"flux/internal/service/tool"
+	typesScan "flux/internal/types/scan"
+typesRemote "flux/internal/types/remote"
+	typesSync "flux/internal/types/sync"
+	typesSnapshot "flux/internal/types/snapshot"
 )
 
 // DefaultListLimit 快照列表默认分页大小。
@@ -758,7 +758,7 @@ func matchesScanFilter(item ToolSummary, filter string) bool {
 	if item.Scope != string(tool.ScopeProject) {
 		return false
 	}
-	// 匹配项目名（如 demo、ai-sync-manager）
+	// 匹配项目名（如 demo、flux）
 	if strings.EqualFold(item.ProjectName, filter) {
 		return true
 	}
@@ -1221,7 +1221,7 @@ func extractErrorReason(err error) string {
 		return ""
 	}
 	msg := err.Error()
-	// 移除 "ai-sync-manager/internal/app/usecase." 前缀
+	// 移除 "flux/internal/app/usecase." 前缀
 	if strings.HasPrefix(msg, "未找到名称为") {
 		return msg
 	}

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/internal/models"
-	"ai-sync-manager/pkg/database"
+	"flux/internal/models"
+	"flux/pkg/database"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

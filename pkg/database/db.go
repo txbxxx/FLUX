@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"ai-sync-manager/pkg/logger"
+	"flux/pkg/logger"
 
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
@@ -43,7 +43,7 @@ func InitDB(dataDir string) (*DB, error) {
 		return nil, fmt.Errorf("创建数据目录失败: %w", err)
 	}
 
-	dbPath := filepath.Join(dataDir, "ai-sync-manager.db")
+	dbPath := filepath.Join(dataDir, "flux.db")
 	db := &DB{
 		path:   dbPath,
 		closed: false,

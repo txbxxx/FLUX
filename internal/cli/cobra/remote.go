@@ -7,8 +7,8 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"ai-sync-manager/internal/app/usecase"
-	typesRemote "ai-sync-manager/internal/types/remote"
+	"flux/internal/app/usecase"
+	typesRemote "flux/internal/types/remote"
 )
 
 // newRemoteCommand creates the remote command group.

@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ai-sync-manager/pkg/database"
+	"flux/pkg/database"
 )
 
 func TestRuleManagerAddCustomRuleRequiresAbsoluteFile(t *testing.T) {

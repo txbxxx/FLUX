@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-sync-manager/internal/service/tool"
+	"flux/internal/service/tool"
 )
 
 // ConfigTargetKind 表示配置目标的类型：文件或目录。
