@@ -1,0 +1,17 @@
+## Summary
+- 修复 get -e 编辑配置文件保存后，再次执行 get -e 打开时报"目标是二进制文件，无法直接读取"的问题
+- 根因：settings.json 被损坏后嵌入了约 23 个空字节，被 isBinaryContent 检测为二进制并拒绝读取
+- 新增 scrubNullBytes 函数，自动清理配置文件中的空字节后再返回内容
+
+## Changes
+- internal/service/tool/accessor.go：ReadFile 新增空字节清理逻辑
+- internal/service/tool/accessor_scrub_test.go：新增 7 个测试用例
+- internal/service/tool/accessor_test.go：更新原有二进制测试以适配新行为
+
+## Test plan
+- [x] 含零星空字节的文件可正常读取
+- [x] 模拟真实损坏场景（JSON + 23 个空字节）正确恢复
+- [x] scrubNullBytes 单元测试覆盖边界情况
+- [x] go test ./... 全部通过
+
+Generated with Claude Code (https://claude.com/claude-code)
