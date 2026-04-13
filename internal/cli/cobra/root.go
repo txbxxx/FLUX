@@ -312,10 +312,19 @@ func printSnapshotList(w io.Writer, result *usecase.ListSnapshotsResult) {
 	fmt.Fprint(w, tbl.Render())
 }
 
+// printError renders a user-facing error to w.
+// For UserError, the original error (Err) is appended to Message so the user
+// can see the root cause without checking log files.
+// A de-duplication check prevents repeating the original error when Message
+// already contains it (e.g. AddProject concatenates errMsg into Message).
 func printError(w io.Writer, err error) {
 	var userErr *usecase.UserError
 	if errors.As(err, &userErr) {
-		fmt.Fprintln(w, userErr.Message)
+		msg := userErr.Message
+		if userErr.Err != nil && !strings.Contains(msg, userErr.Err.Error()) {
+			msg += ": " + userErr.Err.Error()
+		}
+		fmt.Fprintln(w, msg)
 		if strings.TrimSpace(userErr.Suggestion) != "" {
 			fmt.Fprintln(w, userErr.Suggestion)
 		}
@@ -376,4 +385,29 @@ func displayScanSummaryTitle(item usecase.ToolSummary) string {
 // filepathSeparator 包一层便于测试时统一处理平台差异。
 func filepathSeparator() rune {
 	return filepath.Separator
+}
+
+// validateExactOneArg validates that exactly one argument is provided,
+// returning a Chinese error message instead of Cobra's default English one.
+func validateExactOneArg(example string) func(cmd *spcobra.Command, args []string) error {
+	return func(cmd *spcobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("请指定参数，例如：%s", example)
+		}
+		if len(args) > 1 {
+			return fmt.Errorf("参数过多，%s 只接受 1 个参数", cmd.CommandPath())
+		}
+		return nil
+	}
+}
+
+// validateAtLeastOneArg validates that at least one argument is provided,
+// returning a Chinese error message instead of Cobra's default English one.
+func validateAtLeastOneArg(example string) func(cmd *spcobra.Command, args []string) error {
+	return func(cmd *spcobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("请指定参数，例如：%s", example)
+		}
+		return nil
+	}
 }

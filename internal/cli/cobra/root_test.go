@@ -706,8 +706,99 @@ func TestExecuteCommandPrintsFriendlyError(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
 	}
-	if !strings.Contains(stderr.String(), "未检测到任何可同步工具") || !strings.Contains(stderr.String(), "请先确认") {
-		t.Fatalf("unexpected stderr: %s", stderr.String())
+	// 改造后输出应包含原始错误信息
+	output := stderr.String()
+	if !strings.Contains(output, "未检测到任何可同步工具: not found") {
+		t.Fatalf("expected message with original error, got %q", output)
+	}
+	if !strings.Contains(output, "请先确认") {
+		t.Fatalf("expected suggestion in output, got %q", output)
+	}
+}
+
+func TestPrintError(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		want   []string
+		dont   []string
+	}{
+		{
+			name: "UserError 有 Err 时追加原始错误",
+			err: &usecase.UserError{
+				Message: "创建快照失败",
+				Err:     errors.New("no space left on device"),
+			},
+			want: []string{"创建快照失败: no space left on device"},
+		},
+		{
+			name: "UserError 有 Err 有 Suggestion",
+			err: &usecase.UserError{
+				Message:    "扫描失败",
+				Suggestion: "请确认目录存在",
+				Err:        errors.New("permission denied"),
+			},
+			want: []string{"扫描失败: permission denied", "请确认目录存在"},
+		},
+		{
+			name: "UserError 无 Err 时不追加冒号",
+			err: &usecase.UserError{
+				Message:    "创建快照失败：message 不能为空",
+				Suggestion: "请通过 --message 输入",
+			},
+			want: []string{"创建快照失败：message 不能为空", "请通过 --message 输入"},
+			dont: []string{": :"},
+		},
+		{
+			name: "UserError Message 已包含 Err 时去重",
+			err: &usecase.UserError{
+				Message: "添加项目失败：项目名已存在",
+				Err:     errors.New("项目名已存在"),
+			},
+			want: []string{"添加项目失败：项目名已存在"},
+			dont: []string{"项目名已存在: 项目名已存在"},
+		},
+		{
+			name: "非 UserError 直接输出 Error()",
+			err:  errors.New("标准错误信息"),
+			want: []string{"标准错误信息"},
+		},
+		{
+			name: "UserError 无 Suggestion 只输出 Message",
+			err: &usecase.UserError{
+				Message: "删除快照失败",
+				Err:     errors.New("database is locked"),
+			},
+			want: []string{"删除快照失败: database is locked"},
+		},
+		{
+			name: "UserError 空 Suggestion 不输出空行",
+			err: &usecase.UserError{
+				Message:    "失败",
+				Suggestion: "   ",
+				Err:        errors.New("io timeout"),
+			},
+			want: []string{"失败: io timeout"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			printError(&buf, tt.err)
+			output := buf.String()
+
+			for _, w := range tt.want {
+				if !strings.Contains(output, w) {
+					t.Errorf("expected output to contain %q, got %q", w, output)
+				}
+			}
+			for _, d := range tt.dont {
+				if strings.Contains(output, d) {
+					t.Errorf("expected output NOT to contain %q, got %q", d, output)
+				}
+			}
+		})
 	}
 }
 

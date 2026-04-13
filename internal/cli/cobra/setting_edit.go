@@ -18,7 +18,7 @@ func newSettingEditCommand(deps Dependencies) *spcobra.Command {
 	command := &spcobra.Command{
 		Use:   "edit <name>",
 		Short: "编辑 AI 配置",
-		Args:  spcobra.ExactArgs(1),
+		Args:  validateExactOneArg("ai-sync setting edit <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			name := args[0]
 
