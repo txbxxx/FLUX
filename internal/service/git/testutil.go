@@ -11,7 +11,7 @@ import (
 func CreateTestRepo(t *testing.T) string {
 	t.Helper()
 
-	tempDir := filepath.Join(os.TempDir(), "fl"-git-test")
+	tempDir := filepath.Join(os.TempDir(), "fl-git-test")
 	_ = os.RemoveAll(tempDir)
 	_ = os.MkdirAll(tempDir, 0755)
 
@@ -34,7 +34,7 @@ func CreateTestRepo(t *testing.T) string {
 func CreateTestRepoWithCommit(t *testing.T) string {
 	t.Helper()
 
-	tempDir := filepath.Join(os.TempDir(), "fl"-git-test-commit")
+	tempDir := filepath.Join(os.TempDir(), "fl-git-test-commit")
 	_ = os.RemoveAll(tempDir)
 	_ = os.MkdirAll(tempDir, 0755)
 
@@ -68,7 +68,7 @@ func CleanupTestRepo(t *testing.T, path string) {
 func CreateTestSSHKey(t *testing.T) string {
 	t.Helper()
 
-	tempDir := filepath.Join(os.TempDir(), "fl"-ssh-test")
+	tempDir := filepath.Join(os.TempDir(), "fl-ssh-test")
 	_ = os.MkdirAll(tempDir, 0755)
 
 	// 创建一个假的私钥文件用于测试

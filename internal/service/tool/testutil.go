@@ -11,7 +11,7 @@ import (
 func CreateMockConfigDir(t *testing.T, toolType ToolType, scope ConfigScope) string {
 	t.Helper()
 
-	baseDir := filepath.Join(os.TempDir(), "fl"-test", string(toolType), string(scope))
+	baseDir := filepath.Join(os.TempDir(), "fl-test", string(toolType), string(scope))
 	err := os.MkdirAll(baseDir, 0755)
 	if err != nil {
 		t.Fatalf("创建模拟目录失败: %v", err)
@@ -102,7 +102,7 @@ func CleanupMockDir(t *testing.T, path string) {
 	t.Helper()
 
 	if path != "" {
-		_ = os.RemoveAll(filepath.Join(os.TempDir(), "fl"-test"))
+		_ = os.RemoveAll(filepath.Join(os.TempDir(), "fl-test"))
 	}
 }
 
@@ -110,7 +110,7 @@ func CleanupMockDir(t *testing.T, path string) {
 func CreateMockProject(t *testing.T, name string, hasCodex, hasClaude bool) string {
 	t.Helper()
 
-	projectDir := filepath.Join(os.TempDir(), "fl"-test-projects", name)
+	projectDir := filepath.Join(os.TempDir(), "fl-test-projects", name)
 	err := os.MkdirAll(projectDir, 0755)
 	if err != nil {
 		t.Fatalf("创建项目目录失败: %v", err)
@@ -143,7 +143,7 @@ func createFileInDir(dir, name, content string) {
 // CleanupMockProjects 清理所有模拟项目
 func CleanupMockProjects(t *testing.T) {
 	t.Helper()
-	_ = os.RemoveAll(filepath.Join(os.TempDir(), "fl"-test-projects"))
+	_ = os.RemoveAll(filepath.Join(os.TempDir(), "fl-test-projects"))
 }
 
 // GetUserHomeDirForTest 获取用户主目录（测试用）

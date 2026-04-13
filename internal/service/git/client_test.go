@@ -29,7 +29,7 @@ func TestIsRepository(t *testing.T) {
 	assert.False(t, IsRepository("/nonexistent/path/12345"))
 
 	// 测试非仓库目录
-	tempDir := filepath.Join(os.TempDir(), "fl"-not-repo")
+	tempDir := filepath.Join(os.TempDir(), "fl-not-repo")
 	_ = os.MkdirAll(tempDir, 0755)
 	defer os.RemoveAll(tempDir)
 	assert.False(t, IsRepository(tempDir))
@@ -47,7 +47,7 @@ func TestInitRepository(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tempDir := filepath.Join(os.TempDir(), "fl"-init-test")
+			tempDir := filepath.Join(os.TempDir(), "fl-init-test")
 			_ = os.RemoveAll(tempDir)
 			defer os.RemoveAll(tempDir)
 
@@ -77,7 +77,7 @@ func TestGetRepositoryInfo(t *testing.T) {
 
 // TestGetRepositoryInfo_NotRepo 测试非仓库路径
 func TestGetRepositoryInfo_NotRepo(t *testing.T) {
-	tempDir := filepath.Join(os.TempDir(), "fl"-not-a-repo")
+	tempDir := filepath.Join(os.TempDir(), "fl-not-a-repo")
 	_ = os.MkdirAll(tempDir, 0755)
 	defer os.RemoveAll(tempDir)
 
@@ -201,7 +201,7 @@ func TestListBranches(t *testing.T) {
 
 // TestListBranches_NotRepo 测试非仓库路径
 func TestListBranches_NotRepo(t *testing.T) {
-	tempDir := filepath.Join(os.TempDir(), "fl"-not-repo")
+	tempDir := filepath.Join(os.TempDir(), "fl-not-repo")
 	_ = os.MkdirAll(tempDir, 0755)
 	defer os.RemoveAll(tempDir)
 

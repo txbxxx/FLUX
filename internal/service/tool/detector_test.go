@@ -30,7 +30,7 @@ func TestDetectWithOptions_EmptyResult(t *testing.T) {
 	detector := NewToolDetector()
 
 	// 使用临时目录作为主目录
-	tempHome := filepath.Join(os.TempDir(), "fl"-empty-home-test")
+	tempHome := filepath.Join(os.TempDir(), "fl-empty-home-test")
 	_ = os.MkdirAll(tempHome, 0755)
 	defer os.RemoveAll(tempHome)
 
@@ -439,7 +439,7 @@ func TestWalkConfigDir(t *testing.T) {
 	detector := NewToolDetector()
 
 	// 创建临时目录
-	tempDir := filepath.Join(os.TempDir(), "fl"-walk-test")
+	tempDir := filepath.Join(os.TempDir(), "fl-walk-test")
 	_ = os.MkdirAll(tempDir, 0755)
 	defer os.RemoveAll(tempDir)
 
