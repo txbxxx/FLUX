@@ -189,21 +189,369 @@ func (db *DB) IsClosed() bool {
 	return db.closed
 }
 
-// checkLegacySchema 检测旧版本 schema（UUID string ID）并提示用户重建数据库。
+// checkLegacySchema 检测旧版本 schema（UUID string ID）并自动迁移为 uint 自增 ID。
+// 迁移策略：按 rowid 顺序复制数据，建立旧 text ID → 新 uint ID 映射，更新关联字段。
 func (db *DB) checkLegacySchema() error {
-	// 检查 snapshots 表是否存在以及 ID 列类型
 	if !db.conn.Migrator().HasTable(&SnapshotRecord{}) {
-		return nil // 表不存在，首次创建，无需检查
+		return nil // 表不存在，首次创建
 	}
 
-	// 检查 ID 列的数据类型（通过查询 sqlite_master）
 	var columnType string
 	err := db.conn.Raw("SELECT typeof(id) FROM snapshots LIMIT 1").Scan(&columnType).Error
-	if err == nil && columnType == "text" {
-		return fmt.Errorf("数据库 schema 已过时（使用 UUID string ID），请删除数据库文件后重试\n数据库路径: %s\n删除后重新运行程序将自动创建新 schema", db.path)
+	if err != nil || columnType != "text" {
+		return nil // 已经是整数类型或空表
 	}
 
+	logger.Info("检测到旧版本数据库 schema，开始自动迁移（UUID string → uint 自增）")
+	if migrateErr := db.migrateLegacySchema(); migrateErr != nil {
+		return fmt.Errorf("数据库迁移失败: %w\n数据库路径: %s\n请手动删除数据库文件后重试", migrateErr, db.path)
+	}
+	logger.Info("数据库 schema 迁移完成")
 	return nil
+}
+
+// migrateLegacySchema 将所有表的 ID 列从 string 转为 uint 自增。
+func (db *DB) migrateLegacySchema() error {
+	return db.conn.Transaction(func(tx *gorm.DB) error {
+		// 第一步：读取旧 snapshot ID 映射（按 rowid 顺序保证新 ID 1,2,3... 对应）
+		var oldSnapshotIDs []string
+		if err := tx.Raw("SELECT id FROM snapshots ORDER BY rowid").Scan(&oldSnapshotIDs).Error; err != nil {
+			return fmt.Errorf("读取旧快照 ID 失败: %w", err)
+		}
+		snapIDMap := make(map[string]uint)
+		for i, oldID := range oldSnapshotIDs {
+			snapIDMap[oldID] = uint(i + 1)
+		}
+
+		// 第二步：读取旧 sync_task ID 映射
+		var oldTaskIDs []string
+		_ = tx.Raw("SELECT id FROM sync_tasks ORDER BY rowid").Scan(&oldTaskIDs).Error
+		taskIDMap := make(map[string]uint)
+		for i, oldID := range oldTaskIDs {
+			taskIDMap[oldID] = uint(i + 1)
+		}
+
+		// 第三步：迁移 snapshots 表
+		if err := migrateTable(tx, "snapshots", `
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			description TEXT,
+			message TEXT NOT NULL,
+			created_at DATETIME NOT NULL,
+			tools TEXT NOT NULL,
+			metadata TEXT,
+			tags TEXT,
+			commit_hash TEXT,
+			file_count INTEGER DEFAULT 0,
+			total_size INTEGER DEFAULT 0
+		`, "name, description, message, created_at, tools, metadata, tags, commit_hash, file_count, total_size"); err != nil {
+			return fmt.Errorf("迁移 snapshots 表失败: %w", err)
+		}
+
+		// 第四步：迁移 snapshot_files 表（更新 snapshot_id 为新 uint ID）
+		if err := migrateTableWithSnapshotID(tx, "snapshot_files", `
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			snapshot_id INTEGER NOT NULL,
+			path TEXT NOT NULL,
+			original_path TEXT NOT NULL,
+			size INTEGER NOT NULL,
+			hash TEXT,
+			modified_at DATETIME,
+			content BLOB,
+			tool_type TEXT NOT NULL,
+			category TEXT NOT NULL,
+			is_binary INTEGER DEFAULT 0
+		`, snapIDMap); err != nil {
+			return fmt.Errorf("迁移 snapshot_files 表失败: %w", err)
+		}
+
+		// 第五步：迁移 sync_tasks 表（更新 snapshot_id）
+		if err := migrateSyncTasks(tx, snapIDMap); err != nil {
+			return fmt.Errorf("迁移 sync_tasks 表失败: %w", err)
+		}
+
+		// 第六步：迁移 sync_history 表（更新 task_id）
+		if err := migrateSyncHistory(tx, taskIDMap); err != nil {
+			return fmt.Errorf("迁移 sync_history 表失败: %w", err)
+		}
+
+		// 第七步：迁移 backups 表（更新 snapshot_id）
+		if err := migrateBackups(tx, snapIDMap); err != nil {
+			return fmt.Errorf("迁移 backups 表失败: %w", err)
+		}
+
+		// 第八步：迁移无外键关联的表（直接复制）
+		for _, table := range []struct {
+			name    string
+			schema  string
+			columns string
+		}{
+			{
+				"remote_configs",
+				`id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, url TEXT NOT NULL,
+				auth_type TEXT NOT NULL, auth_username TEXT, auth_password TEXT, auth_ssh_key TEXT,
+				auth_passphrase TEXT, branch TEXT NOT NULL DEFAULT 'main', is_default INTEGER DEFAULT 0,
+				created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, last_synced DATETIME,
+				status TEXT NOT NULL DEFAULT 'inactive'`,
+				"name, url, auth_type, auth_username, auth_password, auth_ssh_key, auth_passphrase, branch, is_default, created_at, updated_at, last_synced, status",
+			},
+			{
+				"custom_sync_rules",
+				`id INTEGER PRIMARY KEY AUTOINCREMENT, tool_type TEXT NOT NULL, absolute_path TEXT NOT NULL,
+				created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL`,
+				"tool_type, absolute_path, created_at, updated_at",
+			},
+			{
+				"registered_projects",
+				`id INTEGER PRIMARY KEY AUTOINCREMENT, tool_type TEXT NOT NULL, project_name TEXT NOT NULL,
+				project_path TEXT NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL`,
+				"tool_type, project_name, project_path, created_at, updated_at",
+			},
+			{
+				"ai_settings",
+				`id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, token TEXT NOT NULL,
+				base_url TEXT, opus_model TEXT, sonnet_model TEXT,
+				created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL`,
+				"name, token, base_url, opus_model, sonnet_model, created_at, updated_at",
+			},
+			{
+				"app_settings",
+				`id INTEGER PRIMARY KEY AUTOINCREMENT, version TEXT NOT NULL, remote_config_id INTEGER,
+				sync_auto_sync INTEGER DEFAULT 0, sync_interval INTEGER, sync_conflict_policy TEXT,
+				sync_excludes TEXT, sync_includes TEXT, encryption_enabled INTEGER DEFAULT 0,
+				encryption_algorithm TEXT, encryption_key_path TEXT, ui_theme TEXT, ui_language TEXT,
+				ui_auto_start INTEGER DEFAULT 0, ui_minimize_to_tray INTEGER DEFAULT 0,
+				notifications_enabled INTEGER DEFAULT 1, notifications_sync_success INTEGER DEFAULT 1,
+				notifications_sync_failure INTEGER DEFAULT 1, notifications_conflict INTEGER DEFAULT 1,
+				notifications_new_snapshot INTEGER DEFAULT 1, notifications_sound TEXT,
+				created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL`,
+				"version, remote_config_id, sync_auto_sync, sync_interval, sync_conflict_policy, sync_excludes, sync_includes, encryption_enabled, encryption_algorithm, encryption_key_path, ui_theme, ui_language, ui_auto_start, ui_minimize_to_tray, notifications_enabled, notifications_sync_success, notifications_sync_failure, notifications_conflict, notifications_new_snapshot, notifications_sound, created_at, updated_at",
+			},
+		} {
+			if tx.Migrator().HasTable(table.name) {
+				if err := migrateTable(tx, table.name, table.schema, table.columns); err != nil {
+					return fmt.Errorf("迁移 %s 表失败: %w", table.name, err)
+				}
+			}
+		}
+
+		return nil
+	})
+}
+
+// migrateTable 重建表为 uint 自增 ID，复制所有非 ID 列数据。
+func migrateTable(tx *gorm.DB, tableName, schema, columns string) error {
+	newName := tableName + "_new"
+	// 创建新表
+	if err := tx.Exec(fmt.Sprintf("CREATE TABLE %s (%s)", newName, schema)).Error; err != nil {
+		return err
+	}
+	// 复制数据（按 rowid 顺序保证新 ID 递增顺序一致）
+	if err := tx.Exec(fmt.Sprintf("INSERT INTO %s (%s) SELECT %s FROM %s ORDER BY rowid", newName, columns, columns, tableName)).Error; err != nil {
+		return err
+	}
+	// 替换旧表
+	if err := tx.Exec(fmt.Sprintf("DROP TABLE %s", tableName)).Error; err != nil {
+		return err
+	}
+	return tx.Exec(fmt.Sprintf("ALTER TABLE %s RENAME TO %s", newName, tableName)).Error
+}
+
+// migrateTableWithSnapshotID 迁移 snapshot_files 表，将 string snapshot_id 映射为 uint。
+func migrateTableWithSnapshotID(tx *gorm.DB, tableName, schema string, snapIDMap map[string]uint) error {
+	newName := tableName + "_new"
+	if err := tx.Exec(fmt.Sprintf("CREATE TABLE %s (%s)", newName, schema)).Error; err != nil {
+		return err
+	}
+
+	// 读取旧数据
+	type oldFileRow struct {
+		SnapshotID   string
+		Path         string
+		OriginalPath string
+		Size         int64
+		Hash         string
+		ModifiedAt   time.Time
+		Content      []byte
+		ToolType     string
+		Category     string
+		IsBinary     bool
+	}
+	var rows []oldFileRow
+	if err := tx.Raw("SELECT snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary FROM "+tableName+" ORDER BY rowid").Scan(&rows).Error; err != nil {
+		return err
+	}
+
+	for _, r := range rows {
+		newSnapID, ok := snapIDMap[r.SnapshotID]
+		if !ok {
+			continue // 孤儿记录，跳过
+		}
+		if err := tx.Exec(
+			fmt.Sprintf("INSERT INTO %s (snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", newName),
+			newSnapID, r.Path, r.OriginalPath, r.Size, r.Hash, r.ModifiedAt, r.Content, r.ToolType, r.Category, r.IsBinary,
+		).Error; err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Exec(fmt.Sprintf("DROP TABLE %s", tableName)).Error; err != nil {
+		return err
+	}
+	return tx.Exec(fmt.Sprintf("ALTER TABLE %s RENAME TO %s", newName, tableName)).Error
+}
+
+// migrateSyncTasks 迁移 sync_tasks 表，映射 snapshot_id。
+func migrateSyncTasks(tx *gorm.DB, snapIDMap map[string]uint) error {
+	if !tx.Migrator().HasTable("sync_tasks") {
+		return nil
+	}
+	if err := tx.Exec(`CREATE TABLE sync_tasks_new (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, status TEXT NOT NULL,
+		snapshot_id INTEGER, direction TEXT, created_at DATETIME NOT NULL,
+		started_at DATETIME, completed_at DATETIME, progress_current INTEGER DEFAULT 0,
+		progress_total INTEGER DEFAULT 0, progress_message TEXT, error_msg TEXT, metadata TEXT
+	)`).Error; err != nil {
+		return err
+	}
+
+	type oldTask struct {
+		ID              string
+		Type            string
+		Status          string
+		SnapshotID      *string
+		Direction       string
+		CreatedAt       time.Time
+		StartedAt       *time.Time
+		CompletedAt     *time.Time
+		ProgressCurrent int
+		ProgressTotal   int
+		ProgressMessage string
+		ErrorMsg        string
+		Metadata        string
+	}
+	var rows []oldTask
+	if err := tx.Raw("SELECT id, type, status, snapshot_id, direction, created_at, started_at, completed_at, progress_current, progress_total, progress_message, error_msg, metadata FROM sync_tasks ORDER BY rowid").Scan(&rows).Error; err != nil {
+		return err
+	}
+
+	for _, r := range rows {
+		var newSnapID *uint
+		if r.SnapshotID != nil {
+			if id, ok := snapIDMap[*r.SnapshotID]; ok {
+				newSnapID = &id
+			}
+		}
+		if err := tx.Exec(
+			`INSERT INTO sync_tasks_new (type, status, snapshot_id, direction, created_at, started_at, completed_at, progress_current, progress_total, progress_message, error_msg, metadata)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			r.Type, r.Status, newSnapID, r.Direction, r.CreatedAt, r.StartedAt, r.CompletedAt,
+			r.ProgressCurrent, r.ProgressTotal, r.ProgressMessage, r.ErrorMsg, r.Metadata,
+		).Error; err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Exec("DROP TABLE sync_tasks").Error; err != nil {
+		return err
+	}
+	return tx.Exec("ALTER TABLE sync_tasks_new RENAME TO sync_tasks").Error
+}
+
+// migrateSyncHistory 迁移 sync_history 表，映射 task_id。
+func migrateSyncHistory(tx *gorm.DB, taskIDMap map[string]uint) error {
+	if !tx.Migrator().HasTable("sync_history") {
+		return nil
+	}
+	if err := tx.Exec(`CREATE TABLE sync_history_new (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL, type TEXT NOT NULL,
+		status TEXT NOT NULL, direction TEXT, started_at DATETIME NOT NULL,
+		completed_at DATETIME, duration_ms INTEGER, success INTEGER DEFAULT 0, error_msg TEXT
+	)`).Error; err != nil {
+		return err
+	}
+
+	type oldHistory struct {
+		TaskID      string
+		Type        string
+		Status      string
+		Direction   string
+		StartedAt   time.Time
+		CompletedAt *time.Time
+		DurationMS  *int64
+		Success     bool
+		ErrorMsg    string
+	}
+	var rows []oldHistory
+	if err := tx.Raw("SELECT task_id, type, status, direction, started_at, completed_at, duration_ms, success, error_msg FROM sync_history ORDER BY rowid").Scan(&rows).Error; err != nil {
+		return err
+	}
+
+	for _, r := range rows {
+		newTaskID, ok := taskIDMap[r.TaskID]
+		if !ok {
+			continue
+		}
+		if err := tx.Exec(
+			`INSERT INTO sync_history_new (task_id, type, status, direction, started_at, completed_at, duration_ms, success, error_msg)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newTaskID, r.Type, r.Status, r.Direction, r.StartedAt, r.CompletedAt, r.DurationMS, r.Success, r.ErrorMsg,
+		).Error; err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Exec("DROP TABLE sync_history").Error; err != nil {
+		return err
+	}
+	return tx.Exec("ALTER TABLE sync_history_new RENAME TO sync_history").Error
+}
+
+// migrateBackups 迁移 backups 表，映射 snapshot_id。
+func migrateBackups(tx *gorm.DB, snapIDMap map[string]uint) error {
+	if !tx.Migrator().HasTable("backups") {
+		return nil
+	}
+	if err := tx.Exec(`CREATE TABLE backups_new (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME NOT NULL, path TEXT NOT NULL,
+		size INTEGER NOT NULL, file_count INTEGER NOT NULL, snapshot_id INTEGER, description TEXT
+	)`).Error; err != nil {
+		return err
+	}
+
+	type oldBackup struct {
+		CreatedAt   time.Time
+		Path        string
+		Size        int64
+		FileCount   int
+		SnapshotID  *string
+		Description string
+	}
+	var rows []oldBackup
+	if err := tx.Raw("SELECT created_at, path, size, file_count, snapshot_id, description FROM backups ORDER BY rowid").Scan(&rows).Error; err != nil {
+		return err
+	}
+
+	for _, r := range rows {
+		var newSnapID *uint
+		if r.SnapshotID != nil {
+			if id, ok := snapIDMap[*r.SnapshotID]; ok {
+				newSnapID = &id
+			}
+		}
+		if err := tx.Exec(
+			`INSERT INTO backups_new (created_at, path, size, file_count, snapshot_id, description)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			r.CreatedAt, r.Path, r.Size, r.FileCount, newSnapID, r.Description,
+		).Error; err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Exec("DROP TABLE backups").Error; err != nil {
+		return err
+	}
+	return tx.Exec("ALTER TABLE backups_new RENAME TO backups").Error
 }
 
 // GetConn 暴露 GORM 连接给 DAO 层使用。
