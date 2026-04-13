@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -288,29 +287,6 @@ func deriveRemoteName(url string) string {
 		return fmt.Sprintf("remote-%d", time.Now().Unix())
 	}
 	return s
-}
-
-// isValidGitURL checks whether the given string looks like a valid Git repository URL.
-// Supports HTTPS, HTTP, and SSH formats.
-func isValidGitURL(raw string) bool {
-	// SSH format: git@host:path.git
-	if strings.HasPrefix(raw, "git@") {
-		parts := strings.SplitN(raw, ":", 2)
-		if len(parts) != 2 || parts[1] == "" {
-			return false
-		}
-		return len(parts[0]) > 4 // "git@" needs at least a host after @
-	}
-
-	// HTTPS/HTTP format
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return false
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return false
-	}
-	return len(parsed.Hostname()) >= 3
 }
 
 // WithRemoteConfigs injects the remote configuration manager dependency.
