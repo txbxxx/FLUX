@@ -16,7 +16,6 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "if": "Bash(git commit:*)",
         "hooks": [
           {
             "type": "agent",
@@ -38,5 +37,6 @@
         ]
       }
     ]
-  }
+  },
+  "prefersReducedMotion": true
 }

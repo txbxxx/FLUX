@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"ai-sync-manager/internal/app/usecase"
+	typesRemote "ai-sync-manager/internal/types/remote"
 	typesSnapshot "ai-sync-manager/internal/types/snapshot"
+	typesSync "ai-sync-manager/internal/types/sync"
 )
 
 type stubWorkflow struct {
@@ -166,6 +168,42 @@ func (s *stubWorkflow) DeleteAISettingsBatch(_ context.Context, input usecase.De
 func (s *stubWorkflow) EditAISetting(_ context.Context, input usecase.EditAISettingInput) (*usecase.EditAISettingResult, error) {
 	s.editAISettingInput = input
 	return s.editAISettingResult, s.editAISettingErr
+}
+
+func (s *stubWorkflow) AddRemote(_ context.Context, _ typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error) {
+	return nil, nil
+}
+
+func (s *stubWorkflow) ListRemotes(_ context.Context) (*typesRemote.ListRemotesResult, error) {
+	return nil, nil
+}
+
+func (s *stubWorkflow) RemoveRemote(_ context.Context, _ typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error) {
+	return nil, nil
+}
+
+func (s *stubWorkflow) UpdateSnapshot(_ context.Context, _ usecase.UpdateSnapshotInput) (*typesSnapshot.UpdateSnapshotResult, error) {
+	return nil, nil
+}
+
+func (s *stubWorkflow) SyncPush(_ context.Context, _ typesSync.SyncPushInput) (*typesSync.SyncPushResult, error) {
+	return nil, nil
+}
+
+func (s *stubWorkflow) SyncPull(_ context.Context, _ typesSync.SyncPullInput) (*typesSync.SyncPullResult, error) {
+	return nil, nil
+}
+
+func (s *stubWorkflow) SyncStatus(_ context.Context, _ typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error) {
+	return nil, nil
+}
+
+func (s *stubWorkflow) SnapshotHistory(_ context.Context, _ usecase.SnapshotHistoryInput) (*typesSnapshot.HistoryResult, error) {
+	return nil, nil
+}
+
+func (s *stubWorkflow) RestoreFromHistory(_ context.Context, _ usecase.RestoreFromHistoryInput) (*typesSnapshot.RestoreResult, error) {
+	return nil, nil
 }
 
 type stubTUIRunner struct {
