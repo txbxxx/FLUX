@@ -80,6 +80,14 @@ func (w *LocalWorkflow) AddRemote(ctx context.Context, input typesRemote.AddRemo
 		}
 	}
 
+	// 新增：URL 格式校验
+	if !isValidGitURL(url) {
+		return nil, &UserError{
+			Message: "添加远端仓库失败：仓库地址格式不正确",
+			Suggestion: "支持的格式：\n  HTTPS: https://github.com/user/repo.git\n  SSH:   git@github.com:user/repo.git\n  本地:  /path/to/repo.git",
+		}
+	}
+
 	if w.remoteConfigs == nil {
 		return nil, &UserError{
 			Message:    "添加远端仓库失败：远端配置服务不可用",
@@ -299,4 +307,65 @@ func (w *LocalWorkflow) WithDataDir(dir string) *LocalWorkflow {
 // remoteConfigPath returns the repos directory path for a given project.
 func remoteConfigPath(dataDir, projectName string) string {
 	return filepath.Join(dataDir, "repos", projectName)
+}
+
+// isValidGitURL validates if the given URL is a valid Git repository URL.
+// 支持的格式：
+//   - HTTPS: https://github.com/user/repo.git
+//   - SSH:   git@github.com:user/repo.git
+//   - 本地绝对路径: /path/to/repo.git
+func isValidGitURL(url string) bool {
+	// 拒绝明显的无效格式
+	if len(url) < 4 {
+		return false
+	}
+
+	// 拒绝单个字符或特殊值
+	if url == "-" || url == "." || url == ".." {
+		return false
+	}
+
+	// HTTPS 格式
+	if strings.HasPrefix(url, "https://") {
+		// 检查是否有基本的域名结构（至少有一个点）
+		rest := strings.TrimPrefix(url, "https://")
+		if strings.Contains(rest, ".") && !strings.HasPrefix(rest, ".") {
+			return true
+		}
+		return false
+	}
+
+	// HTTP 格式（不推荐但允许）
+	if strings.HasPrefix(url, "http://") {
+		rest := strings.TrimPrefix(url, "http://")
+		if strings.Contains(rest, ".") && !strings.HasPrefix(rest, ".") {
+			return true
+		}
+		return false
+	}
+
+	// SSH 格式: git@host:path
+	if strings.Contains(url, "@") && strings.Contains(url, ":") {
+		parts := strings.Split(url, "@")
+		if len(parts) == 2 && strings.Contains(parts[1], ":") {
+			return true
+		}
+	}
+
+	// SSH 协议格式: ssh://host/path
+	if strings.HasPrefix(url, "ssh://") {
+		return true
+	}
+
+	// 本地绝对路径（Unix/Linux/Mac）
+	if strings.HasPrefix(url, "/") {
+		return true
+	}
+
+	// Windows 绝对路径
+	if len(url) >= 2 && ((url[0] >= 'a' && url[0] <= 'z') || (url[0] >= 'A' && url[0] <= 'Z')) && url[1] == ':' {
+		return true
+	}
+
+	return false
 }
