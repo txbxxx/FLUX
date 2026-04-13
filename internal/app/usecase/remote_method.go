@@ -78,7 +78,7 @@ func (w *LocalWorkflow) AddRemote(ctx context.Context, input typesRemote.AddRemo
 	if url == "" {
 		return nil, &UserError{
 			Message:    "添加远端仓库失败：请提供仓库地址",
-			Suggestion: "例如: ai-sync remote add https://github.com/user/configs.git",
+			Suggestion: "例如: fl remote add https://github.com/user/configs.git",
 		}
 	}
 

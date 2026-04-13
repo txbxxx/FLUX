@@ -73,7 +73,7 @@ func runEditorMode(cmd *spcobra.Command, deps Dependencies, name, format string)
 
 	// 使用固定文件名而非随机名称，让 notepad 认为这是正常文件
 	ext := "." + format
-	tempFileName := "ai-sync-edit-" + name + ext
+	tempFileName := "fl"-edit-" + name + ext
 	tempPath := filepath.Join(tempDir, tempFileName)
 
 	// 删除旧文件（如果存在）

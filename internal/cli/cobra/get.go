@@ -14,7 +14,7 @@ import (
 // validateGetArgs validates arguments for the get command with user-friendly Chinese error messages.
 func validateGetArgs(cmd *spcobra.Command, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("请指定项目名称，例如：ai-sync get claude 或 ai-sync get claude settings.json\n查看支持的项目：ai-sync scan list")
+		return fmt.Errorf("请指定项目名称，例如：fl get claude 或 fl get claude settings.json\n查看支持的项目：fl scan list")
 	}
 	if len(args) > 2 {
 		return fmt.Errorf("参数过多，get 命令接受 1-2 个参数：<project> [path]")

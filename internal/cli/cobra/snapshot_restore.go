@@ -35,7 +35,7 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
   - 历史版本：通过 --version <hash> 恢复到指定历史版本
 
 恢复前会自动备份当前配置到 ~/.flux/backup/<timestamp>/。`,
-		Args: validateExactOneArg("ai-sync snapshot restore <id-or-name>"),
+		Args: validateExactOneArg("fl" snapshot restore <id-or-name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			// 历史版本恢复模式
 			if version != "" {

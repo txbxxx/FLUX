@@ -19,9 +19,9 @@ import (
 //
 // 工具类型自动推导示例：
 //
-//	ai-sync snapshot create -m "备份" -p claude        → 自动推导 tools=["claude"]
-//	ai-sync snapshot create -m "备份" -p codex-global  → 自动推导 tools=["codex"]
-//	ai-sync snapshot create -m "备份" -p my-project    → 从数据库查找项目 → 取 ToolType
+//	fl snapshot create -m "备份" -p claude        → 自动推导 tools=["claude"]
+//	fl snapshot create -m "备份" -p codex-global  → 自动推导 tools=["codex"]
+//	fl snapshot create -m "备份" -p my-project    → 从数据库查找项目 → 取 ToolType
 func newSnapshotCreateCommand(deps Dependencies) *spcobra.Command {
 	var tools string
 	var message string

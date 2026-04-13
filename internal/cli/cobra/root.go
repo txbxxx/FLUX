@@ -82,7 +82,7 @@ type Dependencies struct {
 // NewRootCommand 组装顶层命令并注入所有子命令。
 func NewRootCommand(deps Dependencies) *spcobra.Command {
 	root := &spcobra.Command{
-		Use:           "ai-sync",
+		Use:           "fl"",
 		Short:         "AI tool config snapshot manager",
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -147,7 +147,7 @@ func errorWriter(w io.Writer) io.Writer {
 
 // printUsage 输出顶层简版帮助。
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "请指定子命令，例如: ai-sync scan")
+	fmt.Fprintln(w, "请指定子命令，例如: fl scan")
 }
 
 // printScanResult 负责把扫描结果渲染为统一表格。

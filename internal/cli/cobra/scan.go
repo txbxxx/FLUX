@@ -31,7 +31,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			if addProjectMode {
 				if len(args) != 3 {
-					return fmt.Errorf("请按格式输入: ai-sync scan add --project <应用名> <项目名> <项目绝对路径>")
+					return fmt.Errorf("请按格式输入: fl scan add --project <应用名> <项目名> <项目绝对路径>")
 				}
 				return deps.Workflow.AddProject(cmd.Context(), usecase.AddProjectInput{
 					App:         args[0],
@@ -41,7 +41,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 			}
 
 			if len(args) != 2 {
-				return fmt.Errorf("请按格式输入: ai-sync scan add <应用名> <文件绝对路径>")
+				return fmt.Errorf("请按格式输入: fl scan add <应用名> <文件绝对路径>")
 			}
 			return deps.Workflow.AddCustomRule(cmd.Context(), usecase.AddCustomRuleInput{
 				App:          args[0],
@@ -58,7 +58,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			if removeProjectMode {
 				if len(args) != 2 {
-					return fmt.Errorf("请按格式输入: ai-sync scan remove --project <应用名> <项目绝对路径>")
+					return fmt.Errorf("请按格式输入: fl scan remove --project <应用名> <项目绝对路径>")
 				}
 				return deps.Workflow.RemoveProject(cmd.Context(), usecase.RemoveProjectInput{
 					App:         args[0],
@@ -67,7 +67,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 			}
 
 			if len(args) != 2 {
-				return fmt.Errorf("请按格式输入: ai-sync scan remove <应用名> <文件绝对路径>")
+				return fmt.Errorf("请按格式输入: fl scan remove <应用名> <文件绝对路径>")
 			}
 			return deps.Workflow.RemoveCustomRule(cmd.Context(), usecase.RemoveCustomRuleInput{
 				App:          args[0],
@@ -97,7 +97,7 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 		Short: "查看当前扫描规则",
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			if len(args) > 1 {
-				return fmt.Errorf("请按格式输入: ai-sync scan rules [应用或项目名]")
+				return fmt.Errorf("请按格式输入: fl scan rules [应用或项目名]")
 			}
 
 			app := ""

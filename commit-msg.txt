@@ -1,0 +1,10 @@
+rename: 更新 AGENTS.md
+
+完成了什么：
+- 标题: AI Sync Manager → Flux
+- 项目结构: ai-sync-manager/ → flux/, cmd/ai-sync/ → cmd/fl/
+- import 路径: ai-sync-manager → flux
+- 所有命令示例: ai-sync → fl
+
+有什么作用：
+- AGENTS.md 与新的项目名保持一致

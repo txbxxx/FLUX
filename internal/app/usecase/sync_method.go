@@ -32,7 +32,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	if w.remoteConfigs == nil {
 		return nil, &UserError{
 			Message:    "推送失败：远端配置服务不可用",
-			Suggestion: "请先执行 ai-sync remote add <url>",
+			Suggestion: "请先执行 fl remote add <url>",
 		}
 	}
 
@@ -41,7 +41,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	if err != nil || len(configs) == 0 {
 		return nil, &UserError{
 			Message:    "推送失败：未配置远端仓库",
-			Suggestion: "请先执行 ai-sync remote add <url> 添加远端仓库",
+			Suggestion: "请先执行 fl remote add <url> 添加远端仓库",
 		}
 	}
 
@@ -56,7 +56,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	if remoteConfig == nil {
 		return nil, &UserError{
 			Message:    "推送失败：没有可用的活跃远端配置",
-			Suggestion: "请先执行 ai-sync remote add 添加一个有效的远端仓库",
+			Suggestion: "请先执行 fl remote add 添加一个有效的远端仓库",
 		}
 	}
 
@@ -86,7 +86,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	if targetID == "" {
 		return nil, &UserError{
 			Message:    "推送失败：项目 \"" + projectName + "\" 没有快照",
-			Suggestion: "请先执行 ai-sync snapshot create -p " + projectName + " 创建快照",
+			Suggestion: "请先执行 fl snapshot create -p " + projectName + " 创建快照",
 		}
 	}
 
@@ -221,7 +221,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	if w.remoteConfigs == nil {
 		return nil, &UserError{
 			Message:    "拉取失败：远端配置服务不可用",
-			Suggestion: "请先执行 ai-sync remote add <url>",
+			Suggestion: "请先执行 fl remote add <url>",
 		}
 	}
 
@@ -230,7 +230,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	if err != nil || len(configs) == 0 {
 		return nil, &UserError{
 			Message:    "拉取失败：未配置远端仓库",
-			Suggestion: "请先执行 ai-sync remote add <url>",
+			Suggestion: "请先执行 fl remote add <url>",
 		}
 	}
 
@@ -244,7 +244,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	if remoteConfig == nil {
 		return nil, &UserError{
 			Message:    "拉取失败：没有可用的活跃远端配置",
-			Suggestion: "请先执行 ai-sync remote add 添加一个有效的远端仓库",
+			Suggestion: "请先执行 fl remote add 添加一个有效的远端仓库",
 		}
 	}
 
@@ -256,7 +256,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	if !git.IsRepository(repoPath) {
 		return nil, &UserError{
 			Message:    "拉取失败：本地仓库不存在",
-			Suggestion: "请先执行 ai-sync sync push --project " + projectName + " 初始化仓库",
+			Suggestion: "请先执行 fl sync push --project " + projectName + " 初始化仓库",
 		}
 	}
 

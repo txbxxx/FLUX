@@ -22,7 +22,7 @@ func newSnapshotUpdateCommand(deps Dependencies) *spcobra.Command {
 	command := &spcobra.Command{
 		Use:   "update <id-or-name>",
 		Short: "更新快照（重新扫描配置文件）",
-		Args:  validateExactOneArg("ai-sync snapshot update <id-or-name>"),
+		Args:  validateExactOneArg("fl" snapshot update <id-or-name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			result, err := deps.Workflow.UpdateSnapshot(cmd.Context(), usecase.UpdateSnapshotInput{
 				IDOrName: args[0],

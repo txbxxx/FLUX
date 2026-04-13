@@ -556,7 +556,7 @@ func matchesRegisteredProjectFilter(project typesScan.RegisteredProjectRecord, f
 //     b. 查数据库中已注册项目的 ToolType 字段
 //  3. 都没有则报错，提示用户指定
 //
-// 这样用户只需要 `ai-sync snapshot create -m 说明 -p claude` 即可，
+// 这样用户只需要 `fl snapshot create -m 说明 -p claude` 即可，
 // 不需要再手动传 `-t claude`。
 func (w *LocalWorkflow) CreateSnapshot(_ context.Context, input CreateSnapshotInput) (*SnapshotSummary, error) {
 	// 第一步：自动推导工具类型（当用户未指定 -t 时）

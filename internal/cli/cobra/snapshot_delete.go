@@ -14,7 +14,7 @@ func newSnapshotDeleteCommand(deps Dependencies) *spcobra.Command {
 	command := &spcobra.Command{
 		Use:   "delete <id-or-name>",
 		Short: "删除本地快照",
-		Args:  validateExactOneArg("ai-sync snapshot delete <id-or-name>"),
+		Args:  validateExactOneArg("fl" snapshot delete <id-or-name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			err := deps.Workflow.DeleteSnapshot(cmd.Context(), usecase.DeleteSnapshotInput{
 				IDOrName: args[0],
