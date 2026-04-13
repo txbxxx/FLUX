@@ -181,13 +181,13 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 
 // printCreatedSetting 输出创建成功的配置信息。
 func printCreatedSetting(w io.Writer, result *usecase.CreateAISettingResult) {
-	fmt.Fprintf(w, "配置已创建: %s\n", result.ID)
+	fmt.Fprintf(w, "配置已创建: %d\n", result.ID)
 }
 
 // printSettingDetail 输出配置详情。
 func printSettingDetail(w io.Writer, result *usecase.GetAISettingResult) {
 	fmt.Fprintf(w, "配置名称: %s\n", result.Name)
-	fmt.Fprintf(w, "配置 ID: %s\n", result.ID)
+	fmt.Fprintf(w, "配置 ID: %d\n", result.ID)
 
 	// Token 脱敏展示
 	maskedToken := maskToken(result.Token)

@@ -4,7 +4,7 @@ import "time"
 
 // AISettingDetail 表示保存的 AI 配置详情。
 type AISettingDetail struct {
-	ID          string    `json:"id"`
+	ID          uint      `json:"id"`
 	Name        string    `json:"name"`
 	Token       string    `json:"token"`
 	BaseURL     string    `json:"base_url"`
@@ -16,5 +16,5 @@ type AISettingDetail struct {
 
 // AISettingCreateResult 表示创建配置的结果。
 type AISettingCreateResult struct {
-	ID string `json:"id"`
+	ID uint `json:"id"`
 }

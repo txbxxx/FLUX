@@ -65,7 +65,7 @@ type RemoteRepository struct {
 
 // RemoteSnapshot holds metadata for a snapshot stored on a remote.
 type RemoteSnapshot struct {
-	ID          string    `json:"id"`          // 快照 ID
+	ID          uint      `json:"id"`          // 快照 ID
 	Name        string    `json:"name"`        // 快照名称
 	Description string    `json:"description"` // 快照描述
 	CreatedAt   time.Time `json:"created_at"`  // 创建时间
@@ -103,8 +103,8 @@ type TaskMetadata struct {
 
 // SyncHistory records a completed sync operation.
 type SyncHistory struct {
-	ID          string              `json:"id"`           // 记录 ID
-	TaskID      string              `json:"task_id"`      // 任务 ID
+	ID          uint                `json:"id"`           // 记录 ID
+	TaskID      uint                `json:"task_id"`      // 任务 ID
 	Type        models.SyncTaskType `json:"type"`         // 任务类型
 	Status      models.SyncTaskStatus `json:"status"`     // 任务状态
 	Direction   models.SyncDirection `json:"direction"`    // 同步方向

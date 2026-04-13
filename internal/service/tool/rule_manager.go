@@ -11,8 +11,6 @@ import (
 	"ai-sync-manager/internal/models"
 	"ai-sync-manager/pkg/database"
 	typesScan "ai-sync-manager/internal/types/scan"
-
-	"github.com/google/uuid"
 )
 
 // RuleManager 负责统一处理规则持久化和路径规范化。
@@ -62,7 +60,7 @@ func (m *RuleManager) AddCustomRule(toolType ToolType, absolutePath string) erro
 
 	now := time.Now()
 	return m.store.customRules.Create(&models.CustomSyncRule{
-		ID:           uuid.New().String(),
+		ID:           0, // GORM 自动生成自增 ID
 		ToolType:     toolType.String(),
 		AbsolutePath: normalizedPath,
 		CreatedAt:    now,
@@ -110,7 +108,7 @@ func (m *RuleManager) AddProject(toolType ToolType, projectName, projectPath str
 
 	now := time.Now()
 	return m.store.projects.Create(&models.RegisteredProject{
-		ID:          uuid.New().String(),
+		ID:          0, // GORM 自动生成自增 ID
 		ToolType:    toolType.String(),
 		ProjectName: name,
 		ProjectPath: normalizedPath,
@@ -290,7 +288,7 @@ func (m *RuleManager) ensureOneGlobalProject(toolType ToolType, projectName stri
 
 	now := time.Now()
 	return m.store.projects.Create(&models.RegisteredProject{
-		ID:          uuid.New().String(),
+		ID:          0, // GORM 自动生成自增 ID
 		ToolType:    toolType.String(),
 		ProjectName: projectName,
 		ProjectPath: globalPath,

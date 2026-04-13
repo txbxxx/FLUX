@@ -9,7 +9,7 @@ import (
 
 // RegisteredProject 表示用户登记参与扫描的项目。
 type RegisteredProject struct {
-	ID          string    `json:"id" db:"id" gorm:"column:id;primaryKey"`
+	ID          uint     `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"`
 	ToolType    string    `json:"tool_type" db:"tool_type" gorm:"column:tool_type;not null"`
 	ProjectName string    `json:"project_name" db:"project_name" gorm:"column:project_name;not null"`
 	ProjectPath string    `json:"project_path" db:"project_path" gorm:"column:project_path;not null"`

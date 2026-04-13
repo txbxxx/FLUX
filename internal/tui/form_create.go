@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -57,7 +58,7 @@ func (m *Model) createSnapshotCmd() tea.Cmd {
 
 		return createSnapshotMsg{
 			result: list,
-			id:     result.ID,
+			id:     fmt.Sprintf("%d", result.ID),
 		}
 	}
 }

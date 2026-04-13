@@ -20,7 +20,7 @@ func TestPackager_ValidateSnapshotForPush(t *testing.T) {
 
 	// 有效快照
 	validSnapshot := &models.Snapshot{
-		ID: "test-valid-1",
+		ID:          0,
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -32,18 +32,9 @@ func TestPackager_ValidateSnapshotForPush(t *testing.T) {
 	err := packager.ValidateSnapshotForPush(validSnapshot)
 	assert.NoError(t, err)
 
-	// 无效快照 - ID 为空
-	invalidSnapshot1 := &models.Snapshot{
-		ID:    "",
-		Files: []models.SnapshotFile{{Path: "test"}},
-	}
-
-	err = packager.ValidateSnapshotForPush(invalidSnapshot1)
-	assert.Error(t, err)
-
 	// 无效快照 - 无文件
 	invalidSnapshot2 := &models.Snapshot{
-		ID:    "test-id",
+		ID:          0,
 		Files: []models.SnapshotFile{},
 	}
 
@@ -52,7 +43,7 @@ func TestPackager_ValidateSnapshotForPush(t *testing.T) {
 
 	// 无效快照 - 文件路径为空
 	invalidSnapshot3 := &models.Snapshot{
-		ID: "test-id",
+		ID:          0,
 		Files: []models.SnapshotFile{
 			{
 				Path:         "",
@@ -66,7 +57,7 @@ func TestPackager_ValidateSnapshotForPush(t *testing.T) {
 
 	// 无效快照 - 原始路径为空
 	invalidSnapshot4 := &models.Snapshot{
-		ID: "test-id",
+		ID:          0,
 		Files: []models.SnapshotFile{
 			{
 				Path:         "test",
@@ -84,7 +75,7 @@ func TestPackager_CreateCommitMessage(t *testing.T) {
 	packager := NewPackager()
 
 	snapshot := &models.Snapshot{
-		ID:          "test-id-123",
+		ID:          0,
 		Name:        "Test Snapshot",
 		Description: "This is a test snapshot for testing",
 		Project:     "codex",
@@ -95,7 +86,7 @@ func TestPackager_CreateCommitMessage(t *testing.T) {
 	message := packager.CreateCommitMessage(snapshot)
 
 	assert.Contains(t, message, "Snapshot: Test Snapshot")
-	assert.Contains(t, message, "ID: test-id-123")
+	assert.Contains(t, message, "ID: 0")
 	assert.Contains(t, message, "This is a test snapshot for testing")
 	assert.Contains(t, message, "Project: codex")
 	assert.Contains(t, message, "Files: 2")
@@ -144,7 +135,7 @@ func TestPackager_CreateIndex(t *testing.T) {
 	packager := NewPackager()
 
 	snapshot := &models.Snapshot{
-		ID:          "test-index-1",
+		ID:          0,
 		Name:        "Test Index",
 		Description: "Test description",
 		CreatedAt:   time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC),
@@ -157,7 +148,7 @@ func TestPackager_CreateIndex(t *testing.T) {
 
 	index := packager.CreateIndex(snapshot)
 
-	assert.Equal(t, "test-index-1", index.SnapshotID)
+	assert.Equal(t, "0", index.SnapshotID)
 	assert.Len(t, index.FilePaths, 2)
 	assert.Equal(t, "config.toml", index.FilePaths[0])
 	assert.Equal(t, "skills.yml", index.FilePaths[1])
@@ -248,7 +239,7 @@ func TestService_PushSnapshot(t *testing.T) {
 
 	ctx := context.Background()
 	snapshot := &models.Snapshot{
-		ID:        "test-push-1",
+		ID:          0,
 		Name:      "Test Push",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
@@ -459,13 +450,13 @@ func TestService_convertToRemoteCommits(t *testing.T) {
 
 	snapshots := []*models.Snapshot{
 		{
-			ID:         "snap-1",
+			ID:          1,
 			CommitHash: "abc123",
 			Message:    "First snapshot",
 			CreatedAt:  time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC),
 		},
 		{
-			ID:         "snap-2",
+			ID:          2,
 			CommitHash: "def456",
 			Message:    "Second snapshot",
 			CreatedAt:  time.Date(2026, 3, 20, 11, 0, 0, 0, time.UTC),
@@ -477,12 +468,12 @@ func TestService_convertToRemoteCommits(t *testing.T) {
 	assert.Len(t, commits, 2)
 	assert.Equal(t, "abc123", commits[0].Hash)
 	assert.Equal(t, "First snapshot", commits[0].Message)
-	assert.Equal(t, "snap-1", commits[0].SnapshotID)
+	assert.Equal(t, "1", commits[0].SnapshotID)
 	assert.Equal(t, "2026-03-20T10:00:00Z", commits[0].Date)
 
 	assert.Equal(t, "def456", commits[1].Hash)
 	assert.Equal(t, "Second snapshot", commits[1].Message)
-	assert.Equal(t, "snap-2", commits[1].SnapshotID)
+	assert.Equal(t, "2", commits[1].SnapshotID)
 }
 
 // TestService_isSnapshotNew 测试检查快照是否为新
@@ -492,13 +483,13 @@ func TestService_isSnapshotNew(t *testing.T) {
 
 	service := NewService(db)
 
-	// 新快照
-	isNew := service.isSnapshotNew("non-existent-id")
+	// 新快照（不存在的 ID）
+	isNew := service.isSnapshotNew(uint(99999))
 	assert.True(t, isNew)
 
 	// 创建已存在的快照
 	existingSnapshot := &models.Snapshot{
-		ID:        "existing-id",
+		ID:          0,
 		Name:      "Existing",
 		Message:   "Test",
 		CreatedAt: time.Now(),
@@ -514,7 +505,7 @@ func TestService_isSnapshotNew(t *testing.T) {
 	require.NoError(t, err)
 
 	// 检查已存在的快照
-	isNew = service.isSnapshotNew("existing-id")
+	isNew = service.isSnapshotNew(existingSnapshot.ID)
 	assert.False(t, isNew)
 }
 
@@ -526,7 +517,7 @@ func TestService_saveRemoteSnapshot(t *testing.T) {
 	service := NewService(db)
 
 	remoteSnapshot := &models.Snapshot{
-		ID:        "remote-1",
+		ID:          0,
 		Name:      "Remote Snapshot",
 		Message:   "From remote",
 		CreatedAt: time.Now(),
@@ -542,7 +533,7 @@ func TestService_saveRemoteSnapshot(t *testing.T) {
 
 	// 验证保存
 	snapshotDAO := models.NewSnapshotDAO(db)
-	fetched, err := snapshotDAO.GetByID("remote-1")
+	fetched, err := snapshotDAO.GetByID(remoteSnapshot.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "Remote Snapshot", fetched.Name)
 }
@@ -646,7 +637,7 @@ func TestSyncStatus(t *testing.T) {
 		LocalBehind: 1,
 		RemoteSnapshots: []RemoteSnapshotInfo{
 			{
-				ID:         "snap-1",
+				ID:          "test-snap-1",
 				Name:       "Snapshot 1",
 				CommitHash: "abc123",
 				Author:     "Test Author",
@@ -666,7 +657,7 @@ func TestSyncStatus(t *testing.T) {
 // TestRemoteSnapshotInfo 测试远程快照信息
 func TestRemoteSnapshotInfo(t *testing.T) {
 	info := RemoteSnapshotInfo{
-		ID:          "snap-1",
+		ID:          "test-snap-1",
 		Name:        "Snapshot Name",
 		Description: "Snapshot description",
 		Message:     "Commit message",
@@ -678,7 +669,7 @@ func TestRemoteSnapshotInfo(t *testing.T) {
 		Size:        1024,
 	}
 
-	assert.Equal(t, "snap-1", info.ID)
+	assert.Equal(t, "test-snap-1", info.ID)
 	assert.Equal(t, "Snapshot Name", info.Name)
 	assert.Equal(t, "codex", info.Project)
 	assert.Equal(t, 5, info.FileCount)

@@ -11,7 +11,7 @@ import (
 // NewSnapshot 创建一个带默认时间和基础元数据的快照对象。
 func NewSnapshot(message string, projectName string) *Snapshot {
 	return &Snapshot{
-		ID:          generateID("snap"),
+		ID:          0, // GORM 自动生成自增 ID
 		Name:        generateSnapshotName(message),
 		Description: message,
 		Message:     message,
@@ -25,11 +25,6 @@ func NewSnapshot(message string, projectName string) *Snapshot {
 	}
 }
 
-// generateID 使用时间戳生成轻量唯一 ID。
-func generateID(prefix string) string {
-	timestamp := time.Now().UnixNano()
-	return fmt.Sprintf("%s-%d", prefix, timestamp)
-}
 
 // generateSnapshotName 从消息生成展示用名称。
 func generateSnapshotName(message string) string {

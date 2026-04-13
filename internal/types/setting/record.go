@@ -5,7 +5,7 @@ import "time"
 // AISettingRecord carries AI setting data across the Service-UseCase boundary.
 // It decouples the UseCase layer from the models (database) layer.
 type AISettingRecord struct {
-	ID          string    `json:"id"`
+	ID          uint      `json:"id"`
 	Name        string    `json:"name"`
 	Token       string    `json:"token"`
 	BaseURL     string    `json:"base_url"`

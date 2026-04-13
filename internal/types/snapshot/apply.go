@@ -50,12 +50,12 @@ type ChangeSummary struct {
 
 // BackupInfo holds metadata for a configuration backup.
 type BackupInfo struct {
-	ID          string `json:"id"`          // 备份 ID
+	ID          uint   `json:"id"`          // 备份 ID
 	CreatedAt   string `json:"created_at"`  // 创建时间
 	Path        string `json:"path"`        // 备份路径
 	Size        int64  `json:"size"`        // 备份大小
 	FileCount   int    `json:"file_count"`  // 文件数量
-	SnapshotID  string `json:"snapshot_id"` // 关联快照 ID
+	SnapshotID  *uint  `json:"snapshot_id"` // 关联快照 ID
 	Description string `json:"description"` // 备份描述
 }
 
@@ -70,7 +70,7 @@ type BackupOptions struct {
 // BackupResult summarizes the outcome of a backup operation.
 type BackupResult struct {
 	Success   bool   `json:"success"`    // 是否成功
-	BackupID  string `json:"backup_id"`  // 备份 ID
+	BackupID  uint   `json:"backup_id"`  // 备份 ID
 	Path      string `json:"path"`       // 备份路径
 	Size      int64  `json:"size"`       // 备份大小
 	FileCount int    `json:"file_count"` // 文件数量

@@ -118,7 +118,7 @@ func TestScanViewShowsChineseSummary(t *testing.T) {
 func TestModelCreateSnapshotSuccessMovesToSnapshots(t *testing.T) {
 	model := NewModel(&stubWorkflow{
 		createResult: &usecase.SnapshotSummary{
-			ID:        "snap-1",
+			ID:          0,
 			Name:      "Snapshot 1",
 			Message:   "created from tui",
 			Project:   "codex",
@@ -130,7 +130,7 @@ func TestModelCreateSnapshotSuccessMovesToSnapshots(t *testing.T) {
 			Total: 1,
 			Items: []usecase.SnapshotSummary{
 				{
-					ID:        "snap-1",
+					ID:          0,
 					Name:      "Snapshot 1",
 					Message:   "created from tui",
 					Project:   "codex",
@@ -158,7 +158,7 @@ func TestModelCreateSnapshotSuccessMovesToSnapshots(t *testing.T) {
 	if next.Page != PageSnapshots {
 		t.Fatalf("expected snapshots page after create, got %q", next.Page)
 	}
-	if len(next.Snapshots) != 1 || next.Snapshots[0].ID != "snap-1" {
+	if len(next.Snapshots) != 1 || next.Snapshots[0].ID != 0 {
 		t.Fatalf("unexpected snapshots state: %+v", next.Snapshots)
 	}
 }
