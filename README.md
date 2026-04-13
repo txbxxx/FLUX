@@ -1,6 +1,6 @@
-# AI Sync Manager
+# Flux
 
-AI Sync Manager 是一个本地优先的 AI 工具配置管理器，当前主线已经收敛为纯终端形态，提供 CLI 和轻量 TUI 两种使用方式。
+Flux 是一个本地优先的 AI 工具配置管理器，当前主线已经收敛为纯终端形态，提供 CLI 和轻量 TUI 两种使用方式。
 
 它当前聚焦在本地闭环：
 
@@ -14,8 +14,8 @@ AI Sync Manager 是一个本地优先的 AI 工具配置管理器，当前主线
 
 仓库主入口：
 
-- CLI：`cmd/ai-sync`
-- 终端界面：`ai-sync tui`
+- CLI：`cmd/fl`
+- 终端界面：`fl tui`
 
 当前阶段仍未覆盖：
 
@@ -28,7 +28,7 @@ AI Sync Manager 是一个本地优先的 AI 工具配置管理器，当前主线
 直接运行 CLI：
 
 ```powershell
-go run -buildvcs=false ./cmd/ai-sync <command>
+go run -buildvcs=false ./cmd/fl <command>
 ```
 
 使用 `Makefile` 构建本地二进制：
@@ -43,7 +43,7 @@ make build
 make build CLI_NAME=sync-tool
 ```
 
-默认输出目录是 `bin/`，例如 Windows 下会生成 `bin/ai-sync.exe`。
+默认输出目录是 `bin/`，例如 Windows 下会生成 `bin/fl.exe`。
 如果你需要非 Windows 产物，可以继续直接使用 `go build`，或者执行 `make build GOEXE=`。
 
 如果你想直接运行 CLI，可以使用：
@@ -53,12 +53,12 @@ make run
 make run ARGS=scan
 ```
 
-其中 `make run` 默认会执行 `.\bin\ai-sync.exe --help`。
+其中 `make run` 默认会执行 `.\bin\fl.exe --help`。
 
 查看帮助：
 
 ```powershell
-go run -buildvcs=false ./cmd/ai-sync --help
+go run -buildvcs=false ./cmd/fl --help
 ```
 
 ## 主要命令
@@ -66,57 +66,57 @@ go run -buildvcs=false ./cmd/ai-sync --help
 扫描本机配置：
 
 ```powershell
-ai-sync scan
+fl scan
 ```
 
 创建快照：
 
 ```powershell
-ai-sync snapshot create --name "我的快照" --message "初始化配置"
+fl snapshot create --name "我的快照" --message "初始化配置"
 ```
 
 列出快照：
 
 ```powershell
-ai-sync snapshot list
+fl snapshot list
 ```
 
 查看配置目录或文件：
 
 ```powershell
-ai-sync get codex skills\
-ai-sync get codex skills\README.md
+fl get codex skills\
+fl get codex skills\README.md
 ```
 
 进入终端编辑模式：
 
 ```powershell
-ai-sync get codex skills\README.md --edit
+fl get codex skills\README.md --edit
 ```
 
 管理 AI 配置（setting 命令）：
 
 ```powershell
 # 创建配置
-ai-sync setting create --name "claude-api" --token "sk-xxxx" --api "https://api.anthropic.com"
+fl setting create --name "claude-api" --token "sk-xxxx" --api "https://api.anthropic.com"
 
 # 列出配置
-ai-sync setting list
+fl setting list
 
 # 获取配置详情
-ai-sync setting get claude-api
+fl setting get claude-api
 
 # 删除配置
-ai-sync setting delete claude-api
+fl setting delete claude-api
 
 # 切换生效配置
-ai-sync setting switch claude-api
+fl setting switch claude-api
 ```
 
 启动轻量 TUI：
 
 ```powershell
-ai-sync tui
+fl tui
 ```
 
 ## 文档
@@ -142,4 +142,4 @@ go test ./...
 make build
 ```
 
-如果你刚从旧分支切回主线，命令入口统一收敛到 `cmd/ai-sync/main.go`。
+如果你刚从旧分支切回主线，命令入口统一收敛到 `cmd/fl/main.go`。
