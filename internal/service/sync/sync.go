@@ -38,13 +38,13 @@ func (s *Service) PushSnapshot(
 	options SyncOptions,
 ) (*PushResult, error) {
 	logger.Info("开始推送快照",
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 		zap.String("remote_url", options.RemoteURL),
 		zap.String("branch", options.Branch),
 	)
 
 	result := &PushResult{
-		SnapshotID: snapshot.ID,
+		SnapshotID: fmt.Sprintf("%d", snapshot.ID),
 	}
 
 	// 验证快照
@@ -65,7 +65,7 @@ func (s *Service) PushSnapshot(
 	}
 
 	// 创建快照目录
-	snapshotDir := filepath.Join(repoPath, ".ai-sync", "snapshots", snapshot.ID)
+	snapshotDir := filepath.Join(repoPath, ".ai-sync", "snapshots", fmt.Sprintf("%d", snapshot.ID))
 	if err := os.MkdirAll(snapshotDir, 0755); err != nil {
 		result.Success = false
 		result.ErrorMessage = err.Error()
@@ -108,7 +108,7 @@ func (s *Service) PushSnapshot(
 	result.FilesCount = len(snapshot.Files)
 
 	logger.Info("快照推送成功",
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 		zap.String("commit_hash", commitHash),
 	)
 
@@ -161,7 +161,7 @@ func (s *Service) PullSnapshots(
 		if s.isSnapshotNew(snap.ID) {
 			if err := s.saveRemoteSnapshot(snap); err != nil {
 				logger.Warn("保存远程快照失败",
-					zap.String("snapshot_id", snap.ID),
+					zap.Uint64("snapshot_id", uint64(snap.ID)),
 					zap.Error(err),
 				)
 				continue
@@ -321,7 +321,7 @@ func (s *Service) parseRemoteSnapshots(repoPath string) ([]*models.Snapshot, err
 }
 
 // isSnapshotNew 检查快照是否为新
-func (s *Service) isSnapshotNew(snapshotID string) bool {
+func (s *Service) isSnapshotNew(snapshotID uint) bool {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 	_, err := snapshotDAO.GetByID(snapshotID)
 	return err != nil // 错误表示不存在
@@ -368,7 +368,7 @@ func (s *Service) convertToRemoteCommits(
 			Hash:       snap.CommitHash,
 			Message:    snap.Message,
 			Date:       snap.CreatedAt.Format("2006-01-02T15:04:05Z"),
-			SnapshotID: snap.ID,
+			SnapshotID: fmt.Sprintf("%d", snap.ID),
 		}
 	}
 

@@ -13,7 +13,6 @@ import (
 	typesCommon "ai-sync-manager/internal/types/common"
 	typesSetting "ai-sync-manager/internal/types/setting"
 
-	"github.com/google/uuid"
 )
 
 // AISettingManager AI 配置管理接口。
@@ -139,7 +138,7 @@ func (w *LocalWorkflow) CreateAISetting(_ context.Context, input CreateAISetting
 
 	// 创建配置
 	setting := &typesSetting.AISettingRecord{
-		ID:          generateUUID(),
+		ID:          0, // GORM 自动生成自增 ID
 		Name:        name,
 		Token:       token,
 		BaseURL:     baseURL,
@@ -568,10 +567,6 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// generateUUID generates a UUID v4 string.
-func generateUUID() string {
-	return uuid.New().String()
-}
 
 // GetAISettingsBatchInput 批量获取配置的输入。
 type GetAISettingsBatchInput struct {
@@ -697,7 +692,7 @@ type EditAISettingInput struct {
 
 // EditAISettingResult 编辑配置的返回值。
 type EditAISettingResult struct {
-	ID        string
+	ID        uint
 	Name      string
 	UpdatedAt time.Time
 	Changes   []typesSetting.FieldChange

@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"ai-sync-manager/internal/models"
 	typesRemote "ai-sync-manager/internal/types/remote"
-
-	"github.com/google/uuid"
 )
 
 // RemoteConfigManager abstracts remote configuration persistence.
@@ -53,11 +52,19 @@ func (a *RemoteConfigDAOAdapter) UpdateRemoteConfig(config *models.RemoteConfig)
 }
 
 func (a *RemoteConfigDAOAdapter) DeleteRemoteConfig(id string) error {
-	return a.dao.Delete(id)
+	idNum, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return fmt.Errorf("无效的 ID 格式: %w", err)
+	}
+	return a.dao.Delete(uint(idNum))
 }
 
 func (a *RemoteConfigDAOAdapter) SetDefaultRemoteConfig(id string) error {
-	return a.dao.SetDefault(id)
+	idNum, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return fmt.Errorf("无效的 ID 格式: %w", err)
+	}
+	return a.dao.SetDefault(uint(idNum))
 }
 
 // RemoteConnectionTester abstracts remote connectivity testing.
@@ -121,7 +128,7 @@ func (w *LocalWorkflow) AddRemote(ctx context.Context, input typesRemote.AddRemo
 	}
 
 	config := &models.RemoteConfig{
-		ID:        uuid.New().String(),
+		ID:        0, // GORM 自动生成自增 ID
 		Name:      name,
 		URL:       url,
 		Branch:    branch,
@@ -256,7 +263,7 @@ func (w *LocalWorkflow) RemoveRemote(_ context.Context, input typesRemote.Remove
 		}
 	}
 
-	if err := w.remoteConfigs.DeleteRemoteConfig(found.ID); err != nil {
+	if err := w.remoteConfigs.DeleteRemoteConfig(fmt.Sprintf("%d", found.ID)); err != nil {
 		return nil, &UserError{
 			Message:    "删除远端仓库失败",
 			Suggestion: "请检查本地数据库是否可访问",

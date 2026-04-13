@@ -16,7 +16,7 @@ func TestCustomSyncRuleDAOCreateListDelete(t *testing.T) {
 	dao := NewCustomSyncRuleDAO(db)
 	now := time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC)
 	rule := &CustomSyncRule{
-		ID:           "rule-1",
+		ID:           0,
 		ToolType:     "claude",
 		AbsolutePath: `C:\Users\tester\.claude.json`,
 		CreatedAt:    now,
@@ -60,7 +60,7 @@ func TestCustomSyncRuleDAORejectsDuplicatePath(t *testing.T) {
 	dao := NewCustomSyncRuleDAO(db)
 	now := time.Date(2026, 3, 26, 10, 30, 0, 0, time.UTC)
 	rule := &CustomSyncRule{
-		ID:           "rule-1",
+		ID:           0,
 		ToolType:     "codex",
 		AbsolutePath: `D:\workspace\demo\extra.toml`,
 		CreatedAt:    now,
@@ -72,7 +72,7 @@ func TestCustomSyncRuleDAORejectsDuplicatePath(t *testing.T) {
 	}
 
 	duplicate := &CustomSyncRule{
-		ID:           "rule-2",
+		ID:           0,
 		ToolType:     "codex",
 		AbsolutePath: rule.AbsolutePath,
 		CreatedAt:    now,

@@ -59,6 +59,11 @@ func InitDB(dataDir string) (*DB, error) {
 		return nil, fmt.Errorf("配置数据库失败: %w", err)
 	}
 
+	// 检查旧版本 schema（UUID string ID）并提示用户
+	if err := db.checkLegacySchema(); err != nil {
+		return nil, err
+	}
+
 	if err := db.migrate(); err != nil {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}
@@ -182,6 +187,23 @@ func (db *DB) IsClosed() bool {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.closed
+}
+
+// checkLegacySchema 检测旧版本 schema（UUID string ID）并提示用户重建数据库。
+func (db *DB) checkLegacySchema() error {
+	// 检查 snapshots 表是否存在以及 ID 列类型
+	if !db.conn.Migrator().HasTable(&SnapshotRecord{}) {
+		return nil // 表不存在，首次创建，无需检查
+	}
+
+	// 检查 ID 列的数据类型（通过查询 sqlite_master）
+	var columnType string
+	err := db.conn.Raw("SELECT typeof(id) FROM snapshots LIMIT 1").Scan(&columnType).Error
+	if err == nil && columnType == "text" {
+		return fmt.Errorf("数据库 schema 已过时（使用 UUID string ID），请删除数据库文件后重试\n数据库路径: %s\n删除后重新运行程序将自动创建新 schema", db.path)
+	}
+
+	return nil
 }
 
 // GetConn 暴露 GORM 连接给 DAO 层使用。
@@ -336,7 +358,7 @@ type TestDBHelper interface {
 
 // SnapshotRecord is the GORM model for the "snapshots" table, used for migration and CRUD.
 type SnapshotRecord struct {
-	ID          string    `gorm:"column:id;primaryKey"`
+	ID          uint      `gorm:"column:id;primaryKey;autoIncrement"`
 	Name        string    `gorm:"column:name;not null"`
 	Description string    `gorm:"column:description"`
 	Message     string    `gorm:"column:message;not null"`
@@ -354,7 +376,7 @@ func (SnapshotRecord) TableName() string { return "snapshots" }
 // SnapshotFileRecord is the GORM model for the "snapshot_files" table, used for migration and CRUD.
 type SnapshotFileRecord struct {
 	ID           uint      `gorm:"column:id;primaryKey;autoIncrement"`
-	SnapshotID   string    `gorm:"column:snapshot_id;not null"`
+	SnapshotID   uint      `gorm:"column:snapshot_id;not null"`
 	Path         string    `gorm:"column:path;not null"`
 	OriginalPath string    `gorm:"column:original_path;not null"`
 	Size         int64     `gorm:"column:size;not null"`
@@ -369,10 +391,10 @@ type SnapshotFileRecord struct {
 func (SnapshotFileRecord) TableName() string { return "snapshot_files" }
 
 type syncTaskRecord struct {
-	ID              string     `gorm:"column:id;primaryKey"`
+	ID              uint       `gorm:"column:id;primaryKey;autoIncrement"`
 	Type            string     `gorm:"column:type;not null"`
 	Status          string     `gorm:"column:status;not null"`
-	SnapshotID      *string    `gorm:"column:snapshot_id"`
+	SnapshotID      *uint      `gorm:"column:snapshot_id"`
 	Direction       string     `gorm:"column:direction"`
 	CreatedAt       time.Time  `gorm:"column:created_at;not null"`
 	StartedAt       *time.Time `gorm:"column:started_at"`
@@ -387,7 +409,7 @@ type syncTaskRecord struct {
 func (syncTaskRecord) TableName() string { return "sync_tasks" }
 
 type remoteConfigRecord struct {
-	ID             string     `gorm:"column:id;primaryKey"`
+	ID             uint       `gorm:"column:id;primaryKey;autoIncrement"`
 	Name           string     `gorm:"column:name;not null;unique"`
 	URL            string     `gorm:"column:url;not null"`
 	AuthType       string     `gorm:"column:auth_type;not null"`
@@ -406,9 +428,9 @@ type remoteConfigRecord struct {
 func (remoteConfigRecord) TableName() string { return "remote_configs" }
 
 type appSettingsRecord struct {
-	ID                       string    `gorm:"column:id;primaryKey"`
+	ID                       uint      `gorm:"column:id;primaryKey;autoIncrement"`
 	Version                  string    `gorm:"column:version;not null"`
-	RemoteConfigID           *string   `gorm:"column:remote_config_id"`
+	RemoteConfigID           *uint     `gorm:"column:remote_config_id"`
 	SyncAutoSync             bool      `gorm:"column:sync_auto_sync;default:false"`
 	SyncInterval             *int      `gorm:"column:sync_interval"`
 	SyncConflictPolicy       string    `gorm:"column:sync_conflict_policy"`
@@ -434,7 +456,7 @@ type appSettingsRecord struct {
 func (appSettingsRecord) TableName() string { return "app_settings" }
 
 type customSyncRuleRecord struct {
-	ID           string    `gorm:"column:id;primaryKey"`
+	ID           uint      `gorm:"column:id;primaryKey;autoIncrement"`
 	ToolType     string    `gorm:"column:tool_type;not null;uniqueIndex:idx_custom_sync_rules_tool_path"`
 	AbsolutePath string    `gorm:"column:absolute_path;not null;uniqueIndex:idx_custom_sync_rules_tool_path"`
 	CreatedAt    time.Time `gorm:"column:created_at;not null"`
@@ -444,7 +466,7 @@ type customSyncRuleRecord struct {
 func (customSyncRuleRecord) TableName() string { return "custom_sync_rules" }
 
 type registeredProjectRecord struct {
-	ID          string    `gorm:"column:id;primaryKey"`
+	ID          uint      `gorm:"column:id;primaryKey;autoIncrement"`
 	ToolType    string    `gorm:"column:tool_type;not null;uniqueIndex:idx_registered_projects_tool_path"`
 	ProjectName string    `gorm:"column:project_name;not null"`
 	ProjectPath string    `gorm:"column:project_path;not null;uniqueIndex:idx_registered_projects_tool_path"`
@@ -455,20 +477,20 @@ type registeredProjectRecord struct {
 func (registeredProjectRecord) TableName() string { return "registered_projects" }
 
 type backupRecord struct {
-	ID          string    `gorm:"column:id;primaryKey"`
+	ID          uint      `gorm:"column:id;primaryKey;autoIncrement"`
 	CreatedAt   time.Time `gorm:"column:created_at;not null"`
 	Path        string    `gorm:"column:path;not null"`
 	Size        int64     `gorm:"column:size;not null"`
 	FileCount   int       `gorm:"column:file_count;not null"`
-	SnapshotID  *string   `gorm:"column:snapshot_id"`
+	SnapshotID  *uint     `gorm:"column:snapshot_id"`
 	Description string    `gorm:"column:description"`
 }
 
 func (backupRecord) TableName() string { return "backups" }
 
 type syncHistoryRecord struct {
-	ID          string     `gorm:"column:id;primaryKey"`
-	TaskID      string     `gorm:"column:task_id;not null"`
+	ID          uint       `gorm:"column:id;primaryKey;autoIncrement"`
+	TaskID      uint       `gorm:"column:task_id;not null"`
 	Type        string     `gorm:"column:type;not null"`
 	Status      string     `gorm:"column:status;not null"`
 	Direction   string     `gorm:"column:direction"`
@@ -482,7 +504,7 @@ type syncHistoryRecord struct {
 func (syncHistoryRecord) TableName() string { return "sync_history" }
 
 type aiSettingRecord struct {
-	ID        string    `gorm:"column:id;primaryKey"`
+	ID        uint      `gorm:"column:id;primaryKey;autoIncrement"`
 	Name      string    `gorm:"column:name;not null;uniqueIndex"`
 	Token     string    `gorm:"column:token;not null"`
 	BaseURL   string    `gorm:"column:base_url"`

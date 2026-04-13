@@ -8,7 +8,7 @@ import (
 
 // AISetting 表示保存的 AI 配置。
 type AISetting struct {
-	ID        string    `json:"id" db:"id" gorm:"column:id;primaryKey"`
+	ID        uint      `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"`
 	Name      string    `json:"name" db:"name" gorm:"column:name;not null;uniqueIndex"`
 	Token     string    `json:"token" db:"token" gorm:"column:token;not null"`
 	BaseURL   string    `json:"base_url" db:"base_url" gorm:"column:base_url"`

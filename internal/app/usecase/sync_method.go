@@ -79,7 +79,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	var targetID string
 	for _, item := range items {
 		if item.Project == projectName {
-			targetID = item.ID
+			targetID = fmt.Sprintf("%d", item.ID)
 			break
 		}
 	}
@@ -139,7 +139,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	}
 
 	// 第六步：Git add + commit
-	commitMsg := fmt.Sprintf("Snapshot: %s\nID: %s\nProject: %s\nFiles: %d",
+	commitMsg := fmt.Sprintf("Snapshot: %s\nID: %d\nProject: %s\nFiles: %d",
 		snapshot.Name, snapshot.ID, snapshot.Project, len(snapshot.Files))
 	commitResult, err := gitClient.Commit(ctx, &git.CommitOptions{
 		Path:    repoPath,
@@ -317,7 +317,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		if listErr == nil {
 			for _, item := range items {
 				if item.Project == projectName {
-					snap, getErr := w.snapshots.GetSnapshot(item.ID)
+					snap, getErr := w.snapshots.GetSnapshot(fmt.Sprintf("%d", item.ID))
 					if getErr == nil {
 						localSnapshot = snap
 					}

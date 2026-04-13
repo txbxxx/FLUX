@@ -16,7 +16,7 @@ func TestRegisteredProjectDAOCreateListDelete(t *testing.T) {
 	dao := NewRegisteredProjectDAO(db)
 	now := time.Date(2026, 3, 26, 11, 0, 0, 0, time.UTC)
 	project := &RegisteredProject{
-		ID:          "project-1",
+		ID:          0,
 		ToolType:    "codex",
 		ProjectName: "demo",
 		ProjectPath: `D:\workspace\demo`,
@@ -61,7 +61,7 @@ func TestRegisteredProjectDAORejectsDuplicatePath(t *testing.T) {
 	dao := NewRegisteredProjectDAO(db)
 	now := time.Date(2026, 3, 26, 11, 30, 0, 0, time.UTC)
 	project := &RegisteredProject{
-		ID:          "project-1",
+		ID:          0,
 		ToolType:    "claude",
 		ProjectName: "app-one",
 		ProjectPath: `D:\workspace\app-one`,
@@ -74,7 +74,7 @@ func TestRegisteredProjectDAORejectsDuplicatePath(t *testing.T) {
 	}
 
 	duplicate := &RegisteredProject{
-		ID:          "project-2",
+		ID:          0,
 		ToolType:    "claude",
 		ProjectName: "app-two",
 		ProjectPath: project.ProjectPath,

@@ -29,7 +29,7 @@ func (p *Packager) PackageSnapshot(
 	repoPath string,
 ) (*PackagedSnapshot, error) {
 	logger.Info("打包快照",
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 		zap.String("repo_path", repoPath),
 	)
 
@@ -61,7 +61,7 @@ func (p *Packager) PackageSnapshot(
 	}
 
 	logger.Info("快照打包完成",
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 		zap.Int("file_count", len(packaged.Files)),
 	)
 
@@ -102,7 +102,7 @@ func (p *Packager) createMetadataFile(snapshot *models.Snapshot) ([]byte, error)
 		Metadata    models.SnapshotMetadata `json:"metadata"`
 		FileCount   int                     `json:"file_count"`
 	}{
-		ID:          snapshot.ID,
+		ID:          fmt.Sprintf("%d", snapshot.ID),
 		Name:        snapshot.Name,
 		Description: snapshot.Description,
 		Message:     snapshot.Message,
@@ -152,7 +152,7 @@ func (p *Packager) ParseSnapshotFromCommit(
 	}
 
 	snapshot := &models.Snapshot{
-		ID:          metadata.ID,
+		ID:          0, // GORM 自动生成
 		Name:        metadata.Name,
 		Description: metadata.Description,
 		Message:     metadata.Message,
@@ -172,7 +172,7 @@ func (p *Packager) CreateCommitMessage(snapshot *models.Snapshot) string {
 	var buf bytes.Buffer
 
 	buf.WriteString(fmt.Sprintf("Snapshot: %s\n", snapshot.Name))
-	buf.WriteString(fmt.Sprintf("ID: %s\n", snapshot.ID))
+	buf.WriteString(fmt.Sprintf("ID: %d\n", snapshot.ID))
 
 	if snapshot.Description != "" {
 		buf.WriteString(fmt.Sprintf("\n%s\n", snapshot.Description))
@@ -191,9 +191,8 @@ func (p *Packager) CreateCommitMessage(snapshot *models.Snapshot) string {
 
 // ValidateSnapshotForPush 验证快照是否可以推送
 func (p *Packager) ValidateSnapshotForPush(snapshot *models.Snapshot) error {
-	if snapshot.ID == "" {
-		return fmt.Errorf("快照 ID 不能为空")
-	}
+	// ID == 0 is valid for new snapshots (auto-filled by GORM on Create)
+	_ = snapshot.ID
 
 	if len(snapshot.Files) == 0 {
 		return fmt.Errorf("快照必须包含至少一个文件")
@@ -249,7 +248,7 @@ func (p *Packager) CreateIndex(snapshot *models.Snapshot) *SnapshotFileIndex {
 	}
 
 	return &SnapshotFileIndex{
-		SnapshotID: snapshot.ID,
+		SnapshotID: fmt.Sprintf("%d", snapshot.ID),
 		FilePaths:  paths,
 		Metadata: map[string]string{
 			"name":        snapshot.Name,
@@ -333,7 +332,7 @@ func (p *Packager) CreateSnapshotManifest(
 	manifest := make(map[string]interface{})
 
 	for _, snapshot := range snapshots {
-		manifest[snapshot.ID] = map[string]interface{}{
+		manifest[fmt.Sprintf("%d", snapshot.ID)] = map[string]interface{}{
 			"name":        snapshot.Name,
 			"description": snapshot.Description,
 			"message":     snapshot.Message,

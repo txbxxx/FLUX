@@ -13,10 +13,10 @@ import (
 
 // SyncTask 同步任务
 type SyncTask struct {
-	ID          string         `json:"id" db:"id"`                               // 任务唯一 ID
+	ID          uint           `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"` // 任务唯一 ID
 	Type        SyncTaskType   `json:"type" db:"type"`                           // 任务类型
 	Status      SyncTaskStatus `json:"status" db:"status"`                       // 任务状态
-	SnapshotID  string         `json:"snapshot_id,omitempty" db:"snapshot_id"`   // 关联快照 ID
+	SnapshotID  *uint          `json:"snapshot_id,omitempty" db:"snapshot_id"`   // 关联快照 ID
 	Direction   SyncDirection  `json:"direction" db:"direction"`                 // 同步方向
 	CreatedAt   time.Time      `json:"created_at" db:"created_at"`               // 创建时间
 	StartedAt   *time.Time     `json:"started_at,omitempty" db:"started_at"`     // 开始时间
@@ -163,10 +163,10 @@ func (dao *SyncTaskDAO) List(limit, offset int, status SyncTaskStatus) ([]*SyncT
 }
 
 type syncTaskRow struct {
-	ID              string     `gorm:"column:id;primaryKey"`
+	ID              uint       `gorm:"column:id;primaryKey"`
 	Type            string     `gorm:"column:type"`
 	Status          string     `gorm:"column:status"`
-	SnapshotID      *string    `gorm:"column:snapshot_id"`
+	SnapshotID      *uint      `gorm:"column:snapshot_id"`
 	Direction       string     `gorm:"column:direction"`
 	CreatedAt       time.Time  `gorm:"column:created_at"`
 	StartedAt       *time.Time `gorm:"column:started_at"`
@@ -188,16 +188,11 @@ func syncTaskToRow(task *SyncTask) (syncTaskRow, error) {
 		return syncTaskRow{}, fmt.Errorf("序列化任务元数据失败: %w", err)
 	}
 
-	var snapshotID *string
-	if task.SnapshotID != "" {
-		snapshotID = &task.SnapshotID
-	}
-
 	return syncTaskRow{
 		ID:              task.ID,
 		Type:            string(task.Type),
 		Status:          string(task.Status),
-		SnapshotID:      snapshotID,
+		SnapshotID:      task.SnapshotID,
 		Direction:       string(task.Direction),
 		CreatedAt:       task.CreatedAt,
 		StartedAt:       task.StartedAt,
@@ -227,7 +222,7 @@ func (row syncTaskRow) toModel() (*SyncTask, error) {
 		Error: row.ErrorMsg,
 	}
 	if row.SnapshotID != nil {
-		task.SnapshotID = *row.SnapshotID
+		task.SnapshotID = row.SnapshotID
 	}
 
 	if row.Metadata != "" {

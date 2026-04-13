@@ -4,7 +4,7 @@ import "time"
 
 // UpdateSnapshotResult holds the result of a snapshot update operation.
 type UpdateSnapshotResult struct {
-	SnapshotID     string    `json:"snapshot_id"`
+	SnapshotID     uint      `json:"snapshot_id"`
 	SnapshotName   string    `json:"snapshot_name"`
 	FilesUpdated   int       `json:"files_updated"`
 	FilesAdded     int       `json:"files_added"`

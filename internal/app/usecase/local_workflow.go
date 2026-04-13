@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -203,7 +204,7 @@ type CreateSnapshotInput struct {
 
 // SnapshotSummary 是创建快照的返回值摘要。
 type SnapshotSummary struct {
-	ID        string    // 快照唯一 ID
+	ID        uint      // 快照唯一 ID
 	Name      string    // 快照名称
 	Message   string    // 快照说明
 	CreatedAt time.Time // 创建时间
@@ -987,8 +988,8 @@ func (w *LocalWorkflow) DeleteSnapshot(_ context.Context, input DeleteSnapshotIn
 
 	id := strings.TrimSpace(input.IDOrName)
 
-	// 如果不是 UUID 格式，按名称查找对应的 ID。
-	if !isUUIDFormat(id) {
+	// 如果不是数字 ID 格式，按名称查找对应的 ID。
+	if !isNumericID(id) {
 		snapshots, err := w.snapshots.ListSnapshots(0, 0)
 		if err != nil {
 			return &UserError{
@@ -1001,7 +1002,7 @@ func (w *LocalWorkflow) DeleteSnapshot(_ context.Context, input DeleteSnapshotIn
 		found := false
 		for _, snap := range snapshots {
 			if snap.Name == id {
-				id = snap.ID
+				id = fmt.Sprintf("%d", snap.ID)
 				found = true
 				break
 			}
@@ -1034,9 +1035,10 @@ func (w *LocalWorkflow) DeleteSnapshot(_ context.Context, input DeleteSnapshotIn
 	return nil
 }
 
-// isUUIDFormat 检查字符串是否为 UUID 格式（简单判断）。
-func isUUIDFormat(s string) bool {
-	return len(s) == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-'
+// isNumericID 检查字符串是否为数字 ID 格式。
+func isNumericID(s string) bool {
+	_, err := strconv.ParseUint(s, 10, 64)
+	return err == nil
 }
 
 // RestoreSnapshot restores a snapshot's files to their original paths on disk.
@@ -1057,7 +1059,7 @@ func (w *LocalWorkflow) RestoreSnapshot(_ context.Context, input RestoreSnapshot
 
 	// 第二步：解析 ID（支持名称查找，复用 DeleteSnapshot 的模式）
 	id := strings.TrimSpace(input.IDOrName)
-	if !isUUIDFormat(id) {
+	if !isNumericID(id) {
 		snapshots, err := w.snapshots.ListSnapshots(0, 0)
 		if err != nil {
 			return nil, &UserError{
@@ -1070,7 +1072,7 @@ func (w *LocalWorkflow) RestoreSnapshot(_ context.Context, input RestoreSnapshot
 		found := false
 		for _, snap := range snapshots {
 			if snap.Name == id {
-				id = snap.ID
+				id = fmt.Sprintf("%d", snap.ID)
 				found = true
 				break
 			}
@@ -1174,7 +1176,7 @@ func (w *LocalWorkflow) DiffSnapshots(_ context.Context, input DiffSnapshotsInpu
 // Otherwise, the snapshot list is searched for a matching name.
 func (w *LocalWorkflow) resolveSnapshotID(idOrName string) (string, error) {
 	id := strings.TrimSpace(idOrName)
-	if isUUIDFormat(id) {
+	if isNumericID(id) {
 		return id, nil
 	}
 
@@ -1189,7 +1191,7 @@ func (w *LocalWorkflow) resolveSnapshotID(idOrName string) (string, error) {
 
 	for _, snap := range snapshots {
 		if snap.Name == id {
-			return snap.ID, nil
+			return fmt.Sprintf("%d", snap.ID), nil
 		}
 	}
 

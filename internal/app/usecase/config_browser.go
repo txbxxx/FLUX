@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -242,8 +243,8 @@ func (w *LocalWorkflow) SaveConfig(_ context.Context, input SaveConfigInput) err
 func (w *LocalWorkflow) getSnapshotConfig(input GetConfigInput) (*GetConfigResult, error) {
 	snapshotID := strings.TrimSpace(input.Snapshot)
 
-	// 支持通过名称查找快照：如果不是 UUID 格式，按名称查找对应的 ID。
-	if !isUUIDFormat(snapshotID) {
+	// 支持通过名称查找快照：如果不是数字 ID 格式，按名称查找对应的 ID。
+	if !isNumericID(snapshotID) {
 		snapshots, listErr := w.snapshots.ListSnapshots(0, 0)
 		if listErr != nil {
 			return nil, &UserError{
@@ -255,7 +256,7 @@ func (w *LocalWorkflow) getSnapshotConfig(input GetConfigInput) (*GetConfigResul
 		found := false
 		for _, snap := range snapshots {
 			if snap.Name == snapshotID {
-				snapshotID = snap.ID
+				snapshotID = fmt.Sprintf("%d", snap.ID)
 				found = true
 				break
 			}
@@ -331,7 +332,7 @@ func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
 	}
 
 	// 支持通过名称查找快照：如果不是 UUID 格式，按名称查找对应的 ID。
-	if !isUUIDFormat(snapshotID) {
+	if !isNumericID(snapshotID) {
 		snapshots, listErr := w.snapshots.ListSnapshots(0, 0)
 		if listErr != nil {
 			return &UserError{
@@ -343,7 +344,7 @@ func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
 		found := false
 		for _, snap := range snapshots {
 			if snap.Name == snapshotID {
-				snapshotID = snap.ID
+				snapshotID = fmt.Sprintf("%d", snap.ID)
 				found = true
 				break
 			}

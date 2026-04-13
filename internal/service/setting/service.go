@@ -38,7 +38,7 @@ type EditInput struct {
 
 // EditOutput 编辑输出。
 type EditOutput struct {
-	ID        string
+	ID        uint
 	Name      string
 	UpdatedAt time.Time
 	Changes   []setting.FieldChange

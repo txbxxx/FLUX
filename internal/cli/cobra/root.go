@@ -274,7 +274,7 @@ func printScanRuleList(w io.Writer, result *usecase.ListScanRulesResult) {
 
 // 其余 print* 函数都是 cobra 层的纯展示逻辑，不承载业务判断。
 func printCreatedSnapshot(w io.Writer, result *usecase.SnapshotSummary) {
-	fmt.Fprintf(w, "快照已创建: %s\n", result.ID)
+	fmt.Fprintf(w, "快照已创建: %d\n", result.ID)
 	fmt.Fprintf(w, "名称: %s\n", result.Name)
 	fmt.Fprintf(w, "文件数: %d\n", result.FileCount)
 	fmt.Fprintf(w, "大小: %d 字节\n", result.Size)
@@ -300,7 +300,7 @@ func printSnapshotList(w io.Writer, result *usecase.ListSnapshotsResult) {
 	for _, item := range result.Items {
 		tbl.Rows = append(tbl.Rows, output.Row{
 			Cells: []string{
-				item.ID,
+				fmt.Sprintf("%d", item.ID),
 				item.Name,
 				item.Project,
 				item.Message,

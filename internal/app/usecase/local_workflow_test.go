@@ -252,7 +252,7 @@ func TestLocalWorkflowCreateSnapshotMapsServiceResult(t *testing.T) {
 	service := &stubSnapshotService{
 		createResult: &typesSnapshot.SnapshotPackage{
 			Snapshot: &typesSnapshot.SnapshotHeader{
-				ID:        "snap-123",
+				ID:          0,
 				Name:      "Daily backup",
 				Message:   "backup before change",
 				CreatedAt: now,
@@ -278,7 +278,7 @@ func TestLocalWorkflowCreateSnapshotMapsServiceResult(t *testing.T) {
 	if service.createInput.ProjectName != "codex-global" || service.createInput.Message != "backup before change" {
 		t.Fatalf("unexpected create input: %+v", service.createInput)
 	}
-	if result.ID != "snap-123" || result.FileCount != 4 || result.Size != 2048 {
+	if result.ID != 0 || result.FileCount != 4 || result.Size != 2048 {
 		t.Fatalf("unexpected snapshot summary: %+v", result)
 	}
 }
@@ -441,7 +441,7 @@ func TestLocalWorkflowListSnapshotsUsesDefaultPagination(t *testing.T) {
 	service := &stubSnapshotService{
 		listResult: []*typesSnapshot.SnapshotListItem{
 			{
-				ID:        "snap-2",
+				ID:          0,
 				Name:      "Snapshot 2",
 				Message:   "second",
 				CreatedAt: now,
@@ -464,7 +464,7 @@ func TestLocalWorkflowListSnapshotsUsesDefaultPagination(t *testing.T) {
 	if result.Total != 1 || len(result.Items) != 1 {
 		t.Fatalf("unexpected list result: %+v", result)
 	}
-	if result.Items[0].ID != "snap-2" || result.Items[0].Message != "second" {
+	if result.Items[0].ID != 0 || result.Items[0].Message != "second" {
 		t.Fatalf("unexpected snapshot summary: %+v", result.Items[0])
 	}
 }

@@ -14,7 +14,7 @@ type SnapshotPackage struct {
 
 // SnapshotInfo holds brief snapshot information for list display.
 type SnapshotInfo struct {
-	ID          string    `json:"id"`          // 快照 ID
+	ID          uint      `json:"id"`          // 快照 ID
 	Name        string    `json:"name"`        // 快照名称
 	Description string    `json:"description"` // 快照描述
 	CreatedAt   time.Time `json:"created_at"`  // 创建时间

@@ -17,7 +17,7 @@ type AddRemoteInput struct {
 
 // AddRemoteResult is the result of adding a remote repository.
 type AddRemoteResult struct {
-	ConfigID  string `json:"config_id"`
+	ConfigID  uint   `json:"config_id"`
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 	Branch    string `json:"branch"`
