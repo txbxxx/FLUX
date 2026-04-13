@@ -1,0 +1,12 @@
+## Summary
+- 修复 `sync push` 在快照内容与上次推送相同时报错的问题
+- go-git 返回的错误信息是 "cannot create empty commit: clean working tree"，而非之前匹配的 "nothing to commit"
+- 增加了 `"empty commit"` 关键字匹配，使无变更时返回成功（FilesPushed: 0）而非报错
+
+## Test plan
+- [x] `go build ./...` 通过
+- [x] `go test ./...` 通过（排除已知的 pkg/config 测试）
+- [x] 快照无变更时 push 返回成功
+- [x] 快照有变更时 push 正常工作
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

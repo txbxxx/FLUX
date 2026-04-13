@@ -312,10 +312,19 @@ func printSnapshotList(w io.Writer, result *usecase.ListSnapshotsResult) {
 	fmt.Fprint(w, tbl.Render())
 }
 
+// printError renders a user-facing error to w.
+// For UserError, the original error (Err) is appended to Message so the user
+// can see the root cause without checking log files.
+// A de-duplication check prevents repeating the original error when Message
+// already contains it (e.g. AddProject concatenates errMsg into Message).
 func printError(w io.Writer, err error) {
 	var userErr *usecase.UserError
 	if errors.As(err, &userErr) {
-		fmt.Fprintln(w, userErr.Message)
+		msg := userErr.Message
+		if userErr.Err != nil && !strings.Contains(msg, userErr.Err.Error()) {
+			msg += ": " + userErr.Err.Error()
+		}
+		fmt.Fprintln(w, msg)
 		if strings.TrimSpace(userErr.Suggestion) != "" {
 			fmt.Fprintln(w, userErr.Suggestion)
 		}

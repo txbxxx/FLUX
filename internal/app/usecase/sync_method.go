@@ -126,6 +126,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	}
 
 	// 第五步：从 SQLite 读文件 → 写入工作目录
+	filesWritten := 0
 	for _, file := range snapshot.Files {
 		if len(file.Content) == 0 {
 			continue
@@ -135,12 +136,15 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		if mkErr := mkdirAll(dir); mkErr != nil {
 			continue
 		}
-		_ = writeFile(targetPath, file.Content)
+		if err := writeFile(targetPath, file.Content); err != nil {
+			continue
+		}
+		filesWritten++
 	}
 
 	// 第六步：Git add + commit
 	commitMsg := fmt.Sprintf("Snapshot: %s\nID: %d\nProject: %s\nFiles: %d",
-		snapshot.Name, snapshot.ID, snapshot.Project, len(snapshot.Files))
+		snapshot.Name, snapshot.ID, snapshot.Project, filesWritten)
 	commitResult, err := gitClient.Commit(ctx, &git.CommitOptions{
 		Path:    repoPath,
 		Message: commitMsg,
@@ -154,7 +158,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 			return &typesSync.SyncPushResult{
 				Success:     true,
 				Project:     projectName,
-				FilesPushed: 0,
+				FilesPushed: filesWritten,
 				RemoteURL:   remoteConfig.URL,
 			}, nil
 		}
@@ -189,7 +193,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	return &typesSync.SyncPushResult{
 		Success:     true,
 		Project:     projectName,
-		FilesPushed: len(snapshot.Files),
+		FilesPushed: filesWritten,
 		CommitHash:  commitHash,
 		RemoteURL:   remoteConfig.URL,
 	}, nil

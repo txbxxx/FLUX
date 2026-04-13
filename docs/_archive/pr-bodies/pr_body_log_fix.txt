@@ -1,0 +1,11 @@
+## Summary
+- git client.go Commit 方法中，对 "empty commit" / "nothing to commit" 错误降级为 DEBUG 日志
+- 真正的提交失败仍然打 ERROR 日志
+- 解决 sync push 快照无变更时输出 ERROR 日志误导用户的问题
+
+## Test plan
+- [x] `go build ./...` 通过
+- [x] 快照无变更时 push 不再输出 ERROR 日志
+- [x] 真正的提交错误仍然会打 ERROR 日志
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
