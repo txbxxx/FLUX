@@ -116,7 +116,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 			// clone 失败则初始化新仓库
 			if _, initErr := git.InitRepository(repoPath, false); initErr != nil {
 				return nil, &UserError{
-					Message:    "推送失败：无法创建工作目录",
+					Message:    fmt.Sprintf("推送失败：无法创建工作目录（远端: %s）", remoteConfig.URL),
 					Suggestion: "请检查磁盘空间和文件权限",
 					Err:        initErr,
 				}
@@ -159,7 +159,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 			}, nil
 		}
 		return nil, &UserError{
-			Message:    "推送失败：Git commit 失败",
+			Message:    fmt.Sprintf("推送失败：Git commit 失败（远端: %s）", remoteConfig.URL),
 			Suggestion: "请检查工作目录状态",
 			Err:        err,
 		}
@@ -175,7 +175,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	if err != nil {
 		// push 失败不影响本地
 		return nil, &UserError{
-			Message:    "推送失败：无法推送到远端",
+			Message:    fmt.Sprintf("推送失败：无法推送到远端仓库 \"%s\" (%s)", remoteConfig.Name, remoteConfig.URL),
 			Suggestion: "请检查网络连接和仓库权限。本地数据未受影响。",
 			Err:        err,
 		}
@@ -279,7 +279,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			}, nil
 		}
 		return nil, &UserError{
-			Message:    "拉取失败：无法获取远端更新",
+			Message:    fmt.Sprintf("拉取失败：无法获取远端更新（远端: %s）", remoteConfig.URL),
 			Suggestion: "请检查网络连接和仓库权限",
 			Err:        err,
 		}
@@ -427,7 +427,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			}, nil
 		}
 		return nil, &UserError{
-			Message:    "拉取失败：Git pull 失败",
+			Message:    fmt.Sprintf("拉取失败：Git pull 失败（远端: %s）", remoteConfig.URL),
 			Suggestion: "请检查网络连接和仓库权限",
 			Err:        err,
 		}

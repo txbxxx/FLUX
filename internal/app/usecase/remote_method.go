@@ -3,12 +3,15 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"ai-sync-manager/internal/models"
 	typesRemote "ai-sync-manager/internal/types/remote"
+
+	"github.com/google/uuid"
 )
 
 // RemoteConfigManager abstracts remote configuration persistence.
@@ -80,6 +83,13 @@ func (w *LocalWorkflow) AddRemote(ctx context.Context, input typesRemote.AddRemo
 		}
 	}
 
+	if !isValidGitURL(url) {
+		return nil, &UserError{
+			Message:    "添加远端仓库失败：仓库地址格式不正确（\"" + url + "\"）",
+			Suggestion: "支持的格式：\n  HTTPS: https://github.com/user/repo.git\n  SSH:   git@github.com:user/repo.git",
+		}
+	}
+
 	if w.remoteConfigs == nil {
 		return nil, &UserError{
 			Message:    "添加远端仓库失败：远端配置服务不可用",
@@ -111,6 +121,7 @@ func (w *LocalWorkflow) AddRemote(ctx context.Context, input typesRemote.AddRemo
 	}
 
 	config := &models.RemoteConfig{
+		ID:        uuid.New().String(),
 		Name:      name,
 		URL:       url,
 		Branch:    branch,
@@ -276,6 +287,29 @@ func deriveRemoteName(url string) string {
 		return fmt.Sprintf("remote-%d", time.Now().Unix())
 	}
 	return s
+}
+
+// isValidGitURL checks whether the given string looks like a valid Git repository URL.
+// Supports HTTPS, HTTP, and SSH formats.
+func isValidGitURL(raw string) bool {
+	// SSH format: git@host:path.git
+	if strings.HasPrefix(raw, "git@") {
+		parts := strings.SplitN(raw, ":", 2)
+		if len(parts) != 2 || parts[1] == "" {
+			return false
+		}
+		return len(parts[0]) > 4 // "git@" needs at least a host after @
+	}
+
+	// HTTPS/HTTP format
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+	return len(parsed.Hostname()) >= 3
 }
 
 // WithRemoteConfigs injects the remote configuration manager dependency.

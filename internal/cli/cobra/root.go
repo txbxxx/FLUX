@@ -377,3 +377,28 @@ func displayScanSummaryTitle(item usecase.ToolSummary) string {
 func filepathSeparator() rune {
 	return filepath.Separator
 }
+
+// validateExactOneArg validates that exactly one argument is provided,
+// returning a Chinese error message instead of Cobra's default English one.
+func validateExactOneArg(example string) func(cmd *spcobra.Command, args []string) error {
+	return func(cmd *spcobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("请指定参数，例如：%s", example)
+		}
+		if len(args) > 1 {
+			return fmt.Errorf("参数过多，%s 只接受 1 个参数", cmd.CommandPath())
+		}
+		return nil
+	}
+}
+
+// validateAtLeastOneArg validates that at least one argument is provided,
+// returning a Chinese error message instead of Cobra's default English one.
+func validateAtLeastOneArg(example string) func(cmd *spcobra.Command, args []string) error {
+	return func(cmd *spcobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("请指定参数，例如：%s", example)
+		}
+		return nil
+	}
+}
