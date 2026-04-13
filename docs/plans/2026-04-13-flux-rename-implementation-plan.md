@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task.
 
-**Goal:** 将项目从 `fl-manager` / `fl` 重命名为 `Flux` / `fl`
+**Goal:** 将项目从 `ai-sync-manager` / `ai-sync` 重命名为 `Flux` / `fl`
 
 **Architecture:** 简单的全局文本替换 + 目录重命名
 - 使用 `sed` 或 IDE 批量替换
@@ -18,7 +18,7 @@
 |------|------|----------|
 | 1 | 修改 go.mod module 名 | 1 file |
 | 2 | 批量替换 Go 文件 import 路径 | ~90 files |
-| 3 | 重命名 cmd/fl 目录 | 目录 |
+| 3 | 重命名 cmd/ai-sync 目录 | 目录 |
 | 4 | 更新 Makefile | 1 file |
 | 5 | 更新 CLAUDE.md | 1 file |
 | 6 | 更新 README.md | 1 file |
@@ -37,7 +37,7 @@
 **Step 1: 修改 module 声明**
 
 ```diff
--module fl-manager
+-module ai-sync-manager
 +module flux
 ```
 
@@ -59,19 +59,19 @@ git commit -m "rename: 修改 go.mod module 名为 flux"
 ## Task 2: 批量替换 Go 文件 import 路径
 
 **Files:**
-- Modify: 所有含 `fl-manager` 的 Go 文件 (~90 files)
+- Modify: 所有含 `ai-sync-manager` 的 Go 文件 (~90 files)
 
 **Step 1: 使用 sed 批量替换**
 
 ```bash
 # 在 Git Bash / Linux 下执行
-find . -name "*.go" -type f -exec sed -i 's|fl-manager|flux|g' {} \;
+find . -name "*.go" -type f -exec sed -i 's|ai-sync-manager|flux|g' {} \;
 ```
 
 **Step 2: 验证无遗漏**
 
 ```bash
-grep -r "fl-manager" --include="*.go" .
+grep -r "ai-sync-manager" --include="*.go" .
 # 期望输出：无
 ```
 
@@ -90,15 +90,15 @@ git commit -m "rename: 替换所有 Go import 路径为 flux"
 
 ---
 
-## Task 3: 重命名 cmd/fl 目录
+## Task 3: 重命名 cmd/ai-sync 目录
 
 **Files:**
-- Rename: `cmd/fl` → `cmd/fl`
+- Rename: `cmd/ai-sync` → `cmd/fl`
 
 **Step 1: 重命名目录**
 
 ```bash
-git mv cmd/fl cmd/fl
+git mv cmd/ai-sync cmd/fl
 ```
 
 **Step 2: 更新 main.go 中的 import（如需要）**
@@ -116,7 +116,7 @@ go build ./cmd/fl
 **Step 4: 提交**
 
 ```bash
-git commit -m "rename: 重命名 CLI 入口目录 fl -> fl"
+git commit -m "rename: 重命名 CLI 入口目录 ai-sync -> fl"
 ```
 
 ---
@@ -129,7 +129,7 @@ git commit -m "rename: 重命名 CLI 入口目录 fl -> fl"
 **Step 1: 更新默认值**
 
 ```diff
--CLI_NAME ?= fl
+-CLI_NAME ?= ai-sync
 +CLI_NAME ?= fl
 ```
 
@@ -163,8 +163,8 @@ git commit -m "rename: 更新 Makefile 默认 CLI 名为 fl"
 
 **需要更新的内容：**
 - 项目概述中的名字
-- 项目结构路径 `cmd/fl` → `cmd/fl`
-- CLI 命令速查中的 `fl` → `fl`
+- 项目结构路径 `cmd/ai-sync` → `cmd/fl`
+- CLI 命令速查中的 `ai-sync` → `fl`
 
 **Step 1: 提交**
 
@@ -182,8 +182,8 @@ git commit -m "rename: 更新 CLAUDE.md 中的项目名和路径"
 
 **需要更新的内容：**
 - 标题 `# AI Sync Manager` → `# Flux`
-- 所有 `fl` → `fl` 命令引用
-- `cmd/fl` → `cmd/fl`
+- 所有 `ai-sync` → `fl` 命令引用
+- `cmd/ai-sync` → `cmd/fl`
 - Tagline 更新
 
 **Step 1: 提交**
@@ -209,13 +209,13 @@ git commit -m "rename: 更新 README.md 中的项目名和命令"
 **Step 1: 批量替换**
 
 ```bash
-find docs -name "*.md" -type f -exec sed -i 's/fl/fl/g' {} \;
+find docs -name "*.md" -type f -exec sed -i 's/ai-sync/fl/g' {} \;
 ```
 
 **Step 2: 验证**
 
 ```bash
-grep -r "fl" docs/ --include="*.md" | grep -v "flux" | head -20
+grep -r "ai-sync" docs/ --include="*.md" | grep -v "flux" | head -20
 ```
 
 **Step 3: 提交**
@@ -235,7 +235,7 @@ git commit -m "rename: 更新文档中的命令引用"
 **Step 1: 检查并更新**
 
 ```bash
-grep "fl" AGENTS.md
+grep "ai-sync" AGENTS.md
 # 替换为 fl
 ```
 
@@ -267,7 +267,7 @@ go test ./...
 **Step 3: 确认无遗漏**
 
 ```bash
-grep -r "fl" . --include="*.go" --include="*.md" | grep -v "flux" | grep -v "docs/plans/2026-04-13-flux"
+grep -r "ai-sync" . --include="*.go" --include="*.md" | grep -v "flux" | grep -v "docs/plans/2026-04-13-flux"
 ```
 
 ---

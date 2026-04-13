@@ -49,7 +49,7 @@ func TestRuleResolverListsCustomRulesAndMissingCustomRules(t *testing.T) {
 	now := time.Date(2026, 3, 26, 13, 0, 0, 0, time.UTC)
 	customDAO := models.NewCustomSyncRuleDAO(db)
 	if err := customDAO.Create(&models.CustomSyncRule{
-		ID:           "rule-1",
+		ID:           0,
 		ToolType:     "claude",
 		AbsolutePath: filepath.Join(homeDir, ".claude.json"),
 		CreatedAt:    now,
@@ -58,7 +58,7 @@ func TestRuleResolverListsCustomRulesAndMissingCustomRules(t *testing.T) {
 		t.Fatalf("create custom rule: %v", err)
 	}
 	if err := customDAO.Create(&models.CustomSyncRule{
-		ID:           "rule-2",
+		ID:           0,
 		ToolType:     "claude",
 		AbsolutePath: filepath.Join(homeDir, "missing-claude.json"),
 		CreatedAt:    now,
@@ -105,7 +105,7 @@ func TestRuleResolverMapsRegisteredProjectsToProjectTemplates(t *testing.T) {
 	projectDAO := models.NewRegisteredProjectDAO(db)
 	now := time.Date(2026, 3, 26, 13, 30, 0, 0, time.UTC)
 	if err := projectDAO.Create(&models.RegisteredProject{
-		ID:          "project-1",
+		ID:          0,
 		ToolType:    "codex",
 		ProjectName: "demo",
 		ProjectPath: projectPath,

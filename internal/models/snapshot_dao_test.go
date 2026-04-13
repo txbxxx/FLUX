@@ -19,7 +19,7 @@ func TestSnapshotDAO_Create_WritesFiles(t *testing.T) {
 	dao := NewSnapshotDAO(db)
 
 	snapshot := &Snapshot{
-		ID:        "test-dao-files-001",
+		ID:        0,
 		Name:      "DAO Files Test",
 		Message:   "testing file persistence",
 		CreatedAt: time.Now(),
@@ -61,7 +61,7 @@ func TestSnapshotDAO_Create_WritesFiles(t *testing.T) {
 	assert.NoError(err, "Create 不应返回错误")
 
 	// 验证：读回快照，检查文件是否存在
-	loaded, err := dao.GetByID("test-dao-files-001")
+	loaded, err := dao.GetByID(snapshot.ID)
 	assert.NoError(err, "GetByID 不应返回错误")
 
 	// 核心断言：文件数量必须匹配
@@ -90,7 +90,7 @@ func TestSnapshotDAO_Create_DoesNotDuplicateFiles(t *testing.T) {
 	dao := NewSnapshotDAO(db)
 
 	snapshot := &Snapshot{
-		ID:        "test-no-dup-001",
+		ID:        0,
 		Name:      "No Dup Test",
 		Message:   "test",
 		CreatedAt: time.Now(),
@@ -104,7 +104,7 @@ func TestSnapshotDAO_Create_DoesNotDuplicateFiles(t *testing.T) {
 	err = dao.Create(snapshot)
 	assert.NoError(err)
 
-	loaded, err := dao.GetByID("test-no-dup-001")
+	loaded, err := dao.GetByID(snapshot.ID)
 	assert.NoError(err)
 
 	// 不应有重复

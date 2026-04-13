@@ -19,7 +19,7 @@ func TestRuleStoreListsCustomRulesAndProjects(t *testing.T) {
 	now := time.Date(2026, 3, 26, 12, 0, 0, 0, time.UTC)
 
 	if err := customDAO.Create(&models.CustomSyncRule{
-		ID:           "rule-1",
+		ID:           0,
 		ToolType:     "claude",
 		AbsolutePath: `C:\Users\tester\.claude.json`,
 		CreatedAt:    now,
@@ -29,7 +29,7 @@ func TestRuleStoreListsCustomRulesAndProjects(t *testing.T) {
 	}
 
 	if err := projectDAO.Create(&models.RegisteredProject{
-		ID:          "project-1",
+		ID:          0,
 		ToolType:    "claude",
 		ProjectName: "demo",
 		ProjectPath: `D:\workspace\demo`,

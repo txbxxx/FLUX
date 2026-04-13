@@ -12,16 +12,16 @@ import (
 
 // RemoteConfig 远端仓库配置
 type RemoteConfig struct {
-	ID         string       `json:"id" db:"id"`                             // 配置 ID
-	Name       string       `json:"name" db:"name"`                         // 配置名称
-	URL        string       `json:"url" db:"url"`                           // 仓库 URL
-	Auth       AuthConfig   `json:"auth" db:"auth"`                         // 认证配置
-	Branch     string       `json:"branch" db:"branch"`                     // 分支名
-	IsDefault  bool         `json:"is_default" db:"is_default"`             // 是否为默认配置
-	CreatedAt  time.Time    `json:"created_at" db:"created_at"`             // 创建时间
-	UpdatedAt  time.Time    `json:"updated_at" db:"updated_at"`             // 更新时间
-	LastSynced *time.Time   `json:"last_synced,omitempty" db:"last_synced"` // 最后同步时间
-	Status     ConfigStatus `json:"status" db:"status"`                     // 配置状态
+	ID         uint         `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"` // 配置 ID
+	Name       string       `json:"name" db:"name"`                                       // 配置名称
+	URL        string       `json:"url" db:"url"`                                         // 仓库 URL
+	Auth       AuthConfig   `json:"auth" db:"auth"`                                       // 认证配置
+	Branch     string       `json:"branch" db:"branch"`                                   // 分支名
+	IsDefault  bool         `json:"is_default" db:"is_default"`                           // 是否为默认配置
+	CreatedAt  time.Time    `json:"created_at" db:"created_at"`                           // 创建时间
+	UpdatedAt  time.Time    `json:"updated_at" db:"updated_at"`                           // 更新时间
+	LastSynced *time.Time   `json:"last_synced,omitempty" db:"last_synced"`               // 最后同步时间
+	Status     ConfigStatus `json:"status" db:"status"`                                   // 配置状态
 }
 
 // AuthConfig 认证配置
@@ -123,7 +123,7 @@ func (dao *RemoteConfigDAO) Update(config *RemoteConfig) error {
 }
 
 // SetDefault 设置默认配置
-func (dao *RemoteConfigDAO) SetDefault(id string) error {
+func (dao *RemoteConfigDAO) SetDefault(id uint) error {
 	return dao.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&remoteConfigRow{}).Where("1 = 1").Update("is_default", false).Error; err != nil {
 			return err
@@ -133,12 +133,12 @@ func (dao *RemoteConfigDAO) SetDefault(id string) error {
 }
 
 // Delete 删除远端配置
-func (dao *RemoteConfigDAO) Delete(id string) error {
+func (dao *RemoteConfigDAO) Delete(id uint) error {
 	return dao.db.GetConn().Delete(&remoteConfigRow{}, "id = ?", id).Error
 }
 
 type remoteConfigRow struct {
-	ID             string     `gorm:"column:id;primaryKey"`
+	ID             uint       `gorm:"column:id;primaryKey"`
 	Name           string     `gorm:"column:name"`
 	URL            string     `gorm:"column:url"`
 	AuthType       string     `gorm:"column:auth_type"`

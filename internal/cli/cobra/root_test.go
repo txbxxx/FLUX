@@ -529,7 +529,7 @@ func TestExecuteScanCommandPrintsNotSyncableReason(t *testing.T) {
 func TestExecuteSnapshotCreateParsesFlags(t *testing.T) {
 	workflow := &stubWorkflow{
 		createResult: &usecase.SnapshotSummary{
-			ID:        "snap-1",
+			ID:        0,
 			Name:      "Daily backup",
 			Message:   "before change",
 			Project:   "codex-global",
@@ -559,7 +559,7 @@ func TestExecuteSnapshotCreateParsesFlags(t *testing.T) {
 	if workflow.createInput.ProjectName != "codex-global" || len(workflow.createInput.Tools) != 2 {
 		t.Fatalf("unexpected create input: %+v", workflow.createInput)
 	}
-	if !strings.Contains(stdout.String(), "snap-1") || !strings.Contains(stdout.String(), "文件数: 3") {
+	if !strings.Contains(stdout.String(), "快照已创建: 0") || !strings.Contains(stdout.String(), "文件数: 3") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 	if stderr.Len() != 0 {
@@ -718,10 +718,10 @@ func TestExecuteCommandPrintsFriendlyError(t *testing.T) {
 
 func TestPrintError(t *testing.T) {
 	tests := []struct {
-		name   string
-		err    error
-		want   []string
-		dont   []string
+		name string
+		err  error
+		want []string
+		dont []string
 	}{
 		{
 			name: "UserError 有 Err 时追加原始错误",

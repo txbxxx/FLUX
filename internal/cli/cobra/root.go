@@ -13,9 +13,9 @@ import (
 
 	"flux/internal/app/usecase"
 	"flux/internal/cli/output"
-typesRemote "flux/internal/types/remote"
-	typesSync "flux/internal/types/sync"
+	typesRemote "flux/internal/types/remote"
 	typesSnapshot "flux/internal/types/snapshot"
+	typesSync "flux/internal/types/sync"
 )
 
 var errCommandHandled = errors.New("command handled")
@@ -36,10 +36,10 @@ type Workflow interface {
 	DiffSnapshots(ctx context.Context, input usecase.DiffSnapshotsInput) (*typesSnapshot.DiffResult, error)
 	GetConfig(ctx context.Context, input usecase.GetConfigInput) (*usecase.GetConfigResult, error)
 	SaveConfig(ctx context.Context, input usecase.SaveConfigInput) error
-		// 远端仓库管理
-		AddRemote(ctx context.Context, input typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error)
-		ListRemotes(ctx context.Context) (*typesRemote.ListRemotesResult, error)
-		RemoveRemote(ctx context.Context, input typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error)
+	// 远端仓库管理
+	AddRemote(ctx context.Context, input typesRemote.AddRemoteInput) (*typesRemote.AddRemoteResult, error)
+	ListRemotes(ctx context.Context) (*typesRemote.ListRemotesResult, error)
+	RemoveRemote(ctx context.Context, input typesRemote.RemoveRemoteInput) (*typesRemote.ListRemotesResult, error)
 	CreateAISetting(ctx context.Context, input usecase.CreateAISettingInput) (*usecase.CreateAISettingResult, error)
 	ListAISettings(ctx context.Context, input usecase.ListAISettingsInput) (*usecase.ListAISettingsResult, error)
 	GetAISetting(ctx context.Context, input usecase.GetAISettingInput) (*usecase.GetAISettingResult, error)
@@ -49,10 +49,10 @@ type Workflow interface {
 	// 新增批量方法
 	GetAISettingsBatch(ctx context.Context, input usecase.GetAISettingsBatchInput) (*usecase.GetAISettingsBatchResult, error)
 	DeleteAISettingsBatch(ctx context.Context, input usecase.DeleteAISettingsBatchInput) (*usecase.DeleteAISettingsBatchResult, error)
-		// 同步操作
-		SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
-		SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
-		SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
+	// 同步操作
+	SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
+	SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
+	SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
 	// 历史版本
 	SnapshotHistory(ctx context.Context, input usecase.SnapshotHistoryInput) (*typesSnapshot.HistoryResult, error)
 	RestoreFromHistory(ctx context.Context, input usecase.RestoreFromHistoryInput) (*typesSnapshot.RestoreResult, error)
@@ -274,7 +274,7 @@ func printScanRuleList(w io.Writer, result *usecase.ListScanRulesResult) {
 
 // 其余 print* 函数都是 cobra 层的纯展示逻辑，不承载业务判断。
 func printCreatedSnapshot(w io.Writer, result *usecase.SnapshotSummary) {
-	fmt.Fprintf(w, "快照已创建: %s\n", result.ID)
+	fmt.Fprintf(w, "快照已创建: %d\n", result.ID)
 	fmt.Fprintf(w, "名称: %s\n", result.Name)
 	fmt.Fprintf(w, "文件数: %d\n", result.FileCount)
 	fmt.Fprintf(w, "大小: %d 字节\n", result.Size)
@@ -300,7 +300,7 @@ func printSnapshotList(w io.Writer, result *usecase.ListSnapshotsResult) {
 	for _, item := range result.Items {
 		tbl.Rows = append(tbl.Rows, output.Row{
 			Cells: []string{
-				item.ID,
+				fmt.Sprintf("%d", item.ID),
 				item.Name,
 				item.Project,
 				item.Message,

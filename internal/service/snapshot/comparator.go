@@ -31,8 +31,8 @@ func NewComparator(collector *Collector) *Comparator {
 // CompareSnapshots 比较两个快照的差异
 func (c *Comparator) CompareSnapshots(source, target *models.Snapshot) (*typesSnapshot.ChangeSummary, error) {
 	logger.Info("比较快照",
-		zap.String("source_id", source.ID),
-		zap.String("target_id", target.ID),
+		zap.Uint64("source_id", uint64(source.ID)),
+		zap.Uint64("target_id", uint64(target.ID)),
 	)
 
 	summary := &typesSnapshot.ChangeSummary{
@@ -95,7 +95,7 @@ func (c *Comparator) CompareWithFileSystem(
 	projectPath string,
 ) (*typesSnapshot.ChangeSummary, error) {
 	logger.Info("比较快照与文件系统",
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 		zap.String("project_path", projectPath),
 	)
 
@@ -210,7 +210,7 @@ func (c *Comparator) DetectConflicts(
 	force bool,
 ) ([]typesSnapshot.ApplyError, error) {
 	logger.Info("检测冲突",
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 		zap.Bool("force", force),
 	)
 
@@ -263,7 +263,7 @@ func (c *Comparator) DetectConflicts(
 
 	if len(conflicts) > 0 {
 		logger.Warn("检测到冲突",
-			zap.String("snapshot_id", snapshot.ID),
+			zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 			zap.Int("conflicts", len(conflicts)),
 		)
 	}
@@ -276,8 +276,8 @@ func (c *Comparator) GetFileChanges(
 	source, target *models.Snapshot,
 ) ([]FileComparison, error) {
 	logger.Info("获取文件变更详情",
-		zap.String("source_id", source.ID),
-		zap.String("target_id", target.ID),
+		zap.Uint64("source_id", uint64(source.ID)),
+		zap.Uint64("target_id", uint64(target.ID)),
 	)
 
 	// 构建文件映射
@@ -407,7 +407,7 @@ func (c *Comparator) GetDiff(path1, path2 string) ([]string, error) {
 // ValidateFileIntegrity 验证文件完整性
 func (c *Comparator) ValidateFileIntegrity(snapshot *models.Snapshot) ([]string, error) {
 	logger.Info("验证文件完整性",
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 	)
 
 	invalid := make([]string, 0)
@@ -434,7 +434,7 @@ func (c *Comparator) ValidateFileIntegrity(snapshot *models.Snapshot) ([]string,
 
 	if len(invalid) > 0 {
 		logger.Warn("文件完整性验证失败",
-			zap.String("snapshot_id", snapshot.ID),
+			zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 			zap.Int("invalid", len(invalid)),
 		)
 	}

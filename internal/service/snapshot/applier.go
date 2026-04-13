@@ -33,7 +33,7 @@ func (a *Applier) ApplySnapshot(
 	options typesSnapshot.ApplyOptions,
 ) (*typesSnapshot.ApplyResult, error) {
 	logger.Info("开始应用快照",
-		zap.String("id", snapshot.ID),
+		zap.Uint64("id", uint64(snapshot.ID)),
 		zap.String("name", snapshot.Name),
 		zap.Bool("create_backup", options.CreateBackup),
 		zap.Bool("force", options.Force),
@@ -90,13 +90,13 @@ func (a *Applier) ApplySnapshot(
 
 	if result.Success {
 		logger.Info("快照应用完成",
-			zap.String("id", snapshot.ID),
+			zap.Uint64("id", uint64(snapshot.ID)),
 			zap.Int("applied", len(result.AppliedFiles)),
 			zap.Int("skipped", len(result.SkippedFiles)),
 		)
 	} else {
 		logger.Warn("快照应用部分失败",
-			zap.String("id", snapshot.ID),
+			zap.Uint64("id", uint64(snapshot.ID)),
 			zap.Int("errors", len(result.Errors)),
 		)
 	}
@@ -244,7 +244,7 @@ func (a *Applier) RestoreFile(backupPath, targetPath string) error {
 func (a *Applier) RestoreFromBackup(backupDir string, snapshot *models.Snapshot) error {
 	logger.Info("从备份恢复",
 		zap.String("backup_dir", backupDir),
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 	)
 
 	errors := make([]string, 0)
@@ -280,7 +280,7 @@ func (a *Applier) RestoreFromBackup(backupDir string, snapshot *models.Snapshot)
 // DeleteSnapshotFiles 删除快照中的所有文件
 func (a *Applier) DeleteSnapshotFiles(snapshot *models.Snapshot) ([]string, error) {
 	logger.Info("删除快照文件",
-		zap.String("id", snapshot.ID),
+		zap.Uint64("id", uint64(snapshot.ID)),
 	)
 
 	deleted := make([]string, 0)
@@ -301,7 +301,7 @@ func (a *Applier) DeleteSnapshotFiles(snapshot *models.Snapshot) ([]string, erro
 	}
 
 	logger.Info("文件删除完成",
-		zap.String("id", snapshot.ID),
+		zap.Uint64("id", uint64(snapshot.ID)),
 		zap.Int("deleted", len(deleted)),
 	)
 

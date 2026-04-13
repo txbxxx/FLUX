@@ -15,7 +15,7 @@ func TestNewSnapshot(t *testing.T) {
 	snapshot := NewSnapshot(message, projectName)
 
 	assert.NotNil(t, snapshot)
-	assert.NotEmpty(t, snapshot.ID)
+	assert.Equal(t, uint(0), snapshot.ID) // NewSnapshot sets ID to 0, auto-filled by GORM on Create
 	assert.Equal(t, message, snapshot.Message)
 	assert.Equal(t, projectName, snapshot.Project)
 	assert.Equal(t, projectName, snapshot.Metadata.ProjectPath)
@@ -333,7 +333,7 @@ func TestFormatBytes(t *testing.T) {
 // TestCloneSnapshot 测试克隆快照
 func TestCloneSnapshot(t *testing.T) {
 	original := &Snapshot{
-		ID:        "snap-1",
+		ID:        0,
 		Name:      "Test Snapshot",
 		Message:   "Test message",
 		Project:   "codex-global",

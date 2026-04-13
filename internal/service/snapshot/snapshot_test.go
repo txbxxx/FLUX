@@ -85,11 +85,11 @@ func TestService_ListSnapshots(t *testing.T) {
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
-		ID:        "test-list-1",
+		ID:        0,
 		Name:      "Test List",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -103,9 +103,7 @@ func TestService_ListSnapshots(t *testing.T) {
 				IsBinary:     false,
 			},
 		},
-		Metadata: models.SnapshotMetadata{
-			
-		},
+		Metadata: models.SnapshotMetadata{},
 	}
 
 	snapshotDAO := models.NewSnapshotDAO(db)
@@ -116,7 +114,7 @@ func TestService_ListSnapshots(t *testing.T) {
 	snapshots, err := service.ListSnapshots(10, 0)
 	assert.NoError(t, err)
 	assert.Len(t, snapshots, 1)
-	assert.Equal(t, "test-list-1", snapshots[0].ID)
+	assert.Equal(t, uint(1), snapshots[0].ID)
 }
 
 // TestService_GetSnapshot 测试获取快照
@@ -128,11 +126,11 @@ func TestService_GetSnapshot(t *testing.T) {
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
-		ID:        "test-get-1",
+		ID:        0,
 		Name:      "Test Get",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -146,9 +144,7 @@ func TestService_GetSnapshot(t *testing.T) {
 				IsBinary:     false,
 			},
 		},
-		Metadata: models.SnapshotMetadata{
-			
-		},
+		Metadata: models.SnapshotMetadata{},
 	}
 
 	snapshotDAO := models.NewSnapshotDAO(db)
@@ -156,10 +152,10 @@ func TestService_GetSnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	// 获取快照
-	fetched, err := service.GetSnapshot("test-get-1")
+	fetched, err := service.GetSnapshot(fmt.Sprintf("%d", snapshot.ID))
 	assert.NoError(t, err)
 	assert.NotNil(t, fetched)
-	assert.Equal(t, "test-get-1", fetched.ID)
+	assert.Equal(t, snapshot.ID, fetched.ID)
 	assert.Equal(t, "Test Get", fetched.Name)
 }
 
@@ -171,7 +167,7 @@ func TestService_GetSnapshot_NotFound(t *testing.T) {
 	service := NewService(db, tool.NewRuleResolver(nil), tool.NewRuleManager(db))
 
 	// 获取不存在的快照
-	_, err = service.GetSnapshot("non-existent")
+	_, err = service.GetSnapshot("999999")
 	assert.Error(t, err)
 }
 
@@ -184,15 +180,13 @@ func TestService_DeleteSnapshot(t *testing.T) {
 
 	// 创建测试快照
 	snapshot := &models.Snapshot{
-		ID:        "test-delete-1",
+		ID:        0,
 		Name:      "Test Delete",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files:     []models.SnapshotFile{},
-		Metadata: models.SnapshotMetadata{
-			
-		},
+		Metadata:  models.SnapshotMetadata{},
 	}
 
 	snapshotDAO := models.NewSnapshotDAO(db)
@@ -200,11 +194,11 @@ func TestService_DeleteSnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	// 删除快照
-	err = service.DeleteSnapshot("test-delete-1")
+	err = service.DeleteSnapshot(fmt.Sprintf("%d", snapshot.ID))
 	assert.NoError(t, err)
 
 	// 验证删除
-	_, err = service.GetSnapshot("test-delete-1")
+	_, err = service.GetSnapshot(fmt.Sprintf("%d", snapshot.ID))
 	assert.Error(t, err)
 }
 
@@ -217,11 +211,11 @@ func TestService_ValidateSnapshot(t *testing.T) {
 
 	// 有效快照
 	validSnapshot := &models.Snapshot{
-		ID:        "test-valid",
+		ID:        0,
 		Name:      "Valid",
 		Message:   "Test",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -240,7 +234,7 @@ func TestService_ValidateSnapshot(t *testing.T) {
 		Name:      "Invalid",
 		Message:   "Test",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files:     []models.SnapshotFile{},
 	}
 
@@ -249,7 +243,7 @@ func TestService_ValidateSnapshot(t *testing.T) {
 
 	// 无效快照 - 无工具
 	invalidSnapshot2 := &models.Snapshot{
-		ID:        "test-invalid",
+		ID:        0,
 		Name:      "Invalid",
 		Message:   "Test",
 		CreatedAt: time.Now(),
@@ -277,11 +271,11 @@ func TestService_ExportSnapshot(t *testing.T) {
 	require.NoError(t, os.WriteFile(sourceFile, testContent, 0644))
 
 	snapshot := &models.Snapshot{
-		ID:        "test-export-1",
+		ID:        0,
 		Name:      "Test Export",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         filepath.Join(".codex", "config.toml"),
@@ -295,9 +289,7 @@ func TestService_ExportSnapshot(t *testing.T) {
 				IsBinary:     false,
 			},
 		},
-		Metadata: models.SnapshotMetadata{
-			
-		},
+		Metadata: models.SnapshotMetadata{},
 	}
 
 	snapshotDAO := models.NewSnapshotDAO(db)
@@ -339,15 +331,13 @@ func TestService_CountSnapshots(t *testing.T) {
 	snapshotDAO := models.NewSnapshotDAO(db)
 	for i := 1; i <= 3; i++ {
 		snapshot := &models.Snapshot{
-			ID:        fmt.Sprintf("test-count-%d", i),
+			ID:        0,
 			Name:      fmt.Sprintf("Snapshot %d", i),
 			Message:   "Test",
 			CreatedAt: time.Now(),
-			Project:     "codex-global",
+			Project:   "codex-global",
 			Files:     []models.SnapshotFile{},
-			Metadata: models.SnapshotMetadata{
-				
-			},
+			Metadata:  models.SnapshotMetadata{},
 		}
 		err = snapshotDAO.Create(snapshot)
 		assert.NoError(t, err)
@@ -367,11 +357,11 @@ func TestApplier_ApplySnapshot(t *testing.T) {
 	// 创建测试快照
 	testContent := []byte("applied content")
 	snapshot := &models.Snapshot{
-		ID:        "test-apply-1",
+		ID:        0,
 		Name:      "Test Apply",
 		Message:   "Test message",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "config.toml",
@@ -385,9 +375,7 @@ func TestApplier_ApplySnapshot(t *testing.T) {
 				IsBinary:     false,
 			},
 		},
-		Metadata: models.SnapshotMetadata{
-			
-		},
+		Metadata: models.SnapshotMetadata{},
 	}
 
 	// 应用快照（干运行）
@@ -408,10 +396,10 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 
 	// 创建源快照
 	sourceSnapshot := &models.Snapshot{
-		ID:        "source",
+		ID:        0,
 		Name:      "Source",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "file1.toml",
@@ -436,17 +424,15 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 				IsBinary:     false,
 			},
 		},
-		Metadata: models.SnapshotMetadata{
-			
-		},
+		Metadata: models.SnapshotMetadata{},
 	}
 
 	// 创建目标快照
 	targetSnapshot := &models.Snapshot{
-		ID:        "target",
+		ID:        0,
 		Name:      "Target",
 		CreatedAt: time.Now(),
-		Project:     "codex-global",
+		Project:   "codex-global",
 		Files: []models.SnapshotFile{
 			{
 				Path:         "file1.toml",
@@ -471,9 +457,7 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 				IsBinary:     false,
 			},
 		},
-		Metadata: models.SnapshotMetadata{
-			
-		},
+		Metadata: models.SnapshotMetadata{},
 	}
 
 	// 比较快照
@@ -599,7 +583,7 @@ func TestServiceCreateSnapshotIncludesRegisteredProjectAndCustomRule(t *testing.
 	require.NoError(t, err)
 
 	// Retrieve the full snapshot from DB to verify collected files.
-	snapshot, err := service.GetSnapshot(pkg.Snapshot.ID)
+	snapshot, err := service.GetSnapshot(fmt.Sprintf("%d", pkg.Snapshot.ID))
 	require.NoError(t, err)
 
 	paths := make([]string, 0, len(snapshot.Files))

@@ -13,16 +13,16 @@ import (
 
 // Snapshot 配置快照
 type Snapshot struct {
-	ID          string           `json:"id" db:"id"`                             // 快照唯一 ID
-	Name        string           `json:"name" db:"name"`                         // 快照名称
-	Description string           `json:"description" db:"description"`           // 快照描述
-	Message     string           `json:"message" db:"message"`                   // 提交消息
-	CreatedAt   time.Time        `json:"created_at" db:"created_at"`             // 创建时间
-	Project     string           `json:"project" db:"tools"` // 关联的项目名称（db tag 保留 "tools" 复用现有列，不改变表结构）
-	Metadata    SnapshotMetadata `json:"metadata" db:"metadata"`                 // 快照元数据
-	Files       []SnapshotFile   `json:"files" db:"files"`                       // 包含的文件列表
-	CommitHash  string           `json:"commit_hash,omitempty" db:"commit_hash"` // Git 提交哈希（如果已推送）
-	Tags        []string         `json:"tags,omitempty" db:"tags"`               // 标签
+	ID          uint             `json:"id" db:"id" gorm:"column:id;primaryKey;autoIncrement"` // 快照唯一 ID
+	Name        string           `json:"name" db:"name"`                                       // 快照名称
+	Description string           `json:"description" db:"description"`                         // 快照描述
+	Message     string           `json:"message" db:"message"`                                 // 提交消息
+	CreatedAt   time.Time        `json:"created_at" db:"created_at"`                           // 创建时间
+	Project     string           `json:"project" db:"tools"`                                   // 关联的项目名称（db tag 保留 "tools" 复用现有列，不改变表结构）
+	Metadata    SnapshotMetadata `json:"metadata" db:"metadata"`                               // 快照元数据
+	Files       []SnapshotFile   `json:"files" db:"files"`                                     // 包含的文件列表
+	CommitHash  string           `json:"commit_hash,omitempty" db:"commit_hash"`               // Git 提交哈希（如果已推送）
+	Tags        []string         `json:"tags,omitempty" db:"tags"`                             // 标签
 }
 
 // SnapshotMetadata 快照元数据
@@ -92,6 +92,10 @@ func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
+		snapshot.ID = row.ID
+		for i := range fileRows {
+			fileRows[i].SnapshotID = row.ID
+		}
 		if len(fileRows) > 0 {
 			// 分批插入以避免 SQLite SQL 变量数量限制
 			const batchSize = 500
@@ -111,7 +115,7 @@ func (dao *SnapshotDAO) Create(snapshot *Snapshot) error {
 }
 
 // GetByID retrieves a snapshot by ID with its files loaded via explicit query.
-func (dao *SnapshotDAO) GetByID(id string) (*Snapshot, error) {
+func (dao *SnapshotDAO) GetByID(id uint) (*Snapshot, error) {
 	var row snapshotRow
 	err := dao.db.GetConn().First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -153,7 +157,7 @@ func (dao *SnapshotDAO) List(limit, offset int) ([]*Snapshot, error) {
 	}
 
 	// Batch-load files for all snapshots.
-	ids := make([]string, 0, len(rows))
+	ids := make([]uint, 0, len(rows))
 	for _, row := range rows {
 		ids = append(ids, row.ID)
 	}
@@ -163,7 +167,7 @@ func (dao *SnapshotDAO) List(limit, offset int) ([]*Snapshot, error) {
 		return nil, err
 	}
 
-	filesBySnapshot := make(map[string][]snapshotFileRow)
+	filesBySnapshot := make(map[uint][]snapshotFileRow)
 	for _, f := range allFileRows {
 		filesBySnapshot[f.SnapshotID] = append(filesBySnapshot[f.SnapshotID], f)
 	}
@@ -234,7 +238,7 @@ func (dao *SnapshotDAO) UpdateWithFiles(snapshot *Snapshot) error {
 
 // Delete deletes the snapshot and its associated files in a single transaction.
 // 为什么：没有外键约束，必须由应用层级联清理 snapshot_files，否则会留下孤立记录。
-func (dao *SnapshotDAO) Delete(id string) error {
+func (dao *SnapshotDAO) Delete(id uint) error {
 	return dao.db.Transaction(func(tx *gorm.DB) error {
 		// 先删文件再删快照记录，避免残留。
 		if err := tx.Where("snapshot_id = ?", id).Delete(&snapshotFileRow{}).Error; err != nil {
@@ -302,7 +306,7 @@ func (dao *SnapshotDAO) loadSnapshotsWithFiles(rows []snapshotRow) ([]*Snapshot,
 		return []*Snapshot{}, nil
 	}
 
-	ids := make([]string, 0, len(rows))
+	ids := make([]uint, 0, len(rows))
 	for _, row := range rows {
 		ids = append(ids, row.ID)
 	}
@@ -312,7 +316,7 @@ func (dao *SnapshotDAO) loadSnapshotsWithFiles(rows []snapshotRow) ([]*Snapshot,
 		return nil, err
 	}
 
-	filesBySnapshot := make(map[string][]snapshotFileRow)
+	filesBySnapshot := make(map[uint][]snapshotFileRow)
 	for _, f := range allFileRows {
 		filesBySnapshot[f.SnapshotID] = append(filesBySnapshot[f.SnapshotID], f)
 	}
@@ -357,7 +361,7 @@ func snapshotToRow(snapshot *Snapshot) snapshotRow {
 }
 
 // snapshotFilesToRows converts SnapshotFile domain models to snapshotFileRow slices for DB persistence.
-func snapshotFilesToRows(snapshotID string, files []SnapshotFile) []snapshotFileRow {
+func snapshotFilesToRows(snapshotID uint, files []SnapshotFile) []snapshotFileRow {
 	rows := make([]snapshotFileRow, 0, len(files))
 	for _, file := range files {
 		rows = append(rows, snapshotFileRow{

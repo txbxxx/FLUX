@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +18,6 @@ import (
 	"flux/pkg/database"
 	"flux/pkg/logger"
 
-	"github.com/google/uuid"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"go.uber.org/zap"
@@ -71,8 +71,7 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 		return nil, fmt.Errorf("未找到任何配置文件")
 	}
 
-	// ID 用于数据库和后续同步；名称主要面向用户展示。
-	snapshotID := uuid.New().String()
+	// ID 由 GORM 自动生成
 	name := options.Name
 
 	// 创建快照元数据
@@ -85,7 +84,7 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 
 	// Snapshot 记录完整文件内容，SnapshotPackage 则补充导出/校验所需元数据。
 	snapshot := &models.Snapshot{
-		ID:          snapshotID,
+		ID:          0, // GORM 自动生成
 		Name:        name,
 		Description: options.Message,
 		Message:     options.Message,
@@ -105,7 +104,7 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 	// 创建快照包
 	pkg := &typesSnapshot.SnapshotPackage{
 		Snapshot: &typesSnapshot.SnapshotHeader{
-			ID:        snapshotID,
+			ID:        snapshot.ID,
 			Name:      name,
 			Message:   options.Message,
 			CreatedAt: time.Now(),
@@ -119,7 +118,7 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 	}
 
 	logger.Info("快照创建成功",
-		zap.String("id", snapshotID),
+		zap.Uint64("id", uint64(snapshot.ID)),
 		zap.String("name", name),
 		zap.Int("file_count", len(result.Files)),
 		zap.Int64("size", result.TotalSize),
@@ -132,7 +131,12 @@ func (s *Service) CreateSnapshot(options typesSnapshot.CreateSnapshotOptions) (*
 func (s *Service) GetSnapshot(id string) (*models.Snapshot, error) {
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 
-	snapshot, err := snapshotDAO.GetByID(id)
+	idNum, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("无效的快照 ID 格式: %w", err)
+	}
+
+	snapshot, err := snapshotDAO.GetByID(uint(idNum))
 	if err != nil {
 		return nil, fmt.Errorf("获取快照失败: %w", err)
 	}
@@ -175,7 +179,12 @@ func (s *Service) DeleteSnapshot(id string) error {
 
 	snapshotDAO := models.NewSnapshotDAO(s.db)
 
-	if err := snapshotDAO.Delete(id); err != nil {
+	idNum, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return fmt.Errorf("无效的快照 ID 格式: %w", err)
+	}
+
+	if err := snapshotDAO.Delete(uint(idNum)); err != nil {
 		return fmt.Errorf("删除快照失败: %w", err)
 	}
 
@@ -191,7 +200,7 @@ func (s *Service) UpdateSnapshot(snapshot *models.Snapshot) error {
 		return fmt.Errorf("更新快照失败: %w", err)
 	}
 
-	logger.Info("快照更新成功", zap.String("id", snapshot.ID))
+	logger.Info("快照更新成功", zap.Uint64("id", uint64(snapshot.ID)))
 	return nil
 }
 
@@ -294,9 +303,8 @@ func (s *Service) CreateBackup(paths []string, backupDir string) (string, error)
 
 // ValidateSnapshot 校验快照最基础的结构完整性，不做深层语义校验。
 func (s *Service) ValidateSnapshot(snapshot *models.Snapshot) error {
-	if snapshot.ID == "" {
-		return fmt.Errorf("快照 ID 不能为空")
-	}
+	// ID == 0 is valid for new snapshots (auto-filled by GORM on Create)
+	_ = snapshot.ID
 
 	if snapshot.Name == "" {
 		return fmt.Errorf("快照名称不能为空")
@@ -414,17 +422,17 @@ func (s *Service) RestoreSnapshot(id string, files []string, options typesSnapsh
 
 	// 第四步：转换为 RestoreResult
 	result := &typesSnapshot.RestoreResult{
-		SnapshotID:    snapshot.ID,
-		SnapshotName:  snapshot.Name,
-		AppliedFiles:  applyResult.AppliedFiles,
-		SkippedFiles:  applyResult.SkippedFiles,
-		Errors:        applyResult.Errors,
-		BackupPath:    applyResult.BackupPath,
-		TotalFiles:    applyResult.Summary.TotalFiles,
-		AppliedCount:  len(applyResult.AppliedFiles),
-		SkippedCount:  len(applyResult.SkippedFiles),
-		ErrorCount:    len(applyResult.Errors),
-		DryRun:        options.DryRun,
+		SnapshotID:   fmt.Sprintf("%d", snapshot.ID),
+		SnapshotName: snapshot.Name,
+		AppliedFiles: applyResult.AppliedFiles,
+		SkippedFiles: applyResult.SkippedFiles,
+		Errors:       applyResult.Errors,
+		BackupPath:   applyResult.BackupPath,
+		TotalFiles:   applyResult.Summary.TotalFiles,
+		AppliedCount: len(applyResult.AppliedFiles),
+		SkippedCount: len(applyResult.SkippedFiles),
+		ErrorCount:   len(applyResult.Errors),
+		DryRun:       options.DryRun,
 	}
 
 	logger.Info("快照恢复完成",
@@ -510,7 +518,7 @@ func (s *Service) DiffSnapshots(sourceID, targetID string, verbose bool, tool st
 // diffWithFilesystem compares a snapshot against the current filesystem.
 func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
 	logger.Info("对比快照与文件系统",
-		zap.String("snapshot_id", snapshot.ID),
+		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 	)
 
 	var changes []typesSnapshot.DiffFileChange
@@ -578,8 +586,8 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 // diffTwoSnapshots compares two snapshots and returns detailed differences.
 func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
 	logger.Info("对比两个快照",
-		zap.String("source_id", source.ID),
-		zap.String("target_id", target.ID),
+		zap.Uint64("source_id", uint64(source.ID)),
+		zap.Uint64("target_id", uint64(target.ID)),
 	)
 
 	sourceFiles := make(map[string]models.SnapshotFile, len(source.Files))
