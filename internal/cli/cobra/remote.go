@@ -43,7 +43,7 @@ func newRemoteAddCommand(deps Dependencies) *spcobra.Command {
 	command := &spcobra.Command{
 		Use:   "add <url>",
 		Short: "添加远端仓库",
-		Args:  validateExactOneArg("fl" remote add <url>"),
+		Args:  validateExactOneArg("fl remote add <url>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			result, err := deps.Workflow.AddRemote(cmd.Context(), typesRemote.AddRemoteInput{
 				URL:      args[0],
@@ -102,7 +102,7 @@ func newRemoteRemoveCommand(deps Dependencies) *spcobra.Command {
 		Use:   "remove <name>",
 		Short: "删除远端仓库配置",
 		Aliases: []string{"rm"},
-		Args:  validateExactOneArg("fl" remote remove <name>"),
+		Args:  validateExactOneArg("fl remote remove <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			_, err := deps.Workflow.RemoveRemote(cmd.Context(), typesRemote.RemoveRemoteInput{
 				Name:  args[0],

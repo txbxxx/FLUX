@@ -82,7 +82,7 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	getCommand := &spcobra.Command{
 		Use:   "get <name> [name...]",
 		Short: "获取指定配置的详情",
-		Args:  validateAtLeastOneArg("fl" setting get <name>"),
+		Args:  validateAtLeastOneArg("fl setting get <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			// 判断是否为批量操作
 			if len(args) > 1 {
@@ -114,7 +114,7 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	deleteCommand := &spcobra.Command{
 		Use:   "delete <name> [name...]",
 		Short: "删除指定的配置",
-		Args:  validateAtLeastOneArg("fl" setting delete <name>"),
+		Args:  validateAtLeastOneArg("fl setting delete <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			// 判断是否为批量操作
 			if len(args) > 1 {
@@ -159,7 +159,7 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	switchCommand := &spcobra.Command{
 		Use:   "switch <name>",
 		Short: "切换到指定的配置",
-		Args:  validateExactOneArg("fl" setting switch <name>"),
+		Args:  validateExactOneArg("fl setting switch <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			result, err := deps.Workflow.SwitchAISetting(cmd.Context(), usecase.SwitchAISettingInput{
 				Name: args[0],

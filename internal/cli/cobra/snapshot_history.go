@@ -22,7 +22,7 @@ func newSnapshotHistoryCommand(deps Dependencies) *spcobra.Command {
 
 展示每次推送的时间、提交说明和版本哈希，
 可通过 restore --version <hash> 恢复到指定版本。`,
-		Args: validateExactOneArg("fl" snapshot history <id-or-name>"),
+		Args: validateExactOneArg("fl snapshot history <id-or-name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			result, err := deps.Workflow.SnapshotHistory(cmd.Context(), usecase.SnapshotHistoryInput{
 				IDOrName: args[0],

@@ -82,7 +82,7 @@ type Dependencies struct {
 // NewRootCommand 组装顶层命令并注入所有子命令。
 func NewRootCommand(deps Dependencies) *spcobra.Command {
 	root := &spcobra.Command{
-		Use:           "fl"",
+		Use:           "fl",
 		Short:         "AI tool config snapshot manager",
 		SilenceErrors: true,
 		SilenceUsage:  true,
