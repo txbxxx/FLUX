@@ -1,4 +1,4 @@
-module ai-sync-manager
+module flux
 
 go 1.25.0
 
