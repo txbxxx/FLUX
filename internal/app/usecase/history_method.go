@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"flux/internal/service/git"
+	"flux/pkg/git"
 	typesSnapshot "flux/internal/types/snapshot"
 )
 

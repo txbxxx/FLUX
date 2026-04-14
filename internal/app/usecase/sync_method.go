@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"flux/internal/models"
-	"flux/internal/service/git"
+	"flux/pkg/git"
 	typesSync "flux/internal/types/sync"
 )
 

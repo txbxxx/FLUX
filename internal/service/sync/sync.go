@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"flux/internal/models"
-	"flux/internal/service/git"
+	"flux/pkg/git"
 	"flux/pkg/database"
 	"flux/pkg/logger"
 
