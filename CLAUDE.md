@@ -4,18 +4,299 @@
 >
 > **交流语言**：中文
 
-## 严格规范
-1. 严格按照文档规范来完成执行任务！
-
 ---
 
 ## 项目概述
 
 本地优先的 AI 工具配置管理器，聚焦于本地配置的扫描、快照、浏览和编辑。
 
-**当前能力**：扫描本机 AI 工具配置 · 创建/列出本地快照 · 浏览配置目录与文件 · 终端内直接编辑配置文件 · 自定义扫描规则
+**当前能力**：扫描本机 AI 工具配置 · 创建/列出/删除/恢复/对比本地快照 · 浏览配置目录与文件 · 终端内直接编辑配置文件 · 自定义扫描规则 · 远端仓库配置（remote add/list/remove）· 同步推送/拉取（sync push/pull）
 
-**暂未覆盖**：远端仓库同步（push/pull/diff/apply/rollback）· 图形化凭证管理 · 快照应用（回滚）· 快照对比 · 大量文件收集可能较慢
+**暂未覆盖**：图形化凭证管理 · 敏感字段加密存储 · 同步冲突自动合并 · 大量文件收集可能较慢
+
+---
+
+## 快速开始
+
+### 构建
+
+```bash
+make build                          # 构建 bin/fl.exe
+make build CLI_NAME=my-tool         # 自定义名称
+make run                            # 构建并运行
+make run ARGS=scan                  # 带参数运行
+```
+
+### 测试
+
+```bash
+go test ./...                       # 全部测试
+go test ./internal/service/snapshot/... -v -cover  # 特定包
+go test -coverprofile=coverage.out ./...            # 覆盖率
+```
+
+### 直接运行
+
+```bash
+go run -buildvcs=false ./cmd/fl <command>
+```
+
+### 代码格式化
+
+```bash
+make fmt                            # 格式化
+make clean                          # 清理
+```
+
+---
+
+## 开发工作流
+
+### 分支开发（推荐使用 worktree）
+
+推荐使用 worktree 进行并行开发，避免频繁切换分支：
+
+```bash
+# 确保在 master 分支且代码最新
+git checkout master && git pull origin master
+
+# 创建 worktree
+git worktree add ../AToSync-<prefix>-<desc> <prefix>/<desc>
+
+# 在 worktree 中开发、测试、提交
+cd ../AToSync-<prefix>-<desc>
+# ... 开发工作 ...
+git push -u origin <prefix>/<desc>
+
+# 创建 PR 合并，不直接 merge 到 master
+```
+
+**分支前缀**：`feat/` `fix/` `refactor/` `docs/` `test/` `chore/` `perf/` `style/`
+
+### 文档同步检查
+
+每次提交后建议检查以下文档是否需要更新：
+
+| 检查项 | 何时更新 |
+|--------|----------|
+| CLAUDE.md 项目结构 | 新增/删除文件、架构变更 |
+| `docs/使用指南/` | 新命令、参数变化、行为变化 |
+| `docs/架构设计/` | 模块新增/重构、数据流变化 |
+| `docs/文档索引.md` | 新增或删除任何文档 |
+
+---
+
+## 架构规范
+
+### 分层调用链
+
+```
+CLI/TUI 层  →  UseCase 层  →  Service 层  →  DAO（models 内）
+   ↓              ↓              ↓              ↓
+ 仅解析参数     流程编排       单领域逻辑     数据库 CRUD
+ 仅渲染输出     错误翻译       可调 DAO       只操作一个表
+ 不含业务逻辑   跨服务协调     不调其他服务    返回明确结构体
+```
+
+**推荐做法**：CLI/TUI 层通过 UseCase 层间接调用 Service 和 DAO，以保持清晰的分层结构。
+
+### 数据库设计（最大可移植性原则）
+
+为确保数据库操作具有良好的可移植性，建议遵循以下原则：
+
+1. **关系完整性由应用层维护**：推荐在代码中处理关系逻辑，而非依赖数据库层的 `REFERENCES` 约束
+2. **避免使用触发器**：推荐在应用层管理 `updated_at` 等字段，而非依赖 DML/DDL 触发器
+3. **业务逻辑位于应用代码**：推荐将所有业务逻辑放在应用层，而非使用存储过程或用户定义函数
+4. **使用 ANSI SQL 标准数据类型**：推荐使用 VARCHAR、INTEGER、TIMESTAMP、TEXT、BOOLEAN 等标准类型
+5. **索引独立创建**：使用 `CREATE INDEX` 独立语句创建索引，而非依赖隐式索引
+
+### Models 层规范
+
+Models 层负责数据定义和基础 CRUD 操作：
+
+- **结构体 + DAO 同文件**：`snapshot.go` 包含 `Snapshot` 结构体和 `SnapshotDAO`
+- **DAO 返回明确结构体**：推荐返回 models 中定义的数据库结构体，而非 `map` 或 `interface{}`
+- **单一职责**：每个 DAO 函数建议只操作一个数据库表
+- **纯数据定义**：Models 层专注于数据库表结构定义和 CRUD 操作
+
+```go
+// internal/models/xxx.go — 标准文件结构
+package models
+
+// Example 数据库表结构
+type Example struct {
+    ID   string `json:"id" db:"id"`
+    Name string `json:"name" db:"name"`
+}
+
+type ExampleDAO struct { db *database.DB }
+
+func NewExampleDAO(db *database.DB) *ExampleDAO { return &ExampleDAO{db: db} }
+func (dao *ExampleDAO) Create(e *Example) error { /* ... */ }
+func (dao *ExampleDAO) GetByID(id string) (*Example, error) { /* ... */ }
+```
+
+### Types 层规范
+
+对外返回的结构体统一定义在 `internal/types/` 包中，按功能模块组织：
+
+- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/config/`、`types/common/`
+- **与 Models 区分**：Models 是数据库表映射，Types 是面向调用方的响应结构体
+- **Service/UseCase 负责转换**：从 DAO 获取 Models 结构体后，转换为 Types 结构体返回
+
+```go
+// internal/types/snapshot/detail.go
+package snapshot
+
+// SnapshotDetail is the response struct for snapshot details returned to callers.
+type SnapshotDetail struct {
+    ID        string    `json:"id"`
+    Name      string    `json:"name"`
+    FileCount int       `json:"file_count"`
+    CreatedAt time.Time `json:"created_at"`
+}
+```
+
+### Service 层规范
+
+- 调用 DAO 获取数据，执行业务逻辑，组装结果
+- 可组合多个 DAO 的返回值
+- **转换职责**：将 Models 结构体转换为 `internal/types/` 中定义的响应结构体返回给调用方
+
+### UseCase 层规范
+
+- 编排多个 Service 完成完整业务流程
+- 将底层技术性错误翻译为用户可读错误（`UserError`）
+- 决定对外返回的数据结构（定义在 `internal/types/` 中）
+
+---
+
+## 代码规范
+
+### 命名约定
+
+- Go 文件：`snake_case`，测试文件加 `_test.go`
+- 包名：小写单词，无下划线
+- Receiver：小写缩写（`w *LocalWorkflow`、`dao *SnapshotDAO`），建议避免使用 `this`/`self`
+
+### 注释规范
+
+- **导出类型/函数**：推荐添加 godoc 注释（英文），说明做什么、为什么
+- **函数内部**：用 `// 第 X 步：` 标记逻辑块；非显而易见的逻辑用 `// 为什么：` 说明设计决策
+- **建议避免**：翻译代码、写创建日期/作者、注释被删除的代码
+
+```go
+// Scan scans all registered projects and returns a status summary for each.
+//
+// 统一项目模型：所有可同步的对象都是"项目"（包括自动注册的全局项目如 claude-global）。
+func (w *LocalWorkflow) Scan(ctx context.Context, input ScanInput) (*ScanResult, error) {
+    // 第一步：自动推导工具类型
+    // 第二步：参数校验
+    // 第三步：调用 SnapshotManager
+
+    // 全局项目使用全局规则而不是项目规则。
+    // 为什么：~/.claude 的布局是全局配置结构，用项目规则只能扫到极少文件。
+    rules = DefaultGlobalRules(toolType)
+```
+
+### 错误处理
+
+```go
+import "flux/pkg/errors"
+return errors.Wrap(err, "创建快照失败")
+```
+
+### 日志记录
+
+```go
+import "flux/pkg/logger"
+logger.Info("操作开始", zap.String("snapshot_id", id), zap.Int("file_count", n))
+```
+
+---
+
+## 产品需求流程
+
+### 需求开发流程
+
+```
+提出需求 → 写 PRD 文档 → 添加到飞书需求文档（待讨论） → 需求评审和讨论
+```
+
+1. **提出需求**：简要描述改进方向，说明问题、目标和用户群体
+2. **写 PRD 文档**：需求确认后，在 `docs/plans/` 下编写完整的 PRD 文档
+3. **添加到飞书需求文档**：将 PRD 链接添加到飞书多维表格需求文档，状态设为"待讨论"
+4. **需求评审和讨论**：与相关方评审 PRD，讨论可行性、优先级和实现方案
+
+### 需求格式（提出时）
+
+```
+**改进名称**：
+**问题描述**：
+**当前状态**：
+**改进方案**：
+**目标用户**：
+**优先级建议**：
+```
+
+### PRD 文档格式（docs/plans/）
+
+```markdown
+# [功能名称] PRD
+
+## 背景
+## 目标
+## 非目标（明确不做什么）
+## 用户故事
+## 功能详情
+## 验收标准
+## 技术方案（可选）
+## 排期估算（可选）
+```
+
+---
+
+## 提交规范
+
+### 基本格式
+
+**语言**：Commit Message **使用中文**（仅 type 前缀如 `feat:` `fix:` 保留英文），描述、说明、测试表格等内容建议使用中文。
+
+```
+<type>: <中文简要描述>
+
+完成了什么：
+有什么作用：
+可能的影响：（无则省略）
+
+| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
+|----------|-----------|----------|----------|
+| xxx      | xxx       | xxx      | 通过     |
+```
+
+### Type 列表
+
+`feat` `fix` `refactor` `docs` `test` `chore` `perf` `style`
+
+### 示例
+
+```
+feat: get 命令支持省略 path 参数
+
+完成了什么：
+- get 命令参数从 ExactArgs(2) 改为 MinimumNArgs(1)
+- accessor 支持空路径时返回根目录
+
+有什么作用：
+- 用户执行 "ai-sync get claude" 即可查看根目录
+
+| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
+|----------|-----------|----------|----------|
+| 省略 path | ai-sync get claude | 列出根目录 | 通过 |
+| 指定 path | ai-sync get claude settings.json | 显示文件内容 | 通过 |
+| 编辑模式 | ai-sync get claude settings.json -e | 进入编辑器 | 通过 |
+| go test | go test ./... | 全部通过 | 通过 |
+```
 
 ---
 
@@ -60,6 +341,7 @@ flux/
 │   │   ├── snapshot_restore.go     # snapshot restore
 │   │   ├── snapshot_diff.go       # snapshot diff
 │   │   ├── setting.go              # setting 命令组
+│   │   ├── sync.go                 # sync 命令组（push/pull/status）
 │   │   └── tui.go                  # tui 命令
 │   │
 │   ├── cli/output/                 # 统一 CLI 输出渲染
@@ -117,269 +399,12 @@ flux/
 │   ├── config/                     # YAML 配置（嵌入默认值 → 用户覆盖）
 │   ├── database/db.go              # SQLite 连接、迁移、事务
 │   ├── errors/                     # 错误码与包装
+│   ├── git/                        # Git 操作（clone/pull/push/fetch/commit）
 │   ├── logger/                     # Zap 日志
 │   └── utils/                      # 字符串/文件/转换工具
 │
 ├── docs/                           # 文档（使用指南/架构设计/_old 存档）
 ├── go.mod · go.sum · Makefile · .golangci.yml · README.md
-```
-
----
-
-## 架构规范
-
-### 数据库设计约束（最大可移植性原则）
-
-所有 DDL 及数据库操作代码必须严格遵守以下禁止项：
-
-1. **禁止使用外键约束（FOREIGN KEY）**：关系完整性在应用层代码逻辑中维护，不得依赖数据库层的 `REFERENCES` 约束
-2. **禁止使用触发器（TRIGGER）**：不得创建任何 DML/DDL 触发器，`updated_at` 等字段由应用层（GORM tag）管理
-3. **禁止使用存储过程（STORED PROCEDURE）及用户定义函数（UDF）**：所有业务逻辑必须位于应用代码中
-4. **禁止使用特定数据库专有扩展**：包括但不限于 PostgreSQL 的 JSONB 运算符、MySQL 的 ENUM 类型、SQL Server 的 IDENTITY_INSERT 语法、Oracle 的 SEQUENCE 伪列（若非 ANSI SQL 标准）
-5. **仅允许使用 ANSI SQL 标准数据类型**：VARCHAR、INTEGER、TIMESTAMP、TEXT、BOOLEAN 等
-6. **索引（INDEX）允许创建**，但必须使用 `CREATE INDEX` 独立语句，不得依赖隐式索引（PRIMARY KEY 自动创建的索引除外）
-
-> **自查规则**：若检测到 `CREATE TRIGGER`、`ADD FOREIGN KEY`、`CREATE PROCEDURE` 等关键字，必须拒绝并替换为应用层逻辑。
-
-### 分层调用链
-
-```
-CLI/TUI 层  →  UseCase 层  →  Service 层  →  DAO（models 内）
-   ↓              ↓              ↓              ↓
- 仅解析参数     流程编排       单领域逻辑     数据库 CRUD
- 仅渲染输出     错误翻译       可调 DAO       只操作一个表
- 不含业务逻辑   跨服务协调     不调其他服务    返回明确结构体
-```
-
-**绝对禁止**：CLI/TUI 直接调用 Service 或 DAO。
-
-### Models 层规则
-
-- **结构体 + DAO 同文件**：`snapshot.go` 包含 `Snapshot` 结构体和 `SnapshotDAO`
-- **DAO 返回值**：只返回 models 中定义的数据库结构体，禁止返回 `map`、`interface{}`
-- **单一职责**：每个 DAO 函数只操作一个数据库表
-- **不做转换**：DAO 不做响应结构体的 convert
-- **纯数据定义**：Models 层只负责数据库表结构定义和 CRUD 操作，不包含任何业务逻辑
-
-```go
-// internal/models/xxx.go — 标准文件结构
-package models
-
-// Example 数据库表结构，无外键定义
-type Example struct {
-    ID   string `json:"id" db:"id"`
-    Name string `json:"name" db:"name"`
-}
-
-type ExampleDAO struct { db *database.DB }
-
-func NewExampleDAO(db *database.DB) *ExampleDAO { return &ExampleDAO{db: db} }
-func (dao *ExampleDAO) Create(e *Example) error { /* ... */ }
-func (dao *ExampleDAO) GetByID(id string) (*Example, error) { /* ... */ }
-```
-
-### Types 层规则
-
-所有对调用方（CLI/TUI/UseCase）返回的结构体统一定义在 `internal/types/` 包中，按功能模块分子目录组织。
-
-- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/config/`、`types/common/`
-- **与 Models 区分**：Models 是数据库表映射，Types 是面向调用方的响应结构体
-- **Service/UseCase 负责 convert**：从 DAO 拿到 Models 结构体后，转换为 Types 结构体返回
-- **命名规范**：目录名即包名，结构体命名语义清晰，如 `types/snapshot.SnapshotDetail`
-
-```go
-// internal/types/snapshot/detail.go
-package snapshot
-
-// SnapshotDetail is the response struct for snapshot details returned to callers.
-type SnapshotDetail struct {
-    ID        string    `json:"id"`
-    Name      string    `json:"name"`
-    FileCount int       `json:"file_count"`
-    CreatedAt time.Time `json:"created_at"`
-}
-```
-
-```go
-// internal/types/common/pagination.go
-package common
-
-// Pagination holds pagination metadata for list responses.
-type Pagination struct {
-    Total  int `json:"total"`
-    Offset int `json:"offset"`
-    Limit  int `json:"limit"`
-}
-```
-
-### Service 层规则
-
-- 调用 DAO 获取数据，执行业务逻辑，组装结果
-- 可组合多个 DAO 的返回值
-- **转换职责**：将 Models 结构体转换为 `internal/types/` 中定义的响应结构体返回给调用方
-
-### UseCase 层规则
-
-- 编排多个 Service 完成完整业务流程
-- 将底层技术性错误翻译为用户可读错误（`UserError`）
-- 决定对外返回的数据结构（定义在 `internal/types/` 中）
-
----
-
-## 代码规范
-
-### 命名
-
-- Go 文件：`snake_case`，测试文件加 `_test.go`
-- 包名：小写单词，无下划线
-- Receiver：小写缩写（`w *LocalWorkflow`、`dao *SnapshotDAO`），禁止 `this`/`self`
-
-### 注释
-
-- **导出类型/函数**：必须有 godoc 注释（英文），说明做什么、为什么
-- **函数内部**：用 `// 第 X 步：` 标记逻辑块；非显而易见的逻辑用 `// 为什么：` 说明设计决策
-- **不要**：翻译代码、写创建日期/作者、注释被删除的代码
-
-```go
-// Scan scans all registered projects and returns a status summary for each.
-//
-// 统一项目模型：所有可同步的对象都是"项目"（包括自动注册的全局项目如 claude-global）。
-func (w *LocalWorkflow) Scan(ctx context.Context, input ScanInput) (*ScanResult, error) {
-    // 第一步：自动推导工具类型
-    // 第二步：参数校验
-    // 第三步：调用 SnapshotManager
-
-    // 全局项目使用全局规则而不是项目规则。
-    // 为什么：~/.claude 的布局是全局配置结构，用项目规则只能扫到极少文件。
-    rules = DefaultGlobalRules(toolType)
-```
-
-### 错误处理
-
-```go
-import "flux/pkg/errors"
-return errors.Wrap(err, "创建快照失败")
-```
-
-### 日志
-
-```go
-import "flux/pkg/logger"
-logger.Info("操作开始", zap.String("snapshot_id", id), zap.Int("file_count", n))
-```
-
----
-
-## 产品需求流程
-
-### 流程规范
-
-所有改进和新功能必须遵循以下流程：
-
-```
-提出需求 → 写 PRD 文档 → 添加到飞书需求文档（待讨论） → 需求评审和讨论
-```
-
-1. **提出需求**：用以下格式简要描述改进方向，说明问题、目标和用户群体，等待确认
-2. **写 PRD 文档**：需求确认后，在 `docs/plans/` 下编写完整的 PRD 文档
-3. **添加到飞书需求文档**：将 PRD 链接添加到飞书多维表格需求文档，状态设为"待讨论"
-4. **需求评审和讨论**：与相关方评审 PRD，讨论可行性、优先级和实现方案，评审通过后状态更新为"已通过"
-
-### 需求格式（提出时）
-
-```
-**改进名称**：
-**问题描述**：
-**当前状态**：
-**改进方案**：
-**目标用户**：
-**优先级建议**：
-```
-
-### PRD 文档格式（docs/plans/）
-
-```markdown
-# [功能名称] PRD
-
-## 背景
-## 目标
-## 非目标（明确不做什么）
-## 用户故事
-## 功能详情
-## 验收标准
-## 技术方案（可选）
-## 排期估算（可选）
-```
-
----
-
-## 开发工作流
-
-### 分支开发（必须使用 worktree）
-
-检查是否自身在`master`分支，如果在就拉取`master`最新代码然后 切出 worktree，不在则需要切换到master分支然后拉取最新代码切出worktree：
-
-```bash
-git checkout master && git pull origin master
-git worktree add ../AToSync-<prefix>-<desc> <prefix>/<desc>
-# ... 在 worktree 中开发、测试、提交 ...
-git push -u origin <prefix>/<desc>
-# 创建 PR 合并，不直接 merge 到 master
-```
-
-**分支前缀**：`feat/` `fix/` `refactor/` `docs/` `test/` `chore/` `perf/` `style/`
-
-### 文档同步检查
-
-每次提交后检查：
-
-| 检查项 | 何时更新 |
-|--------|----------|
-| CLAUDE.md 项目结构 | 新增/删除文件、架构变更 |
-| `docs/使用指南/` | 新命令、参数变化、行为变化 |
-| `docs/架构设计/` | 模块新增/重构、数据流变化 |
-| `docs/文档索引.md` | 新增或删除任何文档 |
-
----
-
-## 提交规范
-
-**语言**：Commit Message **全部使用中文**（仅 type 前缀如 `feat:` `fix:` 保留英文），描述、说明、测试表格等内容必须为中文。禁止使用英文描述。
-
-**格式**：
-
-```
-<type>: <中文简要描述>
-
-完成了什么：
-有什么作用：
-可能的影响：（无则省略）
-
-| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
-|----------|-----------|----------|----------|
-| xxx      | xxx       | xxx      | 通过     |
-```
-
-**Type 列表**：`feat` `fix` `refactor` `docs` `test` `chore` `perf` `style`
-
-**示例**：
-
-```
-feat: get 命令支持省略 path 参数
-
-完成了什么：
-- get 命令参数从 ExactArgs(2) 改为 MinimumNArgs(1)
-- accessor 支持空路径时返回根目录
-
-有什么作用：
-- 用户执行 "ai-sync get claude" 即可查看根目录
-
-| 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
-|----------|-----------|----------|----------|
-| 省略 path | ai-sync get claude | 列出根目录 | 通过 |
-| 指定 path | ai-sync get claude settings.json | 显示文件内容 | 通过 |
-| 编辑模式 | ai-sync get claude settings.json -e | 进入编辑器 | 通过 |
-| go test | go test ./... | 全部通过 | 通过 |
 ```
 
 ---
@@ -404,25 +429,13 @@ feat: get 命令支持省略 path 参数
 | snapshot delete | `fl snapshot delete <id-or-name>` | — |
 | snapshot restore | `fl snapshot restore <id-or-name>` | `--files` 选择性恢复 `--dry-run` 预览 `--force` 跳过确认 |
 | snapshot diff | `fl snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 |
+| remote add | `fl remote add <url>` | `--name` 名称 `--branch` 分支 `--auth` 认证类型 `--token` 令牌 `--ssh-key` SSH密钥 |
+| remote list | `fl remote list` | — |
+| remote remove | `fl remote remove <name>` | — |
+| sync push | `fl sync push` | `-p/--project` 项目 `--all` 全部 |
+| sync pull | `fl sync pull` | `-p/--project` 项目 `--all` 全部 |
+| sync status | `fl sync status` | `-p/--project` 项目 |
 | tui | `fl tui` | — |
-
----
-
-## 常用命令
-
-```bash
-make build                          # 构建 bin/fl.exe
-make build CLI_NAME=my-tool         # 自定义名称
-make run                            # 构建并运行
-make run ARGS=scan                  # 带参数运行
-make fmt                            # 格式化
-make clean                          # 清理
-
-go test ./...                       # 全部测试
-go test ./internal/service/snapshot/... -v -cover  # 特定包
-go test -coverprofile=coverage.out ./...            # 覆盖率
-go run -buildvcs=false ./cmd/fl <command>      # 直接运行
-```
 
 ---
 
