@@ -10,8 +10,8 @@ import (
 
 	"flux/internal/models"
 	"flux/internal/service/tool"
+	"flux/pkg/crypto"
 	"flux/pkg/logger"
-	"flux/pkg/utils"
 
 	"go.uber.org/zap"
 )
@@ -212,7 +212,7 @@ func (c *Collector) collectSingleFile(
 	}
 
 	// 快照里保存项目根路径下的相对表示，去除用户机器特定前缀（如 C:\Users\xxx\），更简洁干净。
-	hash := utils.SHA256Hash(content)
+	hash := crypto.SHA256Hash(content)
 	relPath, err := filepath.Rel(options.ProjectPath, cleanPath)
 	if err != nil {
 		// fallback: 如果相对路径计算失败，使用相对于盘符根的原始方案

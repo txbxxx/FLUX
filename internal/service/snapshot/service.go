@@ -13,9 +13,9 @@ import (
 	"flux/internal/models"
 	"flux/internal/service/tool"
 	typesSnapshot "flux/internal/types/snapshot"
+	"flux/pkg/crypto"
 	"flux/pkg/database"
 	"flux/pkg/logger"
-	"flux/pkg/utils"
 
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
@@ -547,7 +547,7 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 			continue
 		}
 
-		currentHash := utils.SHA256Hash(currentContent)
+		currentHash := crypto.SHA256Hash(currentContent)
 		if currentHash != sf.Hash {
 			change := typesSnapshot.DiffFileChange{
 				Path:     sf.Path,
