@@ -13,8 +13,8 @@ type SyncPushResult struct {
 	FilesPushed int    `json:"files_pushed"`
 	CommitHash  string `json:"commit_hash"`
 	RemoteURL   string `json:"remote_url"`
-	Verified    bool   `json:"verified"`
 	Error       string `json:"error,omitempty"`
+	Message     string `json:"message,omitempty"` // Contextual message (e.g. "no changes to push")
 }
 
 // SyncPullInput is the input for pulling snapshots from remote.

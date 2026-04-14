@@ -9,6 +9,11 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"golang.org/x/crypto/ssh"
+
+	"flux/pkg/logger"
+
+	"go.uber.org/zap"
 )
 
 // NewAuthMethod 创建认证方法
@@ -45,8 +50,20 @@ func newSSHAuth(auth *GitAuthConfig) (transport.AuthMethod, error) {
 
 	// 1. 如果配置中指定了 SSH 密钥路径
 	if auth.SSHKey != "" && filepath.IsAbs(auth.SSHKey) {
-		if _, err := os.Stat(auth.SSHKey); err == nil {
-			keyFiles = append(keyFiles, auth.SSHKey)
+		keyPath := auth.SSHKey
+		// 自动修正：用户可能指定了 .pub（公钥），需要使用对应的私钥
+		if strings.HasSuffix(keyPath, ".pub") {
+			privateKey := strings.TrimSuffix(keyPath, ".pub")
+			if _, err := os.Stat(privateKey); err == nil {
+				logger.Warn("配置的是公钥，已自动切换到私钥",
+					zap.String("public_key", keyPath),
+					zap.String("private_key", privateKey),
+				)
+				keyPath = privateKey
+			}
+		}
+		if _, err := os.Stat(keyPath); err == nil {
+			keyFiles = append(keyFiles, keyPath)
 		}
 	}
 
@@ -89,14 +106,48 @@ func newSSHAuth(auth *GitAuthConfig) (transport.AuthMethod, error) {
 
 	// 尝试使用不同的私钥文件
 	for _, keyFile := range keyFiles {
-		authMethod, err := gitssh.NewPublicKeysFromFile("git", keyFile, auth.Passphrase)
-		if err == nil {
-			return authMethod, nil
+		signer, err := loadSSHSigner(keyFile, auth.Passphrase)
+		if err != nil {
+			continue
 		}
-		// 继续尝试下一个
+		return &gitssh.PublicKeys{
+			User:   "git",
+			Signer: signer,
+			HostKeyCallbackHelper: gitssh.HostKeyCallbackHelper{
+				HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			},
+		}, nil
 	}
 
 	return nil, fmt.Errorf("所有 SSH 密钥尝试失败，请检查密钥格式和密码")
+}
+
+// loadSSHSigner loads an SSH private key and returns a signer.
+func loadSSHSigner(keyFile, passphrase string) (ssh.Signer, error) {
+	keyData, err := os.ReadFile(keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("读取密钥文件失败: %w", err)
+	}
+
+	if passphrase != "" {
+		signer, err := ssh.ParsePrivateKeyWithPassphrase(keyData, []byte(passphrase))
+		if err != nil {
+			return nil, err
+		}
+		return signer, nil
+	}
+
+	signer, err := ssh.ParsePrivateKey(keyData)
+	if err != nil {
+		// 密钥可能需要密码
+		if strings.Contains(err.Error(), "password protected") ||
+			strings.Contains(err.Error(), "encrypted") ||
+			strings.Contains(err.Error(), "passphrase") {
+			return nil, fmt.Errorf("密钥需要密码，请配置 --password 参数")
+		}
+		return nil, err
+	}
+	return signer, nil
 }
 
 // ValidateAuthConfig 验证认证配置
