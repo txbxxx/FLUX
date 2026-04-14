@@ -3,8 +3,6 @@ package snapshot
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +11,7 @@ import (
 	"flux/internal/models"
 	"flux/internal/service/tool"
 	"flux/pkg/logger"
+	"flux/pkg/utils"
 
 	"go.uber.org/zap"
 )
@@ -213,7 +212,7 @@ func (c *Collector) collectSingleFile(
 	}
 
 	// 快照里保存项目根路径下的相对表示，去除用户机器特定前缀（如 C:\Users\xxx\），更简洁干净。
-	hash := c.calculateHash(content)
+	hash := utils.SHA256Hash(content)
 	relPath, err := filepath.Rel(options.ProjectPath, cleanPath)
 	if err != nil {
 		// fallback: 如果相对路径计算失败，使用相对于盘符根的原始方案
@@ -294,11 +293,6 @@ func (c *Collector) categorizeFile(path string, isBinary bool) models.FileCatego
 	return models.CategoryConfig
 }
 
-// calculateHash 生成内容哈希，供快照校验和去重参考使用。
-func (c *Collector) calculateHash(content []byte) string {
-	hash := sha256.Sum256(content)
-	return hex.EncodeToString(hash[:])
-}
 
 // shouldExclude 同时支持 basename 匹配和路径子串匹配。
 func (c *Collector) shouldExclude(path string, excludes []string) bool {

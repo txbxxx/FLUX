@@ -11,6 +11,7 @@ import (
 	"flux/internal/service/tool"
 	typesSnapshot "flux/internal/types/snapshot"
 	"flux/pkg/database"
+	"flux/pkg/utils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -471,15 +472,13 @@ func TestComparator_CompareSnapshots(t *testing.T) {
 
 // TestCollector_CalculateHash 测试哈希计算
 func TestCollector_CalculateHash(t *testing.T) {
-	collector := NewCollector(tool.NewRuleResolver(nil))
-
 	content1 := []byte("test content")
 	content2 := []byte("test content")
 	content3 := []byte("different content")
 
-	hash1 := collector.calculateHash(content1)
-	hash2 := collector.calculateHash(content2)
-	hash3 := collector.calculateHash(content3)
+	hash1 := utils.SHA256Hash(content1)
+	hash2 := utils.SHA256Hash(content2)
+	hash3 := utils.SHA256Hash(content3)
 
 	assert.Equal(t, hash1, hash2)    // 相同内容，相同哈希
 	assert.NotEqual(t, hash1, hash3) // 不同内容，不同哈希

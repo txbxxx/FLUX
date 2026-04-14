@@ -15,6 +15,7 @@ import (
 	"flux/internal/models"
 	"flux/internal/types/common"
 	"flux/pkg/logger"
+	"flux/pkg/utils"
 
 	"go.uber.org/zap"
 )
@@ -299,17 +300,11 @@ func (s *Service) getEncryptionKey() ([]byte, error) {
 
 // loadKeyFromFile 从文件加载密钥
 func (s *Service) loadKeyFromFile(keyPath string) ([]byte, error) {
-	// 扩展路径
-	if len(keyPath) > 0 && keyPath[0] == '~' {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		keyPath = filepath.Join(homeDir, keyPath[1:])
-	}
+	// 扩展路径（支持 ~ 和 %USERPROFILE%）
+	keyPath = utils.ExpandUserHome(keyPath)
 
 	// 读取文件
-	data, err := os.ReadFile(keyPath)
+	data, err := utils.ReadFile(keyPath)
 	if err != nil {
 		return nil, err
 	}
@@ -365,33 +360,17 @@ func (s *Service) GetAlgorithm() string {
 	return "none"
 }
 
-// ValidateKey 验证密钥是否有效
+// ValidateKey 验证密钥是否有效（委托给 utils.ValidateKey）
 func ValidateKey(key string) error {
-	// 密钥应该是 32 字节（Base64 编码后约 44 字符）
-	decoded, err := base64.StdEncoding.DecodeString(key)
-	if err != nil {
-		return fmt.Errorf("密钥格式无效: %w", err)
-	}
-
-	if len(decoded) != 32 {
-		return fmt.Errorf("密钥长度无效: 期望 32 字节，实际 %d 字节", len(decoded))
-	}
-
-	return nil
+	return utils.ValidateKey(key)
 }
 
-// GenerateKey 生成新的加密密钥
+// GenerateKey 生成新的加密密钥（委托给 utils.GenerateKey）
 func GenerateKey() (string, error) {
-	key := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, key); err != nil {
-		return "", fmt.Errorf("生成密钥失败: %w", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(key), nil
+	return utils.GenerateKey()
 }
 
-// HashKey 哈希密钥（用于存储时混淆）
+// HashKey 哈希密钥（委托给 utils.HashKey）
 func HashKey(key string) string {
-	hash := sha256.Sum256([]byte(key))
-	return base64.StdEncoding.EncodeToString(hash[:])
+	return utils.HashKey(key)
 }

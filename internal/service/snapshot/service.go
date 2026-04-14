@@ -1,8 +1,6 @@
 package snapshot
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +15,7 @@ import (
 	typesSnapshot "flux/internal/types/snapshot"
 	"flux/pkg/database"
 	"flux/pkg/logger"
+	"flux/pkg/utils"
 
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
@@ -548,7 +547,7 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 			continue
 		}
 
-		currentHash := calculateFileHash(currentContent)
+		currentHash := utils.SHA256Hash(currentContent)
 		if currentHash != sf.Hash {
 			change := typesSnapshot.DiffFileChange{
 				Path:     sf.Path,
@@ -716,11 +715,6 @@ func (s *Service) computeDiffStats(files []typesSnapshot.DiffFileChange) typesSn
 	return stats
 }
 
-// calculateFileHash computes SHA256 hash of file content.
-func calculateFileHash(content []byte) string {
-	hash := sha256.Sum256(content)
-	return hex.EncodeToString(hash[:])
-}
 
 // computeFileHunks uses gotextdiff to compute structured diff hunks.
 func computeFileHunks(oldContent, newContent []byte) []typesSnapshot.DiffHunk {
