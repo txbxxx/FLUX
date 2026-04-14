@@ -333,8 +333,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 //  1. 获取远端配置
 //  2. 确保 repo 存在，执行 git fetch（不 merge）
 //  3. 对比本地 HEAD 和远端 HEAD 获取变更文件
-//  4. 对每个变更文件做三方对比（本地快照 vs 远端版本）检测冲突
-//  5. 无冲突 → git pull + 更新 SQLite
+//  4. 对每个变更文件做三方对比（本地快照 vs 远端版本）检测冲突 ··//  5. 无冲突 → hard reset 到远端版本 + 更新 SQLite
 //  6. 有冲突 → 返回冲突列表，等待用户解决
 func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error) {
 	// 第一步：参数校验
@@ -551,27 +550,17 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		}, nil
 	}
 
-	// 第八步：无冲突 → 执行 git pull 并更新 SQLite
-	_, err = gitClient.Pull(ctx, &git.PullOptions{
-		Path:       repoPath,
-		Auth:       convertAuthFromModel(&remoteConfig.Auth),
-		RemoteName: "origin",
-		Branch:     remoteConfig.Branch,
-	})
+	// 第八步：无冲突 → 将本地分支 hard reset 到远端版本并更新 SQLite
+	// 为什么用 ResetToRef 而不是 Pull：go-git 的 Pull 只支持 fast-forward 合并，
+	// 当本地和远端有分叉历史时会报 "non-fast-forward update"。
+	// 本地仓库只是同步中间层，已在第六步完成冲突检测，可以安全地 reset 到远端。
+	_, err = gitClient.ResetToRef(repoPath, remoteHash)
 	if err != nil {
-		if strings.Contains(err.Error(), "already up-to-date") {
-			return &typesSync.SyncPullResult{
-				Success:      true,
-				Project:      projectName,
-				FilesUpdated: 0,
-			}, nil
-		}
-
-		// 解析错误类型并返回具体信息
 		errorMsg, suggestion := parseGitError(err.Error(), remoteConfig.URL)
-		logger.Error("Git pull 失败",
+		logger.Error("Git reset 失败",
 			zap.String("project", projectName),
 			zap.String("remote_url", remoteConfig.URL),
+			zap.String("remote_hash", remoteHash),
 			zap.Error(err),
 		)
 		return nil, &UserError{
