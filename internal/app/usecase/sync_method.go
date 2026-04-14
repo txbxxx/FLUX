@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"errors"
 	"strings"
 
 	"flux/internal/models"
-	"flux/internal/service/git"
+	"flux/pkg/git"
 	typesSync "flux/internal/types/sync"
+	"flux/pkg/logger"
+
+	"go.uber.org/zap"
 )
 
 // SyncPush pushes the latest snapshot of a project to its configured remote repository.
@@ -153,12 +157,16 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	if err != nil {
 		// commit 失败可能是因为没有变更
 		// 为什么：go-git 返回 "cannot create empty commit: clean working tree"，而不是 "nothing to commit"
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "nothing to commit") || strings.Contains(errMsg, "empty commit") {
+			if git.IsGitError(err, git.ErrTypeEmptyCommit) {
+			logger.Info("没有变更需要推送",
+				zap.String("project", projectName),
+				zap.Int("files_written", filesWritten),
+			)
+			// 没有实际推送，filesPushed 应该是 0
 			return &typesSync.SyncPushResult{
 				Success:     true,
 				Project:     projectName,
-				FilesPushed: filesWritten,
+				FilesPushed: 0,
 				RemoteURL:   remoteConfig.URL,
 			}, nil
 		}
@@ -178,6 +186,12 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	})
 	if err != nil {
 		// push 失败不影响本地
+		logger.Error("推送失败",
+			zap.String("project", projectName),
+			zap.String("remote_url", remoteConfig.URL),
+			zap.String("branch", remoteConfig.Branch),
+			zap.Error(err),
+		)
 		return nil, &UserError{
 			Message:    fmt.Sprintf("推送失败：无法推送到远端仓库 \"%s\" (%s)", remoteConfig.Name, remoteConfig.URL),
 			Suggestion: "请检查网络连接和仓库权限。本地数据未受影响。",
@@ -190,12 +204,64 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		commitHash = commitResult.CommitHash
 	}
 
+
+	// 第八步：验证远端是否真的收到了提交
+	verified := false
+
+	// 兆底：bbranch 为空时从仓库 HEAD 推导当前分支名
+	verifyBranch := remoteConfig.Branch
+	if verifyBranch == "" {
+		if head, headErr := gitClient.GetStatus(&git.StatusOptions{Path: repoPath}); headErr == nil {
+			verifyBranch = head.Branch
+		}
+	}
+
+	if verifyBranch != "" {
+		logger.Info("验证远端提交",
+			zap.String("project", projectName),
+			zap.String("commit", commitHash),
+			zap.String("remote_url", remoteConfig.URL),
+			zap.String("branch", verifyBranch),
+		)
+		remoteHash, err := gitClient.GetRemoteHeadHash(repoPath, "origin", verifyBranch)
+		if err != nil {
+			logger.Warn("无法获取远端 HEAD，跳过验证",
+				zap.String("project", projectName),
+				zap.String("branch", verifyBranch),
+				zap.Error(err),
+			)
+		} else if commitHash != "" && remoteHash != commitHash {
+			logger.Error("远端提交验证失败",
+				zap.String("project", projectName),
+				zap.String("local_commit", commitHash),
+				zap.String("remote_commit", remoteHash),
+			)
+			return nil, &UserError{
+				Message:    fmt.Sprintf("推送失败：远端仓库未收到提交（本地: %s, 远端: %s）", commitHash[:8], remoteHash[:8]),
+				Suggestion: "请检查远端仓库状态、分支配置和网络连接。本地数据未受影响。",
+				Err:        err,
+			}
+		} else {
+			verified = true
+			logger.Info("推送验证成功",
+				zap.String("project", projectName),
+				zap.String("commit", commitHash),
+				zap.Int("files_pushed", filesWritten),
+			)
+		}
+	} else {
+		logger.Warn("无法确定分支名，跳过远端验证",
+			zap.String("project", projectName),
+		)
+	}
+
 	return &typesSync.SyncPushResult{
 		Success:     true,
 		Project:     projectName,
 		FilesPushed: filesWritten,
 		CommitHash:  commitHash,
 		RemoteURL:   remoteConfig.URL,
+		Verified:    verified,
 	}, nil
 }
 
@@ -275,18 +341,12 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	})
 	if err != nil {
 		// fetch 失败可能是网络问题
-		if strings.Contains(err.Error(), "already up-to-date") {
-			return &typesSync.SyncPullResult{
-				Success:      true,
-				Project:      projectName,
-				FilesUpdated: 0,
-			}, nil
-		}
-		return nil, &UserError{
-			Message:    fmt.Sprintf("拉取失败：无法获取远端更新（远端: %s）", remoteConfig.URL),
-			Suggestion: "请检查网络连接和仓库权限",
-			Err:        err,
-		}
+		logger.Error("拉取远端更新失败",
+			zap.String("project", projectName),
+			zap.String("remote_url", remoteConfig.URL),
+			zap.Error(err),
+		)
+		return nil, gitErrToUser(err, remoteConfig.URL)
 	}
 
 	// 第五步：获取远端 HEAD 并对比变更
@@ -423,18 +483,12 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		Branch:     remoteConfig.Branch,
 	})
 	if err != nil {
-		if strings.Contains(err.Error(), "already up-to-date") {
-			return &typesSync.SyncPullResult{
-				Success:      true,
-				Project:      projectName,
-				FilesUpdated: 0,
-			}, nil
-		}
-		return nil, &UserError{
-			Message:    fmt.Sprintf("拉取失败：Git pull 失败（远端: %s）", remoteConfig.URL),
-			Suggestion: "请检查网络连接和仓库权限",
-			Err:        err,
-		}
+		logger.Error("Git pull 失败",
+			zap.String("project", projectName),
+			zap.String("remote_url", remoteConfig.URL),
+			zap.Error(err),
+		)
+		return nil, gitErrToUser(err, remoteConfig.URL)
 	}
 
 	// 第九步：更新 SQLite 中安全合并的文件
@@ -498,4 +552,49 @@ func mkdirAll(path string) error {
 // writeFile writes data to a file.
 func writeFile(path string, data []byte) error {
 	return os.WriteFile(path, data, 0644)
+}
+
+// gitErrToUser converts a git error (typed or untyped) into a user-friendly UserError.
+func gitErrToUser(err error, remoteURL string) *UserError {
+	var ge *git.GitError
+	if errors.As(err, &ge) {
+		switch ge.Type {
+		case git.ErrTypeAuth:
+			return &UserError{
+				Message:    "拉取失败：认证失败",
+				Suggestion: "请检查用户名和密码/SSH密钥是否正确，或更新访问令牌",
+				Err:        err,
+			}
+		case git.ErrTypeNetwork:
+			return &UserError{
+				Message:    "拉取失败：网络连接失败",
+				Suggestion: "请检查网络连接和仓库地址是否正确",
+				Err:        err,
+			}
+		case git.ErrTypeNotFound:
+			return &UserError{
+				Message:    fmt.Sprintf("拉取失败：仓库不存在（%s）", remoteURL),
+				Suggestion: "请检查仓库地址是否有误，或是否有访问权限",
+				Err:        err,
+			}
+		case git.ErrTypePermission:
+			return &UserError{
+				Message:    "拉取失败：权限不足",
+				Suggestion: "请检查您是否有该仓库的读取权限",
+				Err:        err,
+			}
+		case git.ErrTypeSSL:
+			return &UserError{
+				Message:    "拉取失败：SSL/TLS 证书验证失败",
+				Suggestion: "请检查证书配置或尝试使用 HTTPS 协议",
+				Err:        err,
+			}
+		}
+	}
+
+	return &UserError{
+		Message:    fmt.Sprintf("拉取失败：%s", err.Error()),
+		Suggestion: "请查看日志了解详细错误信息",
+		Err:        err,
+	}
 }

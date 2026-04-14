@@ -1,14 +1,13 @@
 package snapshot
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"flux/internal/models"
+	"flux/pkg/crypto"
 	"flux/pkg/logger"
 
 	typesSnapshot "flux/internal/types/snapshot"
@@ -141,7 +140,7 @@ func (c *Comparator) CompareWithFileSystem(
 		}
 
 		// 计算当前文件哈希
-		currentHash := c.calculateHash(currentContent)
+		currentHash := crypto.SHA256Hash(currentContent)
 
 		// 比较哈希
 		if currentHash != snapshotFile.Hash {
@@ -183,7 +182,7 @@ func (c *Comparator) CompareFiles(path1, path2 string) (*FileComparison, error) 
 	if err != nil {
 		return nil, err
 	}
-	comparison.SourceHash = c.calculateHash(sourceContent)
+	comparison.SourceHash = crypto.SHA256Hash(sourceContent)
 
 	// 读取目标文件
 	targetContent, err := os.ReadFile(path2)
@@ -194,7 +193,7 @@ func (c *Comparator) CompareFiles(path1, path2 string) (*FileComparison, error) 
 		}
 		return nil, err
 	}
-	comparison.TargetHash = c.calculateHash(targetContent)
+	comparison.TargetHash = crypto.SHA256Hash(targetContent)
 
 	// 比较哈希
 	if comparison.SourceHash != comparison.TargetHash {
@@ -250,7 +249,7 @@ func (c *Comparator) DetectConflicts(
 		}
 
 		// 计算现有文件哈希
-		existingHash := c.calculateHash(existingContent)
+		existingHash := crypto.SHA256Hash(existingContent)
 
 		// 检查是否冲突
 		if existingHash != file.Hash && !force {
@@ -346,11 +345,6 @@ func (c *Comparator) FindChangedFiles(
 	return changed, nil
 }
 
-// calculateHash 计算文件哈希
-func (c *Comparator) calculateHash(content []byte) string {
-	hash := sha256.Sum256(content)
-	return hex.EncodeToString(hash[:])
-}
 
 // logFileChange 记录文件变更日志
 func (c *Comparator) logFileChange(path, status, reason string) {
@@ -426,7 +420,7 @@ func (c *Comparator) ValidateFileIntegrity(snapshot *models.Snapshot) ([]string,
 		}
 
 		// 重新计算哈希并验证
-		calculatedHash := c.calculateHash(file.Content)
+		calculatedHash := crypto.SHA256Hash(file.Content)
 		if calculatedHash != file.Hash {
 			invalid = append(invalid, file.Path+": 哈希不匹配")
 		}

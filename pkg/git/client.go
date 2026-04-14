@@ -82,7 +82,7 @@ func (c *GitClient) Clone(ctx context.Context, opts *CloneOptions) (*RepositoryI
 	repo, err := git.PlainCloneContext(ctx, opts.Path, false, cloneOpts)
 	if err != nil {
 		logger.Error("克隆仓库失败", zap.Error(err))
-		return nil, fmt.Errorf("克隆仓库失败: %w", err)
+		return nil, classifyError(err, "克隆仓库失败")
 	}
 
 	logger.Info("仓库克隆成功", zap.String("path", opts.Path))
@@ -157,7 +157,7 @@ func (c *GitClient) Pull(ctx context.Context, opts *PullOptions) (*OperationResu
 			}, nil
 		}
 		logger.Error("拉取失败", zap.Error(err))
-		return nil, fmt.Errorf("拉取失败: %w", err)
+		return nil, classifyError(err, "拉取失败")
 	}
 
 	logger.Info("拉取成功")
@@ -227,7 +227,7 @@ func (c *GitClient) Push(ctx context.Context, opts *PushOptions) (*OperationResu
 	err = repo.PushContext(ctx, pushOpts)
 	if err != nil {
 		logger.Error("推送失败", zap.Error(err))
-		return nil, fmt.Errorf("推送失败: %w", err)
+		return nil, classifyError(err, "推送失败")
 	}
 
 	logger.Info("推送成功")
@@ -387,13 +387,7 @@ func (c *GitClient) Commit(ctx context.Context, opts *CommitOptions) (*CommitRes
 		},
 	})
 	if err != nil {
-		// clean working tree is not a real error
-		if strings.Contains(err.Error(), "empty commit") || strings.Contains(err.Error(), "nothing to commit") {
-			logger.Debug("no changes to commit")
-			return nil, fmt.Errorf("提交失败: %w", err)
-		}
-		logger.Error("提交失败", zap.Error(err))
-		return nil, fmt.Errorf("提交失败: %w", err)
+		return nil, classifyError(err, "提交失败")
 	}
 
 	// 获取提交信息
@@ -527,7 +521,7 @@ func (c *GitClient) Fetch(ctx context.Context, opts *FetchOptions) (*OperationRe
 		if err == git.NoErrAlreadyUpToDate {
 			return &OperationResult{Success: true, Message: "已是最新"}, nil
 		}
-		return nil, fmt.Errorf("fetch 失败: %w", err)
+		return nil, classifyError(err, "fetch 失败")
 	}
 
 	return &OperationResult{Success: true, Message: "fetch 成功"}, nil
