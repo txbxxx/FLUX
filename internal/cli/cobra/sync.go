@@ -119,6 +119,9 @@ func printSyncPushResult(w io.Writer, result *typesSync.SyncPushResult) {
 			fmt.Fprintf(w, "  提交:   %s\n", result.CommitHash[:8])
 		}
 		fmt.Fprintf(w, "  远端:   %s\n", result.RemoteURL)
+		if !result.Verified {
+			fmt.Fprintf(w, "\n  注意: 远端验证未完成，推送可能未生效，建议手动确认\n")
+		}
 	} else {
 		fmt.Fprintf(w, "推送失败: %s\n", result.Error)
 	}

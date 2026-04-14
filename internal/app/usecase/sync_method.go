@@ -204,36 +204,54 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		commitHash = commitResult.CommitHash
 	}
 
+
 	// 第八步：验证远端是否真的收到了提交
-	logger.Info("验证远端提交",
-		zap.String("project", projectName),
-		zap.String("commit", commitHash),
-		zap.String("remote_url", remoteConfig.URL),
-		zap.String("branch", remoteConfig.Branch),
-	)
-	remoteHash, err := gitClient.GetRemoteHeadHash(repoPath, "origin", remoteConfig.Branch)
-	if err != nil {
-		logger.Warn("无法获取远端 HEAD，跳过验证",
-			zap.String("project", projectName),
-			zap.Error(err),
-		)
-	} else if commitHash != "" && remoteHash != commitHash {
-		// 本地和远端不一致，push 可能失败
-		logger.Error("远端提交验证失败",
-			zap.String("project", projectName),
-			zap.String("local_commit", commitHash),
-			zap.String("remote_commit", remoteHash),
-		)
-		return nil, &UserError{
-			Message:    fmt.Sprintf("推送失败：远端仓库未收到提交（本地: %s, 远端: %s）", commitHash[:8], remoteHash[:8]),
-			Suggestion: "请检查远端仓库状态、分支配置和网络连接。本地数据未受影响。",
-			Err:        err,
+	verified := false
+
+	// 兆底：bbranch 为空时从仓库 HEAD 推导当前分支名
+	verifyBranch := remoteConfig.Branch
+	if verifyBranch == "" {
+		if head, headErr := gitClient.GetStatus(&git.StatusOptions{Path: repoPath}); headErr == nil {
+			verifyBranch = head.Branch
 		}
-	} else {
-		logger.Info("推送验证成功",
+	}
+
+	if verifyBranch != "" {
+		logger.Info("验证远端提交",
 			zap.String("project", projectName),
 			zap.String("commit", commitHash),
-			zap.Int("files_pushed", filesWritten),
+			zap.String("remote_url", remoteConfig.URL),
+			zap.String("branch", verifyBranch),
+		)
+		remoteHash, err := gitClient.GetRemoteHeadHash(repoPath, "origin", verifyBranch)
+		if err != nil {
+			logger.Warn("无法获取远端 HEAD，跳过验证",
+				zap.String("project", projectName),
+				zap.String("branch", verifyBranch),
+				zap.Error(err),
+			)
+		} else if commitHash != "" && remoteHash != commitHash {
+			logger.Error("远端提交验证失败",
+				zap.String("project", projectName),
+				zap.String("local_commit", commitHash),
+				zap.String("remote_commit", remoteHash),
+			)
+			return nil, &UserError{
+				Message:    fmt.Sprintf("推送失败：远端仓库未收到提交（本地: %s, 远端: %s）", commitHash[:8], remoteHash[:8]),
+				Suggestion: "请检查远端仓库状态、分支配置和网络连接。本地数据未受影响。",
+				Err:        err,
+			}
+		} else {
+			verified = true
+			logger.Info("推送验证成功",
+				zap.String("project", projectName),
+				zap.String("commit", commitHash),
+				zap.Int("files_pushed", filesWritten),
+			)
+		}
+	} else {
+		logger.Warn("无法确定分支名，跳过远端验证",
+			zap.String("project", projectName),
 		)
 	}
 
@@ -243,6 +261,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		FilesPushed: filesWritten,
 		CommitHash:  commitHash,
 		RemoteURL:   remoteConfig.URL,
+		Verified:    verified,
 	}, nil
 }
 
