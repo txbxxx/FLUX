@@ -10,8 +10,8 @@ import (
 	"flux/internal/models"
 	"flux/internal/service/tool"
 	typesSnapshot "flux/internal/types/snapshot"
-	"flux/pkg/crypto"
 	"flux/pkg/database"
+	"flux/pkg/utils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -476,9 +476,9 @@ func TestCollector_CalculateHash(t *testing.T) {
 	content2 := []byte("test content")
 	content3 := []byte("different content")
 
-	hash1 := crypto.SHA256Hash(content1)
-	hash2 := crypto.SHA256Hash(content2)
-	hash3 := crypto.SHA256Hash(content3)
+	hash1 := utils.SHA256Hash(content1)
+	hash2 := utils.SHA256Hash(content2)
+	hash3 := utils.SHA256Hash(content3)
 
 	assert.Equal(t, hash1, hash2)    // 相同内容，相同哈希
 	assert.NotEqual(t, hash1, hash3) // 不同内容，不同哈希

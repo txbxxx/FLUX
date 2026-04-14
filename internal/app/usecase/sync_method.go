@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"errors"
 	"strings"
 
 	"flux/internal/models"
-	"flux/pkg/git"
 	typesSync "flux/internal/types/sync"
+	"flux/pkg/git"
 	"flux/pkg/logger"
 
 	"go.uber.org/zap"
@@ -117,6 +116,10 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 			Branch: remoteConfig.Branch,
 		}
 		if _, cloneErr := gitClient.Clone(ctx, cloneOpts); cloneErr != nil {
+			logger.Info("Clone 失败，尝试初始化新仓库",
+				zap.String("repo_path", repoPath),
+				zap.Error(cloneErr),
+			)
 			// clone 失败则初始化新仓库
 			if _, initErr := git.InitRepository(repoPath, false); initErr != nil {
 				return nil, &UserError{
@@ -126,7 +129,23 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 				}
 			}
 			_ = git.AddRemote(repoPath, "origin", remoteConfig.URL)
+			logger.Info("新仓库初始化成功", zap.String("repo_path", repoPath))
+		} else {
+			logger.Info("Clone 成功", zap.String("repo_path", repoPath))
 		}
+	}
+
+	// 确保分枝正确：clone 空仓库或 init 后，HEAD 可能指向 master 而非 main
+	targetBranch := remoteConfig.Branch
+	if targetBranch == "" {
+		targetBranch = "main"
+	}
+	if branchErr := git.EnsureBranch(repoPath, targetBranch); branchErr != nil {
+		logger.Warn("设置分枝失败，将使用默认分枝",
+			zap.String("repo_path", repoPath),
+			zap.String("branch", targetBranch),
+			zap.Error(branchErr),
+		)
 	}
 
 	// 第五步：从 SQLite 读文件 → 写入工作目录
@@ -146,6 +165,36 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		filesWritten++
 	}
 
+	logger.Info("文件写入完成",
+		zap.String("repo_path", repoPath),
+		zap.Int("files_written", filesWritten),
+	)
+
+	// 诊断：写入后检查 git status
+	statusResult, statusErr := gitClient.GetStatus(&git.StatusOptions{Path: repoPath})
+	if statusErr != nil {
+		logger.Warn("无法获取 git status",
+			zap.String("repo_path", repoPath),
+			zap.Error(statusErr),
+		)
+	} else {
+		logger.Info("Git status 诊断",
+			zap.Bool("is_clean", statusResult.IsClean),
+			zap.String("branch", statusResult.Branch),
+			zap.Int("changed_files", len(statusResult.Files)),
+		)
+		for i, f := range statusResult.Files {
+			if i >= 5 {
+				break
+			}
+			logger.Info("Git status 文件",
+				zap.String("path", f.Path),
+				zap.String("worktree", f.Worktree),
+				zap.String("staging", f.Staging),
+			)
+		}
+	}
+
 	// 第六步：Git add + commit
 	commitMsg := fmt.Sprintf("Snapshot: %s\nID: %d\nProject: %s\nFiles: %d",
 		snapshot.Name, snapshot.ID, snapshot.Project, filesWritten)
@@ -157,17 +206,27 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	if err != nil {
 		// commit 失败可能是因为没有变更
 		// 为什么：go-git 返回 "cannot create empty commit: clean working tree"，而不是 "nothing to commit"
-			if git.IsGitError(err, git.ErrTypeEmptyCommit) {
-			logger.Info("没有变更需要推送",
-				zap.String("project", projectName),
-				zap.Int("files_written", filesWritten),
-			)
-			// 没有实际推送，filesPushed 应该是 0
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "nothing to commit") || strings.Contains(errMsg, "empty commit") {
+			// 为什么需要区分 filesWritten：用户第一次推送时如果远端已有相同内容，
+			// 会写入大量文件但 git 认为无变更，需要给出明确说明。
+			msg := "远端仓库内容与本地快照一致，无需推送"
+			if filesWritten == 0 {
+				msg = "快照中没有需要推送的文件"
+			} else {
+				logger.Warn("文件已写入但 Git 未检测到变更",
+					zap.String("project", projectName),
+					zap.Int("files_written", filesWritten),
+					zap.String("repo_path", repoPath),
+					zap.Error(err),
+				)
+			}
 			return &typesSync.SyncPushResult{
 				Success:     true,
 				Project:     projectName,
 				FilesPushed: 0,
 				RemoteURL:   remoteConfig.URL,
+				Message:     msg,
 			}, nil
 		}
 		return nil, &UserError{
@@ -178,18 +237,22 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	}
 
 	// 第七步：Git push
-	_, err = gitClient.Push(ctx, &git.PushOptions{
+	branch := remoteConfig.Branch
+	if branch == "" {
+		branch = "main"
+	}
+	pushResult, err := gitClient.Push(ctx, &git.PushOptions{
 		Path:       repoPath,
 		Auth:       convertAuthFromModel(&remoteConfig.Auth),
 		RemoteName: "origin",
-		Branch:     remoteConfig.Branch,
+		Branch:     branch,
 	})
 	if err != nil {
 		// push 失败不影响本地
 		logger.Error("推送失败",
 			zap.String("project", projectName),
 			zap.String("remote_url", remoteConfig.URL),
-			zap.String("branch", remoteConfig.Branch),
+			zap.String("branch", branch),
 			zap.Error(err),
 		)
 		return nil, &UserError{
@@ -198,60 +261,60 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 			Err:        err,
 		}
 	}
+	// 诊断：push 后的仓库状态
+	logger.Info("Push 返回结果",
+		zap.String("project", projectName),
+		zap.Bool("success", pushResult.Success),
+		zap.String("message", pushResult.Message),
+	)
+	localHead, _ := gitClient.GetHeadHash(repoPath)
+	logger.Info("本地 HEAD",
+		zap.String("project", projectName),
+		zap.String("local_head", localHead),
+	)
+	remoteHead, remoteHeadErr := gitClient.GetRemoteHeadHash(repoPath, "origin", branch)
+	logger.Info("远端 HEAD",
+		zap.String("project", projectName),
+		zap.String("branch", branch),
+		zap.String("remote_head", remoteHead),
+		zap.Error(remoteHeadErr),
+	)
 
 	commitHash := ""
 	if commitResult != nil {
 		commitHash = commitResult.CommitHash
 	}
 
-
 	// 第八步：验证远端是否真的收到了提交
-	verified := false
-
-	// 兆底：bbranch 为空时从仓库 HEAD 推导当前分支名
-	verifyBranch := remoteConfig.Branch
-	if verifyBranch == "" {
-		if head, headErr := gitClient.GetStatus(&git.StatusOptions{Path: repoPath}); headErr == nil {
-			verifyBranch = head.Branch
-		}
-	}
-
-	if verifyBranch != "" {
-		logger.Info("验证远端提交",
+	logger.Info("验证远端提交",
+		zap.String("project", projectName),
+		zap.String("commit", commitHash),
+		zap.String("remote_url", remoteConfig.URL),
+		zap.String("branch", remoteConfig.Branch),
+	)
+	remoteHash, err := gitClient.GetRemoteHeadHash(repoPath, "origin", remoteConfig.Branch)
+	if err != nil {
+		logger.Warn("无法获取远端 HEAD，跳过验证",
 			zap.String("project", projectName),
-			zap.String("commit", commitHash),
-			zap.String("remote_url", remoteConfig.URL),
-			zap.String("branch", verifyBranch),
+			zap.Error(err),
 		)
-		remoteHash, err := gitClient.GetRemoteHeadHash(repoPath, "origin", verifyBranch)
-		if err != nil {
-			logger.Warn("无法获取远端 HEAD，跳过验证",
-				zap.String("project", projectName),
-				zap.String("branch", verifyBranch),
-				zap.Error(err),
-			)
-		} else if commitHash != "" && remoteHash != commitHash {
-			logger.Error("远端提交验证失败",
-				zap.String("project", projectName),
-				zap.String("local_commit", commitHash),
-				zap.String("remote_commit", remoteHash),
-			)
-			return nil, &UserError{
-				Message:    fmt.Sprintf("推送失败：远端仓库未收到提交（本地: %s, 远端: %s）", commitHash[:8], remoteHash[:8]),
-				Suggestion: "请检查远端仓库状态、分支配置和网络连接。本地数据未受影响。",
-				Err:        err,
-			}
-		} else {
-			verified = true
-			logger.Info("推送验证成功",
-				zap.String("project", projectName),
-				zap.String("commit", commitHash),
-				zap.Int("files_pushed", filesWritten),
-			)
+	} else if commitHash != "" && remoteHash != commitHash {
+		// 本地和远端不一致，push 可能失败
+		logger.Error("远端提交验证失败",
+			zap.String("project", projectName),
+			zap.String("local_commit", commitHash),
+			zap.String("remote_commit", remoteHash),
+		)
+		return nil, &UserError{
+			Message:    fmt.Sprintf("推送失败：远端仓库未收到提交（本地: %s, 远端: %s）", commitHash[:8], remoteHash[:8]),
+			Suggestion: "请检查远端仓库状态、分支配置和网络连接。本地数据未受影响。",
+			Err:        err,
 		}
 	} else {
-		logger.Warn("无法确定分支名，跳过远端验证",
+		logger.Info("推送验证成功",
 			zap.String("project", projectName),
+			zap.String("commit", commitHash),
+			zap.Int("files_pushed", filesWritten),
 		)
 	}
 
@@ -261,7 +324,6 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		FilesPushed: filesWritten,
 		CommitHash:  commitHash,
 		RemoteURL:   remoteConfig.URL,
-		Verified:    verified,
 	}, nil
 }
 
@@ -341,12 +403,26 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	})
 	if err != nil {
 		// fetch 失败可能是网络问题
+		if strings.Contains(err.Error(), "already up-to-date") {
+			return &typesSync.SyncPullResult{
+				Success:      true,
+				Project:      projectName,
+				FilesUpdated: 0,
+			}, nil
+		}
+
+		// 解析错误类型并返回具体信息
+		errorMsg, suggestion := parseGitError(err.Error(), remoteConfig.URL)
 		logger.Error("拉取远端更新失败",
 			zap.String("project", projectName),
 			zap.String("remote_url", remoteConfig.URL),
 			zap.Error(err),
 		)
-		return nil, gitErrToUser(err, remoteConfig.URL)
+		return nil, &UserError{
+			Message:    errorMsg,
+			Suggestion: suggestion,
+			Err:        err,
+		}
 	}
 
 	// 第五步：获取远端 HEAD 并对比变更
@@ -483,12 +559,26 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		Branch:     remoteConfig.Branch,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "already up-to-date") {
+			return &typesSync.SyncPullResult{
+				Success:      true,
+				Project:      projectName,
+				FilesUpdated: 0,
+			}, nil
+		}
+
+		// 解析错误类型并返回具体信息
+		errorMsg, suggestion := parseGitError(err.Error(), remoteConfig.URL)
 		logger.Error("Git pull 失败",
 			zap.String("project", projectName),
 			zap.String("remote_url", remoteConfig.URL),
 			zap.Error(err),
 		)
-		return nil, gitErrToUser(err, remoteConfig.URL)
+		return nil, &UserError{
+			Message:    errorMsg,
+			Suggestion: suggestion,
+			Err:        err,
+		}
 	}
 
 	// 第九步：更新 SQLite 中安全合并的文件
@@ -554,47 +644,52 @@ func writeFile(path string, data []byte) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// gitErrToUser converts a git error (typed or untyped) into a user-friendly UserError.
-func gitErrToUser(err error, remoteURL string) *UserError {
-	var ge *git.GitError
-	if errors.As(err, &ge) {
-		switch ge.Type {
-		case git.ErrTypeAuth:
-			return &UserError{
-				Message:    "拉取失败：认证失败",
-				Suggestion: "请检查用户名和密码/SSH密钥是否正确，或更新访问令牌",
-				Err:        err,
-			}
-		case git.ErrTypeNetwork:
-			return &UserError{
-				Message:    "拉取失败：网络连接失败",
-				Suggestion: "请检查网络连接和仓库地址是否正确",
-				Err:        err,
-			}
-		case git.ErrTypeNotFound:
-			return &UserError{
-				Message:    fmt.Sprintf("拉取失败：仓库不存在（%s）", remoteURL),
-				Suggestion: "请检查仓库地址是否有误，或是否有访问权限",
-				Err:        err,
-			}
-		case git.ErrTypePermission:
-			return &UserError{
-				Message:    "拉取失败：权限不足",
-				Suggestion: "请检查您是否有该仓库的读取权限",
-				Err:        err,
-			}
-		case git.ErrTypeSSL:
-			return &UserError{
-				Message:    "拉取失败：SSL/TLS 证书验证失败",
-				Suggestion: "请检查证书配置或尝试使用 HTTPS 协议",
-				Err:        err,
-			}
-		}
+// parseGitError 解析 Git 错误并返回具体的错误信息和建议
+func parseGitError(errStr, remoteURL string) (errorMsg, suggestion string) {
+	errStr = strings.ToLower(errStr)
+
+	// 认证失败
+	if strings.Contains(errStr, "authentication required") ||
+		strings.Contains(errStr, "invalid credentials") ||
+		strings.Contains(errStr, "permission denied") && strings.Contains(errStr, "publickey") {
+		return "拉取失败：认证失败",
+			"请检查用户名和密码/SSH密钥是否正确，或更新访问令牌"
 	}
 
-	return &UserError{
-		Message:    fmt.Sprintf("拉取失败：%s", err.Error()),
-		Suggestion: "请查看日志了解详细错误信息",
-		Err:        err,
+	// 网络连接失败
+	if strings.Contains(errStr, "could not resolve") ||
+		strings.Contains(errStr, "network") && strings.Contains(errStr, "unreachable") ||
+		strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "timeout") {
+		return "拉取失败：网络连接失败",
+			"请检查网络连接和仓库地址是否正确"
 	}
+
+	// 仓库不存在
+	if strings.Contains(errStr, "repository not found") ||
+		strings.Contains(errStr, "404") ||
+		strings.Contains(errStr, "does not appear to be a git repository") {
+		return fmt.Sprintf("拉取失败：仓库不存在（%s）", remoteURL),
+			"请检查仓库地址是否有误，或是否有访问权限"
+	}
+
+	// 权限不足
+	if strings.Contains(errStr, "permission denied") ||
+		strings.Contains(errStr, "403") ||
+		strings.Contains(errStr, "forbidden") {
+		return "拉取失败：权限不足",
+			"请检查您是否有该仓库的读取权限"
+	}
+
+	// SSL/TLS 证书问题
+	if strings.Contains(errStr, "ssl") ||
+		strings.Contains(errStr, "certificate") ||
+		strings.Contains(errStr, "tls") {
+		return "拉取失败：SSL/TLS 证书验证失败",
+			"请检查证书配置或尝试使用 HTTPS 协议"
+	}
+
+	// 默认返回原始错误
+	return fmt.Sprintf("拉取失败：%s", errStr),
+		"请查看日志了解详细错误信息"
 }

@@ -112,15 +112,19 @@ func newSyncStatusCommand(deps Dependencies) *spcobra.Command {
 
 func printSyncPushResult(w io.Writer, result *typesSync.SyncPushResult) {
 	if result.Success {
-		fmt.Fprintf(w, "推送成功\n\n")
-		fmt.Fprintf(w, "  项目:   %s\n", result.Project)
-		fmt.Fprintf(w, "  文件:   %d 个已推送\n", result.FilesPushed)
-		if result.CommitHash != "" {
-			fmt.Fprintf(w, "  提交:   %s\n", result.CommitHash[:8])
-		}
-		fmt.Fprintf(w, "  远端:   %s\n", result.RemoteURL)
-		if !result.Verified {
-			fmt.Fprintf(w, "\n  注意: 远端验证未完成，推送可能未生效，建议手动确认\n")
+		if result.FilesPushed == 0 && result.Message != "" {
+			fmt.Fprintf(w, "无需推送\n\n")
+			fmt.Fprintf(w, "  项目:   %s\n", result.Project)
+			fmt.Fprintf(w, "  说明:   %s\n", result.Message)
+			fmt.Fprintf(w, "  远端:   %s\n", result.RemoteURL)
+		} else {
+			fmt.Fprintf(w, "推送成功\n\n")
+			fmt.Fprintf(w, "  项目:   %s\n", result.Project)
+			fmt.Fprintf(w, "  文件:   %d 个已推送\n", result.FilesPushed)
+			if result.CommitHash != "" {
+				fmt.Fprintf(w, "  提交:   %s\n", result.CommitHash[:8])
+			}
+			fmt.Fprintf(w, "  远端:   %s\n", result.RemoteURL)
 		}
 	} else {
 		fmt.Fprintf(w, "推送失败: %s\n", result.Error)

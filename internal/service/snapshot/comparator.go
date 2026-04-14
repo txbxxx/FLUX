@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"flux/internal/models"
-	"flux/pkg/crypto"
 	"flux/pkg/logger"
+	"flux/pkg/utils"
 
 	typesSnapshot "flux/internal/types/snapshot"
 
@@ -140,7 +140,7 @@ func (c *Comparator) CompareWithFileSystem(
 		}
 
 		// 计算当前文件哈希
-		currentHash := crypto.SHA256Hash(currentContent)
+		currentHash := utils.SHA256Hash(currentContent)
 
 		// 比较哈希
 		if currentHash != snapshotFile.Hash {
@@ -182,7 +182,7 @@ func (c *Comparator) CompareFiles(path1, path2 string) (*FileComparison, error) 
 	if err != nil {
 		return nil, err
 	}
-	comparison.SourceHash = crypto.SHA256Hash(sourceContent)
+	comparison.SourceHash = utils.SHA256Hash(sourceContent)
 
 	// 读取目标文件
 	targetContent, err := os.ReadFile(path2)
@@ -193,7 +193,7 @@ func (c *Comparator) CompareFiles(path1, path2 string) (*FileComparison, error) 
 		}
 		return nil, err
 	}
-	comparison.TargetHash = crypto.SHA256Hash(targetContent)
+	comparison.TargetHash = utils.SHA256Hash(targetContent)
 
 	// 比较哈希
 	if comparison.SourceHash != comparison.TargetHash {
@@ -249,7 +249,7 @@ func (c *Comparator) DetectConflicts(
 		}
 
 		// 计算现有文件哈希
-		existingHash := crypto.SHA256Hash(existingContent)
+		existingHash := utils.SHA256Hash(existingContent)
 
 		// 检查是否冲突
 		if existingHash != file.Hash && !force {
@@ -420,7 +420,7 @@ func (c *Comparator) ValidateFileIntegrity(snapshot *models.Snapshot) ([]string,
 		}
 
 		// 重新计算哈希并验证
-		calculatedHash := crypto.SHA256Hash(file.Content)
+		calculatedHash := utils.SHA256Hash(file.Content)
 		if calculatedHash != file.Hash {
 			invalid = append(invalid, file.Path+": 哈希不匹配")
 		}
