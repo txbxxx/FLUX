@@ -82,7 +82,7 @@ func (c *GitClient) Clone(ctx context.Context, opts *CloneOptions) (*RepositoryI
 	repo, err := git.PlainCloneContext(ctx, opts.Path, false, cloneOpts)
 	if err != nil {
 		logger.Error("克隆仓库失败", zap.Error(err))
-		return nil, classifyError(err, "克隆仓库失败")
+		return nil, fmt.Errorf("克隆仓库失败: %w", err)
 	}
 
 	logger.Info("仓库克隆成功", zap.String("path", opts.Path))
@@ -157,7 +157,7 @@ func (c *GitClient) Pull(ctx context.Context, opts *PullOptions) (*OperationResu
 			}, nil
 		}
 		logger.Error("拉取失败", zap.Error(err))
-		return nil, classifyError(err, "拉取失败")
+		return nil, fmt.Errorf("拉取失败: %w", err)
 	}
 
 	logger.Info("拉取成功")
@@ -212,10 +212,38 @@ func (c *GitClient) Push(ctx context.Context, opts *PushOptions) (*OperationResu
 		pushOpts.RemoteName = opts.RemoteName
 	}
 
+	// 诊断：检查本地分支状态
+	localHead, _ := repo.Head()
+	if localHead != nil {
+		logger.Info("Push 前 HEAD 状态",
+			zap.String("head_name", localHead.Name().String()),
+			zap.String("head_hash", localHead.Hash().String()),
+		)
+	} else {
+		logger.Warn("Push 前 HEAD 为空")
+	}
+
 	if opts.Branch != "" {
 		refName := plumbing.ReferenceName("refs/heads/" + opts.Branch)
-		pushOpts.RefSpecs = []config.RefSpec{
-			config.RefSpec(refName + ":" + refName),
+		// 检查该分支是否存在
+		branchRef, branchErr := repo.Reference(refName, true)
+		if branchErr != nil {
+			logger.Warn("本地分支不存在，尝试用 HEAD 推送",
+				zap.String("branch", opts.Branch),
+				zap.Error(branchErr),
+			)
+			// 用 HEAD:refs/heads/branch 推送当前 HEAD 到目标分支
+			pushOpts.RefSpecs = []config.RefSpec{
+				config.RefSpec("HEAD:" + refName),
+			}
+		} else {
+			logger.Info("本地分支存在",
+				zap.String("branch", opts.Branch),
+				zap.String("hash", branchRef.Hash().String()),
+			)
+			pushOpts.RefSpecs = []config.RefSpec{
+				config.RefSpec(refName + ":" + refName),
+			}
 		}
 	}
 
@@ -226,8 +254,16 @@ func (c *GitClient) Push(ctx context.Context, opts *PushOptions) (*OperationResu
 	// 执行推送
 	err = repo.PushContext(ctx, pushOpts)
 	if err != nil {
+		// already up-to-date 不是错误，只是 Git 报告远端已是最新
+		if err == git.NoErrAlreadyUpToDate {
+			logger.Info("推送已是最新")
+			return &OperationResult{
+				Success: true,
+				Message: "已是最新，无需推送",
+			}, nil
+		}
 		logger.Error("推送失败", zap.Error(err))
-		return nil, classifyError(err, "推送失败")
+		return nil, fmt.Errorf("推送失败: %w", err)
 	}
 
 	logger.Info("推送成功")
@@ -387,7 +423,13 @@ func (c *GitClient) Commit(ctx context.Context, opts *CommitOptions) (*CommitRes
 		},
 	})
 	if err != nil {
-		return nil, classifyError(err, "提交失败")
+		// clean working tree is not a real error
+		if strings.Contains(err.Error(), "empty commit") || strings.Contains(err.Error(), "nothing to commit") {
+			logger.Debug("no changes to commit")
+			return nil, fmt.Errorf("提交失败: %w", err)
+		}
+		logger.Error("提交失败", zap.Error(err))
+		return nil, fmt.Errorf("提交失败: %w", err)
 	}
 
 	// 获取提交信息
@@ -462,14 +504,51 @@ func IsRepository(path string) bool {
 }
 
 // InitRepository 初始化新仓库，并复用 GitClient 的信息提取逻辑。
+// 默认 HEAD 指向 main 分支（go-git 默认是 master，现代仓库用 main）。
 func InitRepository(path string, bare bool) (*RepositoryInfo, error) {
 	repo, err := git.PlainInit(path, bare)
 	if err != nil {
 		return nil, fmt.Errorf("初始化仓库失败: %w", err)
 	}
 
+	if err := EnsureBranch(path, "main"); err != nil {
+		return nil, err
+	}
+
 	client := NewGitClient()
 	return client.getRepositoryInfo(repo, path)
+}
+
+// EnsureBranch ensures the repository's HEAD points to the specified branch.
+// 为什么：go-git 的 PlainInit 和空仓库的 Clone 都默认用 master 分支，
+// 但现代仓库约定用 main。调用方应在 clone/init 后调用此函数。
+func EnsureBranch(path, branch string) error {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	head, err := repo.Head()
+	if err != nil && err != plumbing.ErrReferenceNotFound {
+		// 新仓库没有 HEAD 是正常的
+		return nil
+	}
+
+	if head != nil {
+		expected := plumbing.ReferenceName("refs/heads/" + branch)
+		if head.Name() == expected {
+			return nil // 已正确
+		}
+	}
+
+	if err := repo.Storer.SetReference(
+		plumbing.NewSymbolicReference("HEAD", plumbing.ReferenceName("refs/heads/"+branch)),
+	); err != nil {
+		return fmt.Errorf("设置分支 %s 失败: %w", branch, err)
+	}
+
+	logger.Info("已设置仓库分支", zap.String("path", path), zap.String("branch", branch))
+	return nil
 }
 
 // AddRemote 为现有仓库添加远端配置。
@@ -521,7 +600,7 @@ func (c *GitClient) Fetch(ctx context.Context, opts *FetchOptions) (*OperationRe
 		if err == git.NoErrAlreadyUpToDate {
 			return &OperationResult{Success: true, Message: "已是最新"}, nil
 		}
-		return nil, classifyError(err, "fetch 失败")
+		return nil, fmt.Errorf("fetch 失败: %w", err)
 	}
 
 	return &OperationResult{Success: true, Message: "fetch 成功"}, nil

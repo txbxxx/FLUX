@@ -127,6 +127,18 @@ func (w *LocalWorkflow) AddRemote(ctx context.Context, input typesRemote.AddRemo
 		branch = "main"
 	}
 
+	// 自动推导认证类型：用户未指定时从 URL 推导
+	// 为什么：用户用 ssh:// URL 添加 remote 时容易忘记 --auth ssh，
+	// 导致 push/pull 时 NewAuthMethod 返回 nil，go-git 走 SSH agent 在 Windows 上失败。
+	authType := models.AuthType(input.AuthType)
+	if authType == "" {
+		if strings.HasPrefix(url, "ssh://") || strings.HasPrefix(url, "git@") {
+			authType = models.AuthTypeSSH
+		} else if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://") {
+			authType = models.AuthTypeToken
+		}
+	}
+
 	config := &models.RemoteConfig{
 		ID:        0, // GORM 自动生成自增 ID
 		Name:      name,
@@ -135,7 +147,7 @@ func (w *LocalWorkflow) AddRemote(ctx context.Context, input typesRemote.AddRemo
 		IsDefault: input.Project != "",
 		Status:    models.StatusInactive,
 		Auth: models.AuthConfig{
-			Type:       models.AuthType(input.AuthType),
+			Type:       authType,
 			Username:   strings.TrimSpace(input.Username),
 			Password:   strings.TrimSpace(input.Token),
 			SSHKey:     strings.TrimSpace(input.SSHKey),
