@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"errors"
 	"strings"
 
 	"flux/internal/models"
@@ -156,8 +157,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	if err != nil {
 		// commit 失败可能是因为没有变更
 		// 为什么：go-git 返回 "cannot create empty commit: clean working tree"，而不是 "nothing to commit"
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "nothing to commit") || strings.Contains(errMsg, "empty commit") {
+			if git.IsGitError(err, git.ErrTypeEmptyCommit) {
 			logger.Info("没有变更需要推送",
 				zap.String("project", projectName),
 				zap.Int("files_written", filesWritten),
@@ -322,26 +322,12 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	})
 	if err != nil {
 		// fetch 失败可能是网络问题
-		if strings.Contains(err.Error(), "already up-to-date") {
-			return &typesSync.SyncPullResult{
-				Success:      true,
-				Project:      projectName,
-				FilesUpdated: 0,
-			}, nil
-		}
-
-		// 解析错误类型并返回具体信息
-		errorMsg, suggestion := parseGitError(err.Error(), remoteConfig.URL)
 		logger.Error("拉取远端更新失败",
 			zap.String("project", projectName),
 			zap.String("remote_url", remoteConfig.URL),
 			zap.Error(err),
 		)
-		return nil, &UserError{
-			Message:    errorMsg,
-			Suggestion: suggestion,
-			Err:        err,
-		}
+		return nil, gitErrToUser(err, remoteConfig.URL)
 	}
 
 	// 第五步：获取远端 HEAD 并对比变更
@@ -478,26 +464,12 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		Branch:     remoteConfig.Branch,
 	})
 	if err != nil {
-		if strings.Contains(err.Error(), "already up-to-date") {
-			return &typesSync.SyncPullResult{
-				Success:      true,
-				Project:      projectName,
-				FilesUpdated: 0,
-			}, nil
-		}
-
-		// 解析错误类型并返回具体信息
-		errorMsg, suggestion := parseGitError(err.Error(), remoteConfig.URL)
 		logger.Error("Git pull 失败",
 			zap.String("project", projectName),
 			zap.String("remote_url", remoteConfig.URL),
 			zap.Error(err),
 		)
-		return nil, &UserError{
-			Message:    errorMsg,
-			Suggestion: suggestion,
-			Err:        err,
-		}
+		return nil, gitErrToUser(err, remoteConfig.URL)
 	}
 
 	// 第九步：更新 SQLite 中安全合并的文件
@@ -563,52 +535,47 @@ func writeFile(path string, data []byte) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// parseGitError 解析 Git 错误并返回具体的错误信息和建议
-func parseGitError(errStr, remoteURL string) (errorMsg, suggestion string) {
-	errStr = strings.ToLower(errStr)
-
-	// 认证失败
-	if strings.Contains(errStr, "authentication required") ||
-		strings.Contains(errStr, "invalid credentials") ||
-		strings.Contains(errStr, "permission denied") && strings.Contains(errStr, "publickey") {
-		return "拉取失败：认证失败",
-			"请检查用户名和密码/SSH密钥是否正确，或更新访问令牌"
+// gitErrToUser converts a git error (typed or untyped) into a user-friendly UserError.
+func gitErrToUser(err error, remoteURL string) *UserError {
+	var ge *git.GitError
+	if errors.As(err, &ge) {
+		switch ge.Type {
+		case git.ErrTypeAuth:
+			return &UserError{
+				Message:    "拉取失败：认证失败",
+				Suggestion: "请检查用户名和密码/SSH密钥是否正确，或更新访问令牌",
+				Err:        err,
+			}
+		case git.ErrTypeNetwork:
+			return &UserError{
+				Message:    "拉取失败：网络连接失败",
+				Suggestion: "请检查网络连接和仓库地址是否正确",
+				Err:        err,
+			}
+		case git.ErrTypeNotFound:
+			return &UserError{
+				Message:    fmt.Sprintf("拉取失败：仓库不存在（%s）", remoteURL),
+				Suggestion: "请检查仓库地址是否有误，或是否有访问权限",
+				Err:        err,
+			}
+		case git.ErrTypePermission:
+			return &UserError{
+				Message:    "拉取失败：权限不足",
+				Suggestion: "请检查您是否有该仓库的读取权限",
+				Err:        err,
+			}
+		case git.ErrTypeSSL:
+			return &UserError{
+				Message:    "拉取失败：SSL/TLS 证书验证失败",
+				Suggestion: "请检查证书配置或尝试使用 HTTPS 协议",
+				Err:        err,
+			}
+		}
 	}
 
-	// 网络连接失败
-	if strings.Contains(errStr, "could not resolve") ||
-		strings.Contains(errStr, "network") && strings.Contains(errStr, "unreachable") ||
-		strings.Contains(errStr, "connection refused") ||
-		strings.Contains(errStr, "timeout") {
-		return "拉取失败：网络连接失败",
-			"请检查网络连接和仓库地址是否正确"
+	return &UserError{
+		Message:    fmt.Sprintf("拉取失败：%s", err.Error()),
+		Suggestion: "请查看日志了解详细错误信息",
+		Err:        err,
 	}
-
-	// 仓库不存在
-	if strings.Contains(errStr, "repository not found") ||
-		strings.Contains(errStr, "404") ||
-		strings.Contains(errStr, "does not appear to be a git repository") {
-		return fmt.Sprintf("拉取失败：仓库不存在（%s）", remoteURL),
-			"请检查仓库地址是否有误，或是否有访问权限"
-	}
-
-	// 权限不足
-	if strings.Contains(errStr, "permission denied") ||
-		strings.Contains(errStr, "403") ||
-		strings.Contains(errStr, "forbidden") {
-		return "拉取失败：权限不足",
-			"请检查您是否有该仓库的读取权限"
-	}
-
-	// SSL/TLS 证书问题
-	if strings.Contains(errStr, "ssl") ||
-		strings.Contains(errStr, "certificate") ||
-		strings.Contains(errStr, "tls") {
-		return "拉取失败：SSL/TLS 证书验证失败",
-			"请检查证书配置或尝试使用 HTTPS 协议"
-	}
-
-	// 默认返回原始错误
-	return fmt.Sprintf("拉取失败：%s", errStr),
-		"请查看日志了解详细错误信息"
 }
