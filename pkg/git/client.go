@@ -606,6 +606,51 @@ func (c *GitClient) Fetch(ctx context.Context, opts *FetchOptions) (*OperationRe
 	return &OperationResult{Success: true, Message: "fetch 成功"}, nil
 }
 
+// ResetToRef hard-resets the worktree and branch to the given commit hash.
+// 为什么：go-git 的 Pull 只支持 fast-forward 合并，当本地和远端有分叉历史时会报
+// "non-fast-forward update"。对于配置同步场景，本地仓库只是同步中间层，
+// 在应用层已完成冲突检测后，可以安全地 hard reset 到远端版本。
+func (c *GitClient) ResetToRef(path string, hash string) (*OperationResult, error) {
+	if path == "" {
+		return nil, fmt.Errorf("仓库路径不能为空")
+	}
+	if hash == "" {
+		return nil, fmt.Errorf("目标 commit hash 不能为空")
+	}
+
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return nil, fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return nil, fmt.Errorf("获取工作树失败: %w", err)
+	}
+
+	targetHash := plumbing.NewHash(hash)
+	if err := worktree.Reset(&git.ResetOptions{
+		Commit: targetHash,
+		Mode:   git.HardReset,
+	}); err != nil {
+		logger.Error("Hard reset 失败",
+			zap.String("path", path),
+			zap.String("target_hash", hash),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("重置到远端版本失败: %w", err)
+	}
+
+	logger.Info("已重置到远端版本",
+		zap.String("path", path),
+		zap.String("hash", hash),
+	)
+	return &OperationResult{
+		Success: true,
+		Message: "已重置到远端版本",
+	}, nil
+}
+
 // GetHeadHash returns the current HEAD commit hash.
 func (c *GitClient) GetHeadHash(path string) (string, error) {
 	repo, err := git.PlainOpen(path)
