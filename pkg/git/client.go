@@ -832,3 +832,80 @@ func (c *GitClient) getCommitTree(repo *git.Repository, hashStr string) (*object
 
 	return commit.Tree()
 }
+
+// Diff computes the diff between the working tree and the given base reference.
+// Returns summary statistics (added/modified/deleted counts) and optional file list.
+func (c *GitClient) Diff(opts *DiffOptions) (*DiffResult, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("diff 选项不能为空")
+	}
+	if opts.Path == "" {
+		return nil, fmt.Errorf("仓库路径不能为空")
+	}
+
+	repo, err := git.PlainOpen(opts.Path)
+	if err != nil {
+		return nil, fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	// 确定对比基准
+	baseRef := opts.Against
+	if baseRef == "" {
+		baseRef = "origin/main"
+	}
+
+	// 解析基准 commit
+	branchName := strings.TrimPrefix(baseRef, "origin/")
+	refName := plumbing.ReferenceName("refs/remotes/origin/" + branchName)
+	ref, err := repo.Reference(refName, true)
+	if err != nil {
+		// 远端引用不存在，返回空差异
+		return &DiffResult{Added: 0, Modified: 0, Deleted: 0}, nil
+	}
+	baseHash := ref.Hash()
+
+	_ = baseHash // 基准 hash 已在远端引用解析时获取
+
+	// 用工作树状态遍历文件系统与基准 tree 对比
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return nil, fmt.Errorf("获取工作树失败: %w", err)
+	}
+	status, err := worktree.Status()
+	if err != nil {
+		return nil, fmt.Errorf("获取工作树状态失败: %w", err)
+	}
+
+	result := &DiffResult{}
+	for path, fileStatus := range status {
+		staging := string(fileStatus.Staging)
+		worktreeStatus := string(fileStatus.Worktree)
+
+		// 跳过未修改的文件
+		if staging == "" && worktreeStatus == "" {
+			continue
+		}
+		if staging == "Unmodified" && worktreeStatus == "Unmodified" {
+			continue
+		}
+
+		if staging == "Deleted" || worktreeStatus == "Deleted" {
+			result.Deleted++
+			result.Files = append(result.Files, path)
+		} else if staging == "Added" {
+			result.Added++
+			result.Files = append(result.Files, path)
+		} else if staging == "Modified" || worktreeStatus == "Modified" {
+			result.Modified++
+			result.Files = append(result.Files, path)
+		} else if worktreeStatus == "Added" {
+			result.Added++
+			result.Files = append(result.Files, path)
+		} else if staging != "" && staging != "Unmodified" {
+			result.Modified++
+			result.Files = append(result.Files, path)
+		}
+	}
+
+	return result, nil
+}

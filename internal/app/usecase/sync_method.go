@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -70,45 +69,34 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	// 第三步：确保 repo 存在（不存在则询问是否 clone）
 	dataDir := w.dataDir
 	repoPath := filepath.Join(dataDir, "repos", projectName)
-	gitClient := git.NewGitClient()
 
-	if !git.IsRepository(repoPath) {
-		fmt.Printf("本地仓库不存在（%s）\n", repoPath)
-		fmt.Printf("是否从远程拉取现有配置？[Y/n]: ")
-
-		reader := bufio.NewReader(os.Stdin)
-		confirm, _ := reader.ReadString('\n')
-		confirm = strings.TrimSpace(strings.ToLower(confirm))
-		if confirm != "" && confirm != "y" && confirm != "yes" {
-			return &typesSync.SyncPushResult{
-				Success:     true,
-				Project:     projectName,
-				FilesPushed: 0,
-				Message:     "已取消推送",
-			}, nil
-		}
-
-		cloneOpts := &git.CloneOptions{
-			URL:    remoteConfig.URL,
-			Path:   repoPath,
-			Auth:   convertAuthFromModel(&remoteConfig.Auth),
-			Branch: remoteConfig.Branch,
-		}
-		if _, cloneErr := gitClient.Clone(ctx, cloneOpts); cloneErr != nil {
-			return nil, &UserError{
-				Message:    fmt.Sprintf("拉取远端仓库失败（远端: %s）", remoteConfig.URL),
-				Suggestion: "请检查网络连接和仓库地址",
-				Err:        cloneErr,
-			}
-		}
-		fmt.Println("远端配置拉取成功")
+	continuePush, err := w.ensureRepoExists(
+		repoPath,
+		remoteConfig.URL,
+		convertAuthFromModel(&remoteConfig.Auth),
+		remoteConfig.Branch,
+		"是否从远程拉取现有配置？",
+	)
+	if err != nil {
+		return nil, err
 	}
+	if !continuePush {
+		return &typesSync.SyncPushResult{
+			Success:     true,
+			Project:     projectName,
+			FilesPushed: 0,
+			Message:     "已取消推送",
+		}, nil
+	}
+	fmt.Println("远端配置拉取成功")
 
 	// 第四步：fetch 远端最新代码
 	branch := remoteConfig.Branch
 	if branch == "" {
 		branch = "main"
 	}
+	gitClient := git.NewGitClient()
+	fetchFailed := false
 	fetchResult, fetchErr := gitClient.Fetch(ctx, &git.FetchOptions{
 		Path:   repoPath,
 		Auth:   convertAuthFromModel(&remoteConfig.Auth),
@@ -119,6 +107,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 			zap.String("project", projectName),
 			zap.Error(fetchErr),
 		)
+		fetchFailed = true
 		_ = fetchResult
 	}
 
@@ -167,7 +156,11 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		if readErr == nil {
 			for _, entry := range entries {
 				entryPath := filepath.Join(projectSubDir, entry.Name())
-				os.RemoveAll(entryPath)
+				if err := os.RemoveAll(entryPath); err != nil {
+					logger.Warn("清理旧文件失败，跳过",
+						zap.String("path", entryPath),
+						zap.Error(err))
+				}
 			}
 		}
 	}
@@ -178,73 +171,90 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		}
 		targetPath := filepath.Join(repoPath, projectName, file.Path)
 		dir := filepath.Dir(targetPath)
-		mkdirAll(dir)
-		writeFile(targetPath, file.Content)
+		if err := mkdirAll(dir); err != nil {
+			logger.Warn("创建目录失败，跳过文件",
+				zap.String("dir", dir),
+				zap.String("file", targetPath),
+				zap.Error(err))
+			continue
+		}
+		if err := writeFile(targetPath, file.Content); err != nil {
+			logger.Warn("写入文件失败，跳过",
+				zap.String("file", targetPath),
+				zap.Error(err))
+			continue
+		}
 		filesWritten++
 	}
 
 	// 第七步：git diff 展示快照 vs 远端 HEAD 的差异预览
 	fmt.Println()
 	fmt.Printf("快照「%s」vs 远端 origin/%s 差异预览：\n", snapshot.Name, branch)
+	if fetchFailed {
+		fmt.Println("  [警告] fetch 失败，差异可能不完整（远端引用不可用）")
+	}
 	fmt.Println(strings.Repeat("-", 60))
 
-	// 执行 git diff --stat origin/<branch>
-	diffCmd := exec.Command("git", "diff", "--stat", "origin/"+branch)
-	diffCmd.Dir = repoPath
-	diffOutput, diffErr := diffCmd.Output()
-	if diffErr == nil && len(diffOutput) > 0 {
-		fmt.Print(string(diffOutput))
+	diffResult, diffErr := gitClient.Diff(&git.DiffOptions{
+		Path:    repoPath,
+		Against: "origin/" + branch,
+	})
+
+	added, modified, deleted := 0, 0, 0
+	if diffErr == nil && diffResult != nil {
+		added = diffResult.Added
+		modified = diffResult.Modified
+		deleted = diffResult.Deleted
+
+		// 分类显示前几个文件
+		showFile := func(label, path string) { fmt.Printf("  [%s] %s\n", label, path) }
+		showMore := func(label string, n int) { fmt.Printf("  ... 等 %d 个%s文件\n", n, label) }
+
+		// 粗略按比例分配显示：新增/修改/删除
+		total := added + modified + deleted
+		if total > 15 {
+			showAdded := min(added, 5)
+			showModified := min(modified, 5)
+			showDeleted := min(deleted, 5)
+			for i := 0; i < showAdded && i < len(diffResult.Files); i++ {
+				showFile("新增", diffResult.Files[i])
+			}
+			offset := showAdded
+			for i := 0; i < showModified && offset+i < len(diffResult.Files); i++ {
+				showFile("修改", diffResult.Files[offset+i])
+			}
+			offset += showModified
+			for i := 0; i < showDeleted && offset+i < len(diffResult.Files); i++ {
+				showFile("删除", diffResult.Files[offset+i])
+			}
+			if added > showAdded {
+				showMore("新增", added-showAdded)
+			}
+			if modified > showModified {
+				showMore("修改", modified-showModified)
+			}
+			if deleted > showDeleted {
+				showMore("删除", deleted-showDeleted)
+			}
+		} else {
+			// 文件少，按顺序输出（新增在前，修改在中，删除在后）
+			for i, path := range diffResult.Files {
+				var label string
+				if i < added {
+					label = "新增"
+				} else if i < added+modified {
+					label = "修改"
+				} else {
+					label = "删除"
+				}
+				fmt.Printf("  [%s] %s\n", label, path)
+			}
+		}
 	} else {
 		fmt.Println("  无文件变更（快照与远端一致）")
 	}
 
-	// 执行 git diff --name-status origin/<branch> 获取详细变更列表
-	diffNameCmd := exec.Command("git", "diff", "--name-status", "origin/"+branch)
-	diffNameCmd.Dir = repoPath
-	diffNameOutput, diffNameErr := diffNameCmd.Output()
-
-	var added, modified, deleted int
-	if diffNameErr == nil {
-		lines := strings.Split(strings.TrimSpace(string(diffNameOutput)), "\n")
-		for _, line := range lines {
-			if len(line) == 0 {
-				continue
-			}
-			parts := strings.SplitN(line, "\t", 2)
-			if len(parts) < 2 {
-				continue
-			}
-			status := parts[0]
-			path := parts[1]
-			switch status {
-			case "A":
-				added++
-				if added <= 5 {
-					fmt.Printf("  [新增] %s\n", path)
-				}
-			case "M":
-				modified++
-				if modified <= 5 {
-					fmt.Printf("  [修改] %s\n", path)
-				}
-			case "D":
-				deleted++
-				if deleted <= 5 {
-					fmt.Printf("  [删除] %s\n", path)
-				}
-			}
-		}
-		if added > 5 {
-			fmt.Printf("  ... 等 %d 个新增文件\n", added-5)
-		}
-		if modified > 5 {
-			fmt.Printf("  ... 等 %d 个修改文件\n", modified-5)
-		}
-		if deleted > 5 {
-			fmt.Printf("  ... 等 %d 个删除文件\n", deleted-5)
-		}
-	}
-	if added == 0 && modified == 0 && deleted == 0 {
+	if added == 0 && modified == 0 && deleted == 0 && diffResult != nil {
 		fmt.Println("  无文件变更")
 	}
 	fmt.Println(strings.Repeat("-", 60))
@@ -328,6 +338,15 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		Message:     "推送成功",
 	}, nil
 }
+
+// SyncPull pulls the latest remote state for a project into the local repository.
+//
+// 流程：
+//  1. 获取远端配置
+//  2. 确保 repo 存在（不存在则询问是否 clone）
+//  3. fetch 远端最新代码
+//  4. 检测本地和远端的冲突（三方对比：本地快照 vs 本地 git vs 远端 git）
+//  5. 有冲突则返回冲突信息，无冲突则 reset 到远端版本并更新 SQLite
 func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error) {
 	// 第一步：参数校验
 	projectName := strings.TrimSpace(input.Project)
@@ -371,39 +390,27 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	// 第三步：确保仓库存在
 	dataDir := w.dataDir
 	repoPath := filepath.Join(dataDir, "repos", projectName)
-	gitClient := git.NewGitClient()
 
-	if !git.IsRepository(repoPath) {
-		fmt.Printf("本地仓库不存在（%s）\n", repoPath)
-		fmt.Printf("是否从远程拉取现有配置到本地？[Y/n]: ")
-
-		reader := bufio.NewReader(os.Stdin)
-		confirm, _ := reader.ReadString('\n')
-		confirm = strings.TrimSpace(strings.ToLower(confirm))
-		if confirm != "" && confirm != "y" && confirm != "yes" {
-			return &typesSync.SyncPullResult{
-				Success: true,
-				Project: projectName,
-			}, nil
-		}
-
-		cloneOpts := &git.CloneOptions{
-			URL:    remoteConfig.URL,
-			Path:   repoPath,
-			Auth:   convertAuthFromModel(&remoteConfig.Auth),
-			Branch: remoteConfig.Branch,
-		}
-		if _, cloneErr := gitClient.Clone(ctx, cloneOpts); cloneErr != nil {
-			return nil, &UserError{
-				Message:    fmt.Sprintf("拉取远端仓库失败（远端: %s）", remoteConfig.URL),
-				Suggestion: "请检查网络连接和仓库地址",
-				Err:        cloneErr,
-			}
-		}
-		fmt.Printf("远端配置已拉取到本地（%s）\n\n", repoPath)
+	continuePull, err := w.ensureRepoExists(
+		repoPath,
+		remoteConfig.URL,
+		convertAuthFromModel(&remoteConfig.Auth),
+		remoteConfig.Branch,
+		"是否从远程拉取现有配置到本地？",
+	)
+	if err != nil {
+		return nil, err
 	}
+	if !continuePull {
+		return &typesSync.SyncPullResult{
+			Success: true,
+			Project: projectName,
+		}, nil
+	}
+	fmt.Printf("远端配置已拉取到本地（%s）\n\n", repoPath)
 
 	// 第四步：记录本地 HEAD，然后 fetch 远端更新
+	gitClient := git.NewGitClient()
 	localHash, _ := gitClient.GetHeadHash(repoPath)
 
 	branch := remoteConfig.Branch
@@ -711,20 +718,36 @@ func pathExists(path string) (bool, error) {
 	return false, err
 }
 
-// formatSize 将字节数转换为人类可读的字符串（KB/MB/GB）。
-func formatSize(bytes int64) string {
-	const KB = 1024
-	const MB = 1024 * KB
-	const GB = 1024 * MB
+// ensureRepoExists 确保本地仓库存在，不存在时询问用户是否从远程 clone。
+// 返回是否继续执行（用户取消则返回 false）。
+func (w *LocalWorkflow) ensureRepoExists(repoPath string, remoteURL string, auth *git.GitAuthConfig, branch string, promptMsg string) (bool, error) {
+	if git.IsRepository(repoPath) {
+		return true, nil
+	}
 
-	if bytes >= GB {
-		return fmt.Sprintf("%.1f GB", float64(bytes)/GB)
+	fmt.Printf("本地仓库不存在（%s）\n", repoPath)
+	fmt.Printf("%s[Y/n]: ", promptMsg)
+
+	reader := bufio.NewReader(os.Stdin)
+	confirm, _ := reader.ReadString('\n')
+	confirm = strings.TrimSpace(strings.ToLower(confirm))
+	if confirm != "" && confirm != "y" && confirm != "yes" {
+		return false, nil
 	}
-	if bytes >= MB {
-		return fmt.Sprintf("%.1f MB", float64(bytes)/MB)
+
+	gitClient := git.NewGitClient()
+	_, cloneErr := gitClient.Clone(context.Background(), &git.CloneOptions{
+		URL:    remoteURL,
+		Path:   repoPath,
+		Auth:   auth,
+		Branch: branch,
+	})
+	if cloneErr != nil {
+		return false, &UserError{
+			Message:    fmt.Sprintf("拉取远端仓库失败（远端: %s）", remoteURL),
+			Suggestion: "请检查网络连接和仓库地址",
+			Err:        cloneErr,
+		}
 	}
-	if bytes >= KB {
-		return fmt.Sprintf("%.1f KB", float64(bytes)/KB)
-	}
-	return fmt.Sprintf("%d B", bytes)
+	return true, nil
 }

@@ -133,14 +133,42 @@ func (c *Collector) collectMatch(
 
 // collectFilesUnderDir 递归遍历目录，但仍会经过排除规则和 seen 去重。
 // 支持跟随符号链接目录，确保 ~/.claude/skills/ 等由符号链接组成的目录能被正确收集。
+// 包含循环引用防护：通过 real path 去重 + 最大深度限制，防止符号链接造成无限递归。
 func (c *Collector) collectFilesUnderDir(
 	basePath string,
 	toolName string,
 	options CollectOptions,
 	seen map[string]struct{},
 ) ([]models.SnapshotFile, []CollectError) {
+	return c.collectFilesUnderDirWithDepth(basePath, toolName, options, seen, 0, 20)
+}
+
+const maxSymlinkDepth = 20 // 符号链接跟随最大深度
+
+func (c *Collector) collectFilesUnderDirWithDepth(
+	basePath string,
+	toolName string,
+	options CollectOptions,
+	seen map[string]struct{},
+	depth int,
+	maxDepth int,
+) ([]models.SnapshotFile, []CollectError) {
 	var files []models.SnapshotFile
 	var errors []CollectError
+
+	// 循环引用防护：超过最大深度则停止
+	if depth > maxDepth {
+		errors = append(errors, CollectError{Path: basePath, Message: "达到最大遍历深度，可能存在循环引用"})
+		return files, errors
+	}
+
+	// 符号链接循环防护：解析真实路径，已在 seen 中则跳过
+	realPath, realErr := filepath.EvalSymlinks(basePath)
+	if realErr == nil {
+		if _, alreadySeen := seen[realPath]; alreadySeen {
+			return files, errors
+		}
+	}
 
 	walkErr := filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -154,7 +182,7 @@ func (c *Collector) collectFilesUnderDir(
 		if !info.IsDir() && info.Mode()&os.ModeSymlink != 0 {
 			realInfo, statErr := os.Stat(path)
 			if statErr == nil && realInfo.IsDir() {
-				linkedFiles, linkedErrs := c.collectFilesUnderDir(path, toolName, options, seen)
+				linkedFiles, linkedErrs := c.collectFilesUnderDirWithDepth(path, toolName, options, seen, depth+1, maxDepth)
 				files = append(files, linkedFiles...)
 				errors = append(errors, linkedErrs...)
 				return nil
