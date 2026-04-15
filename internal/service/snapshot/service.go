@@ -13,7 +13,6 @@ import (
 	"flux/internal/models"
 	"flux/internal/service/tool"
 	typesSnapshot "flux/internal/types/snapshot"
-	"flux/pkg/crypto"
 	"flux/pkg/database"
 	"flux/pkg/logger"
 
@@ -515,55 +514,95 @@ func (s *Service) DiffSnapshots(sourceID, targetID string, verbose bool, tool st
 }
 
 // diffWithFilesystem compares a snapshot against the current filesystem.
+// Direction: snapshot (source) → filesystem (target).
+//   - snapshot has, filesystem doesn't → deleted (文件被删除)
+//   - snapshot doesn't have, filesystem has → added (新增文件)
+//   - both have but different content → modified
 func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
 	logger.Info("对比快照与文件系统",
 		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 	)
 
+	// 第一步：构建快照文件索引
+	snapshotFiles := make(map[string]models.SnapshotFile, len(snapshot.Files))
+	for _, f := range snapshot.Files {
+		snapshotFiles[f.Path] = f
+	}
+
+	// 第二步：重新扫描当前文件系统，收集目标文件集合
+	fsFiles, err := s.rescanFilesystem(snapshot)
+	if err != nil {
+		logger.Warn("重新扫描文件系统失败，仅基于快照文件列表对比", zap.Error(err))
+	}
+
+	fsFileMap := make(map[string]models.SnapshotFile, len(fsFiles))
+	for _, f := range fsFiles {
+		fsFileMap[f.Path] = f
+	}
+
+	// 第三步：合并所有路径，做双向对比
+	allPaths := make(map[string]bool)
+	for p := range snapshotFiles {
+		allPaths[p] = true
+	}
+	for p := range fsFileMap {
+		allPaths[p] = true
+	}
+
 	var changes []typesSnapshot.DiffFileChange
 
-	for _, sf := range snapshot.Files {
-		info, err := os.Stat(sf.OriginalPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				// 快照中有但文件系统没有 → 相对文件系统是新增
-				changes = append(changes, typesSnapshot.DiffFileChange{
-					Path:     sf.Path,
-					Status:   typesSnapshot.FileAdded,
-					IsBinary: sf.IsBinary,
-					NewSize:  sf.Size,
-					ToolType: sf.ToolType,
-				})
-			}
-			continue
-		}
+	for p := range allPaths {
+		sf, inSnapshot := snapshotFiles[p]
+		ff, inFS := fsFileMap[p]
 
-		if info.IsDir() {
-			continue
-		}
-
-		currentContent, err := os.ReadFile(sf.OriginalPath)
-		if err != nil {
-			continue
-		}
-
-		currentHash := crypto.SHA256Hash(currentContent)
-		if currentHash != sf.Hash {
+		switch {
+		case inSnapshot && !inFS:
+			// 快照中有但文件系统没有 → 文件被删除
 			change := typesSnapshot.DiffFileChange{
-				Path:     sf.Path,
-				Status:   typesSnapshot.FileModified,
+				Path:     p,
+				Status:   typesSnapshot.FileDeleted,
 				IsBinary: sf.IsBinary,
 				OldSize:  sf.Size,
-				NewSize:  info.Size(),
 				ToolType: sf.ToolType,
 			}
-			if verbose && !sf.IsBinary {
-				change.Hunks = computeFileHunks(sf.Content, currentContent)
-			}
 			if !sf.IsBinary {
-				change.AddLines, change.DelLines = countLineChanges(sf.Content, currentContent)
+				change.DelLines = len(strings.Split(string(sf.Content), "\n"))
 			}
 			changes = append(changes, change)
+
+		case !inSnapshot && inFS:
+			// 文件系统中有但快照没有 → 新增文件
+			change := typesSnapshot.DiffFileChange{
+				Path:     p,
+				Status:   typesSnapshot.FileAdded,
+				IsBinary: ff.IsBinary,
+				NewSize:  ff.Size,
+				ToolType: ff.ToolType,
+			}
+			if !ff.IsBinary {
+				change.AddLines = len(strings.Split(string(ff.Content), "\n"))
+			}
+			changes = append(changes, change)
+
+		case inSnapshot && inFS:
+			// 两边都有，比较内容
+			if sf.Hash != ff.Hash {
+				change := typesSnapshot.DiffFileChange{
+					Path:     p,
+					Status:   typesSnapshot.FileModified,
+					IsBinary: sf.IsBinary || ff.IsBinary,
+					OldSize:  sf.Size,
+					NewSize:  ff.Size,
+					ToolType: sf.ToolType,
+				}
+				if verbose && !change.IsBinary {
+					change.Hunks = computeFileHunks(sf.Content, ff.Content)
+				}
+				if !change.IsBinary {
+					change.AddLines, change.DelLines = countLineChanges(sf.Content, ff.Content)
+				}
+				changes = append(changes, change)
+			}
 		}
 	}
 
@@ -580,6 +619,37 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 	result.HasDiff = len(changes) > 0
 
 	return result, nil
+}
+
+// rescanFilesystem re-collects files from the current filesystem using the same
+// project and tools as the original snapshot, so that newly added files can be detected.
+func (s *Service) rescanFilesystem(snapshot *models.Snapshot) ([]models.SnapshotFile, error) {
+	projectPath := snapshot.Metadata.ProjectPath
+	if projectPath == "" {
+		return nil, fmt.Errorf("快照缺少项目路径元数据")
+	}
+
+	// 从快照文件中提取唯一的工具类型列表
+	toolSet := make(map[string]bool)
+	for _, f := range snapshot.Files {
+		toolSet[f.ToolType] = true
+	}
+	tools := make([]string, 0, len(toolSet))
+	for t := range toolSet {
+		tools = append(tools, t)
+	}
+
+	collectOpts := CollectOptions{
+		Tools:       tools,
+		ProjectPath: projectPath,
+	}
+
+	result, err := s.collector.Collect(collectOpts)
+	if err != nil {
+		return nil, fmt.Errorf("重新扫描文件系统失败: %w", err)
+	}
+
+	return result.Files, nil
 }
 
 // diffTwoSnapshots compares two snapshots and returns detailed differences.
