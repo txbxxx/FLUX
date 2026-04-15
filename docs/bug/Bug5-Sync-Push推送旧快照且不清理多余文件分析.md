@@ -176,12 +176,35 @@ if localHash == "" || remoteHash == "" || localHash == remoteHash {
 
 ---
 
+### 问题 5：`sync pull` 本地仓库不存在时报错，强制要求先 push
+
+#### 代码追踪
+
+**`internal/app/usecase/sync_method.go:453-458`**：
+
+```go
+if !git.IsRepository(repoPath) {
+    return nil, &UserError{
+        Message:    "拉取失败：本地仓库不存在",
+        Suggestion: "请先执行 fl sync push --project " + projectName + " 初始化仓库",
+    }
+}
+```
+
+**问题**：Git 标准流程中，pull 可以在任何时候用，不需要先 push。强制要求先 push 不符合直觉。
+
+#### 修复
+
+改为和 `sync push` 一样的交互：询问用户是否从远程 clone。
+
+---
+
 ## 修复文件
 
 | 文件 | 修改内容 |
 |------|---------|
 | `internal/service/snapshot/collector.go` | 增加符号链接目录的递归遍历 |
-| `internal/app/usecase/sync_method.go` | push 前自动创建新快照；写入前清空项目子目录；增加交互确认流程 |
+| `internal/app/usecase/sync_method.go` | push 前自动创建新快照；写入前清空项目子目录；push/pull 仓库不存在时均询问是否 clone |
 
 ## 修复后行为
 
@@ -189,9 +212,10 @@ if localHash == "" || remoteHash == "" || localHash == remoteHash {
 2. 写入 repo 前清空项目子目录，确保远程只有最新快照中的文件
 3. `skills/` 等由符号链接组成的目录能被正确收集
 4. 推送后本地和远程 HEAD 一致，pull 不再误报"0 更新"
-5. **交互确认**：本地仓库不存在时询问是否先拉取远程配置
-6. **提交预览**：显示快照名称、远端地址、文件数量和大小、文件示例
-7. **覆盖警告**：明确告知本次推送将覆盖远端配置，用户确认后才执行
+5. **sync push 交互**：本地仓库不存在时询问是否先拉取远程配置；推送前显示预览和覆盖警告
+6. **sync pull 交互**：本地仓库不存在时询问是否 clone，用户确认后拉取远端到本地
+7. **提交预览**：显示快照名称、远端地址、文件数量和大小、文件示例
+8. **覆盖警告**：明确告知本次推送将覆盖远端配置，用户确认后才执行
 
 ### 交互流程示例
 
@@ -215,6 +239,18 @@ $ fl sync push -p claude-global
 
 用户输入 `n` 则取消推送，返回"已取消推送"。
 
+### sync pull 交互流程示例
+
+```
+$ fl sync pull -p claude-global
+本地仓库不存在（C:\Users\xxx\.ai-sync-manager\repos\claude-global）
+是否从远程拉取现有配置到本地？[Y/n]: Y
+远端配置已拉取到本地（C:\Users\xxx\.ai-sync-manager\repos\claude-global）
+...
+```
+
+用户输入 `n` 则取消，返回成功。
+
 ## 测试场景
 
 | 测试场景 | 输入/操作 | 预期结果 | 实际结果 |
@@ -225,5 +261,5 @@ $ fl sync push -p claude-global
 | skills/ 全为符号链接 | sync push 包含符号链接的 skills | 符号链接目标内容被收集推送 | 通过 |
 | 本地仓库不存在时 push | sync push 新项目 | 询问是否拉取远程，用户可选择 | 通过 |
 | 推送时用户取消确认 | sync push 输入 n | 返回"已取消推送"，无任何变更 | 通过 |
-| skills/ 全为符号链接 | sync push 包含符号链接的 skills | 符号链接目标内容被收集推送 | 通过 |
-| sync pull 检测到差异 | 远程有变更时 sync pull | 检测到变更并更新 SQLite | 通过（待 pull 逻辑改进后）|
+| 本地仓库不存在时 pull | sync pull 新项目 | 询问是否从远程 clone，用户可选择 | 通过 |
+| pull 时用户取消确认 | sync pull 输入 n | 返回成功，无任何变更 | 通过 |
