@@ -5,7 +5,7 @@
 | 字段 | 内容 |
 |------|------|
 | 优先级 | P0 |
-| 状态 | 已修复（待合并） |
+| 状态 | 已合并到 master |
 | 提交人 | TanChang |
 | 创建时间 | 2026-04-15 |
 | 修复分支 | `fix/sync-push-symlink-stale-snapshot` |
@@ -214,8 +214,23 @@ if !git.IsRepository(repoPath) {
 
 | 文件 | 修改内容 |
 |------|---------|
-| `internal/service/snapshot/collector.go` | 增加符号链接目录的递归遍历 |
-| `internal/app/usecase/sync_method.go` | 重新设计 SyncPush：fetch 远端→写入 SQLite 快照→git diff 预览→用户确认→commit+push；写入前清空项目子目录；push/pull 仓库不存在时均询问是否 clone |
+| `internal/service/snapshot/collector.go` | 增加符号链接目录的递归遍历；循环引用防护（最大深度 20 + 真实路径去重） |
+| `internal/app/usecase/sync_method.go` | 重新设计 SyncPush：fetch 远端→写入 SQLite 快照→git diff 预览→用户确认→commit+push；写入前清空项目子目录；push/pull 仓库不存在时均询问是否 clone；ensureRepoExists 公共方法抽取；fetch 失败时 diff 显示警告 |
+| `pkg/git/client.go` | 新增 `Diff` 方法，底层用 go-git `worktree.Status()` 对比工作树与 HEAD；新增 `DiffOptions`、`DiffResult` 类型 |
+| `pkg/git/types.go` | 新增 `DiffOptions`、`DiffResult` 类型定义 |
+
+## 额外修复（Code Review 后续）
+
+| 问题 | 修复 |
+|------|------|
+| P0: `exec.Command("git", ...)` 绕过 pkg/git 抽象 | 已替换为 `gitClient.Diff()`，项目不再依赖系统 git CLI |
+| P0: `Diff` 方法 StatusCode 比较错误 | 字符串比较 ("Modified"/"Added"/"Deleted") 改为 `git.Unmodified`/`git.Deleted`/`git.Added` 等常量 |
+| P1: mkdirAll/writeFile/RemoveAll 无错误处理 | 增加 `logger.Warn` 跳过失败文件，filesWritten 只在成功时递增 |
+| P1: fetch 失败后 diff 无提示 | diff 前显示 `[警告] fetch 失败，差异可能不完整` |
+| P1: ensureRepoExists 用 context.Background() | 传入调用方 ctx，clone 可被取消 |
+| P1: formatSize 死代码 | 已删除 |
+| P2: clone 确认逻辑重复 | 抽取为 `ensureRepoExists` 公共方法，Push/Pull 共用 |
+| P2: SyncPull godoc 缺失 | 补回 6 步流程注释 |
 
 ## 修复后行为
 

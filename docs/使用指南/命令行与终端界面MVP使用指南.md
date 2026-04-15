@@ -20,13 +20,15 @@
 - 浏览工具配置目录与文件
 - 在终端内直接编辑配置文件
 - 创建本地配置快照
-- 列出本地已创建快照
+- 列出/删除/恢复本地快照
+- 快照对比（分析两个快照的差异）
+- 远端仓库同步（push/pull/remote 配置管理）
 - 通过终端交互界面执行基础操作
 
 当前版本不支持：
 
-- 远端仓库同步
-- push、pull、diff、apply、rollback
+- push/pull 时的冲突自动合并
+- sync status（开发中）
 - GUI 桌面界面
 - 凭证管理界面
 
@@ -109,10 +111,19 @@ make run ARGS=scan
 - `fl setting get`
 - `fl setting delete`
 - `fl setting switch`
+- `fl setting edit`
 - `fl snapshot create`
 - `fl snapshot list`
 - `fl snapshot delete`
 - `fl snapshot restore`
+- `fl snapshot diff`
+- `fl remote`
+- `fl remote add`
+- `fl remote list`
+- `fl remote remove`
+- `fl sync push`
+- `fl sync pull`
+- `fl sync status`
 - `fl tui`
 - `fl completion`
 
@@ -822,15 +833,236 @@ Flags:
 - 指定的文件路径不在快照中
 - 目标路径无写入权限
 
-## 12. `tui`：进入终端交互界面
+## 13. `snapshot diff`：对比两个快照
 
-### 10.1 启动命令
+### 13.1 命令
+
+```powershell
+.\fl.exe snapshot diff <source-id-or-name> [target-id-or-name]
+.\fl.exe snapshot diff <source-id> <target-id> --tool claude
+.\fl.exe snapshot diff <source-id> <target-id> --path skills/
+```
+
+### 13.2 功能说明
+
+`snapshot diff` 对比两个快照的差异，支持以下模式：
+
+- **单快照模式**：不指定目标快照时，自动与本地文件系统对比（降级模式）
+- **双快照模式**：指定源和目标快照，对比两份快照的文件内容差异
+
+### 13.3 参数说明
+
+```text
+<source-id-or-name>    源快照 ID 或名称（必填）
+[target-id-or-name]   目标快照 ID 或名称（可选，不填则与文件系统对比）
+
+-t, --tool string     按工具过滤（如 claude、codex）
+-p, --path string      按路径前缀过滤
+-v, --verbose         显示文件内容差异（unified diff 格式）
+    --side-by-side     并排显示差异
+    --color            启用颜色输出
+    --no-color         禁用颜色输出（默认）
+```
+
+### 13.4 输出示例
+
+**摘要模式**：
+```text
+快照「Daily backup」与快照「Weekly backup」对比：
+
+总计：
+  新增: 8 个文件
+  修改: 3 个文件
+  删除: 1 个文件
+  跳过: 2 个文件（内容相同）
+
+新增文件:
+  claude/skills/lark-approval/SKILL.md
+  claude/skills/lark-base/SKILL.md
+  ...
+
+修改文件:
+  claude/settings.json (18 行变化)
+  claude/CLAUDE.md (5 行变化)
+
+删除文件:
+  claude/commands/old-script.sh
+```
+
+### 13.5 降级模式（单快照模式）
+
+当只提供一个快照时，系统会：
+1. 收集该快照的文件列表
+2. 读取当前文件系统的对应文件
+3. 对比每个文件的 SHA256 哈希
+4. 报告新增、修改、删除的文件
+
+降级模式会在输出顶部显示提示：
+```
+[注意] 未提供目标快照，已降级为与文件系统对比
+```
+
+### 13.6 冲突检测
+
+- **哈希相同** → 文件内容一致，跳过（`SKIP`）
+- **仅目标存在** → 文件被删除（`DELETED`）
+- **仅源存在** → 文件被新增（`ADDED`）
+- **哈希不同** → 文件被修改（`MODIFIED`），显示行数统计
+
+## 14. `remote`：管理远端仓库配置
+
+### 14.1 命令概览
+
+```powershell
+.\fl.exe remote add <url> [flags]
+.\fl.exe remote list
+.\fl.exe remote remove <name>
+```
+
+### 14.2 remote add：添加远端仓库
+
+添加一个新的远端 Git 仓库配置：
+
+```powershell
+.\fl.exe remote add https://github.com/user/flux-config.git
+.\fl.exe remote add https://github.com/user/flux-config.git --name my-config --branch main
+.\fl.exe remote add https://github.com/user/flux-config.git --auth token --token ghp_xxxx
+```
+
+**参数说明**：
+
+| 参数 | 简写 | 说明 |
+|------|------|------|
+| `<url>` | — | Git 仓库 URL（必填） |
+| `--name` | `-n` | 配置名称（默认从 URL 推导） |
+| `--branch` | `-b` | 分支名（默认 main） |
+| `--auth` | — | 认证类型：`token`（默认）或 `ssh` |
+| `--token` | — | GitHub/GitLab 访问令牌（用于 token 认证） |
+| `--ssh-key` | — | SSH 私钥路径（用于 SSH 认证） |
+| `--username` | — | 用户名（Basic 认证） |
+| `--password` | — | 密码（Basic 认证） |
+
+### 14.3 remote list：列出远端配置
+
+```powershell
+.\fl.exe remote list
+```
+
+输出示例：
+```text
+远端仓库配置
+
+名称:   claude-global
+URL:    https://github.com/user/flux-config.git
+分支:   main
+状态:   活跃
+认证:   token（已加密存储）
+```
+
+### 14.4 remote remove：删除远端配置
+
+```powershell
+.\fl.exe remote remove claude-global
+```
+
+## 15. `sync push`：推送配置到远端
+
+### 15.1 命令
+
+```powershell
+.\fl.exe sync push --project <name>
+.\fl.exe sync push --project claude-global
+.\fl.exe sync push --all
+```
+
+### 15.2 交互流程
+
+1. **仓库初始化检查**：若本地仓库不存在，询问是否从远程 clone
+2. **差异预览**：显示本次推送相对于远端的新增/修改/删除文件
+3. **用户确认**：显示统计摘要后，等待用户输入 `Y` 确认推送
+4. **提交推送**：确认后执行 `git add + commit + push`
+
+**完整交互示例**：
+```text
+快照「snapshot-20260415-143022」vs 远端 origin/main 差异预览：
+------------------------------------------------------------
+  [新增] claude/skills/lark-approval/SKILL.md
+  [新增] claude/skills/lark-base/SKILL.md
+  ...
+------------------------------------------------------------
+
+快照「snapshot-20260415-143022」：新增 18，修改 1，删除 0
+警告：以快照内容覆盖远端仓库，确认推送？[Y/n]: Y
+
+推送成功
+  项目:   claude-global
+  文件:   19 个已推送
+  远端:   https://github.com/user/flux-config.git
+```
+
+### 15.3 参数说明
+
+| 参数 | 简写 | 说明 |
+|------|------|------|
+| `--project` | `-p` | 项目名称（与 `--all` 互斥） |
+| `--all` | — | 推送所有已配置的项目 |
+
+### 15.4 注意事项
+
+- `sync push` 从 SQLite 读取快照写入本地 repo，然后与远端对比
+- 写入 repo 前会清空项目子目录，确保远程只有快照中的文件
+- 符号链接目录（如 `skills/`）会被正确跟随遍历
+- fetch 失败时差异预览会显示警告，提示结果可能不完整
+
+## 16. `sync pull`：从远端拉取配置
+
+### 16.1 命令
+
+```powershell
+.\fl.exe sync pull --project <name>
+.\fl.exe sync pull --project claude-global
+```
+
+### 16.2 交互流程
+
+1. **仓库初始化检查**：若本地仓库不存在，询问是否从远程 clone
+2. **冲突检测**：三方对比（本地快照 vs 本地 git vs 远端 git）
+3. **安全合并**：无冲突时 reset 到远端版本并更新 SQLite
+
+**完整交互示例**：
+```text
+拉取成功
+
+  项目:   claude-global
+  文件:   12 个已更新
+```
+
+### 16.3 冲突处理
+
+若检测到本地和远端同时修改了同一文件：
+```text
+拉取完成，发现冲突
+
+  项目:   claude-global
+  冲突:   2 个文件需要处理
+
+  [1] claude/settings.json
+      类型: both_modified
+      本地: 本地已修改 (2048 字节)
+      远端: 远端已修改 (1920 字节)
+
+请手动解决冲突后重新执行 fl sync pull
+```
+
+## 17. `tui`：进入终端交互界面
+
+### 17.1 启动命令
 
 ```powershell
 .\fl.exe tui
 ```
 
-### 10.2 当前界面结构
+### 17.2 当前界面结构
 
 当前 Bubble Tea TUI 包含以下页面：
 
@@ -840,7 +1072,7 @@ Flags:
 - 快照列表页
 - Setting 编辑页
 
-### 10.3 首页操作
+### 17.3 首页操作
 
 首页默认展示：
 
@@ -869,7 +1101,7 @@ Flags:
 - 不会显示 `EOF`
 - 不会把退出动作当成错误
 
-### 10.4 扫描结果页
+### 17.4 扫描结果页
 
 从首页选择“扫描工具”后，会进入扫描结果页。
 
@@ -888,7 +1120,7 @@ Flags:
 
 这些按键都会返回首页。
 
-### 10.5 创建快照页
+### 17.5 创建快照页
 
 从首页选择”创建快照”后，会进入创建表单页。
 
@@ -915,7 +1147,7 @@ Flags:
 - 会跳转到“快照列表”页
 - 首页再次进入时会看到成功状态提示
 
-### 10.6 快照列表页
+### 17.6 快照列表页
 
 从首页选择”查看快照”后，会进入快照列表页。
 
@@ -931,7 +1163,7 @@ Flags:
 - `q`
 - `esc`
 
-### 10.7 Setting 编辑页
+### 17.7 Setting 编辑页
 
 通过 CLI 命令 `fl setting edit <name> -e` 进入 setting 编辑页面。
 
@@ -1000,7 +1232,7 @@ export EDITOR=nano
 ./fl setting edit <name> -e
 ```
 
-### 10.8 TUI 的适用定位
+### 17.8 TUI 的适用定位
 
 当前 TUI 适合做这些事情：
 
@@ -1014,7 +1246,7 @@ export EDITOR=nano
 - 需要显式指定参数
 - 需要更稳定地复用命令输出
 
-## 13. 数据目录与本地存储
+## 18. 数据目录与本地存储
 
 程序会在本地创建数据目录，用于保存 SQLite 数据和日志。
 
@@ -1031,7 +1263,7 @@ export EDITOR=nano
 - SQLite 数据库文件
 - 日志文件
 
-## 14. 输出与日志约定
+## 19. 输出与日志约定
 
 当前 CLI 输出遵循以下原则：
 
@@ -1047,7 +1279,7 @@ export EDITOR=nano
 
 如果你在脚本中调用这些命令，可以按这个约定解析结果。
 
-## 15. 推荐使用流程
+## 20. 推荐使用流程
 
 如果你第一次使用，建议按下面顺序操作：
 
@@ -1060,9 +1292,9 @@ export EDITOR=nano
 7. 确认后执行 `fl snapshot restore <name>` 恢复配置
 8. 如果希望交互式浏览，再执行 `fl tui`
 
-## 16. 常见问题
+## 21. 常见问题
 
-### 14.1 提示”未检测到任何可同步工具”
+### 21.1 提示”未检测到任何可同步工具”
 
 优先检查：
 
@@ -1070,7 +1302,7 @@ export EDITOR=nano
 - `~/.claude` 是否存在
 - 当前用户是否有权限读取这些目录
 
-### 14.2 `scan` 显示“暂不可同步”
+### 21.2 `scan` 显示”暂不可同步”
 
 这通常表示：
 
@@ -1079,7 +1311,7 @@ export EDITOR=nano
 
 此时 `snapshot create` 往往也会失败。
 
-### 14.3 `get` 读取失败
+### 21.3 `get` 读取失败
 
 优先检查：
 
@@ -1087,7 +1319,7 @@ export EDITOR=nano
 - 路径是否是相对于工具根目录的相对路径
 - 目标是否在允许访问的配置范围内
 
-### 14.4 `snapshot list` 一直为空
+### 21.4 `snapshot list` 一直为空
 
 这通常表示：
 
@@ -1096,13 +1328,13 @@ export EDITOR=nano
 
 可以先重新执行一次带 `--message` 的 `snapshot create`。
 
-### 14.5 TUI 能启动但没有任何数据
+### 21.5 TUI 能启动但没有任何数据
 
 TUI 只是另一层交互界面，底层仍然依赖同一套扫描与快照逻辑。
 
 如果 CLI 的 `scan` 和 `snapshot list` 没有结果，TUI 中通常也不会有结果。
 
-## 17. 文档维护说明
+## 22. 文档维护说明
 
 如果命令树、参数、输出格式或 TUI 页面行为发生变化，这份文档需要同步更新。更新时应优先以以下内容为准：
 
