@@ -151,7 +151,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	gitClient := git.NewGitClient()
 	if !git.IsRepository(repoPath) {
 		fmt.Printf("本地仓库不存在（%s）\n", repoPath)
-		fmt.Printf("是否从远程拉取现有配置？[Y/n]: ", remoteConfig.URL)
+		fmt.Printf("是否从远程拉取现有配置？[Y/n]: ")
 
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
@@ -401,10 +401,12 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 //
 // 流程（含冲突检测）：
 //  1. 获取远端配置
-//  2. 确保 repo 存在，执行 git fetch（不 merge）
-//  3. 对比本地 HEAD 和远端 HEAD 获取变更文件
-//  4. 对每个变更文件做三方对比（本地快照 vs 远端版本）检测冲突 ··//  5. 无冲突 → hard reset 到远端版本 + 更新 SQLite
-//  6. 有冲突 → 返回冲突列表，等待用户解决
+//  2. 确保 repo 存在（不存在则询问是否 clone）
+//  3. 执行 git fetch（不 merge）
+//  4. 对比本地 HEAD 和远端 HEAD 获取变更文件
+//  5. 对每个变更文件做三方对比（本地快照 vs 远端版本）检测冲突
+//  6. 无冲突 → hard reset 到远端版本 + 更新 SQLite
+//  7. 有冲突 → 返回冲突列表，等待用户解决
 func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error) {
 	// 第一步：参数校验
 	projectName := strings.TrimSpace(input.Project)
@@ -451,10 +453,33 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	gitClient := git.NewGitClient()
 
 	if !git.IsRepository(repoPath) {
-		return nil, &UserError{
-			Message:    "拉取失败：本地仓库不存在",
-			Suggestion: "请先执行 fl sync push --project " + projectName + " 初始化仓库",
+		fmt.Printf("本地仓库不存在（%s）\n", repoPath)
+		fmt.Printf("是否从远程拉取现有配置到本地？[Y/n]: ")
+
+		reader := bufio.NewReader(os.Stdin)
+		confirm, _ := reader.ReadString('\n')
+		confirm = strings.TrimSpace(strings.ToLower(confirm))
+		if confirm != "" && confirm != "y" && confirm != "yes" {
+			return &typesSync.SyncPullResult{
+				Success: true,
+				Project: projectName,
+			}, nil
 		}
+
+		cloneOpts := &git.CloneOptions{
+			URL:    remoteConfig.URL,
+			Path:   repoPath,
+			Auth:   convertAuthFromModel(&remoteConfig.Auth),
+			Branch: remoteConfig.Branch,
+		}
+		if _, cloneErr := gitClient.Clone(ctx, cloneOpts); cloneErr != nil {
+			return nil, &UserError{
+				Message:    fmt.Sprintf("拉取远端仓库失败（远端: %s）", remoteConfig.URL),
+				Suggestion: "请检查网络连接和仓库地址",
+				Err:        cloneErr,
+			}
+		}
+		fmt.Printf("远端配置已拉取到本地（%s）\n\n", repoPath)
 	}
 
 	// 第四步：记录本地 HEAD，然后 fetch 远端更新
