@@ -13,6 +13,7 @@ import (
 	"flux/internal/models"
 	"flux/internal/service/tool"
 	typesSnapshot "flux/internal/types/snapshot"
+	"flux/pkg/crypto"
 	"flux/pkg/database"
 	"flux/pkg/logger"
 
@@ -514,10 +515,15 @@ func (s *Service) DiffSnapshots(sourceID, targetID string, verbose bool, tool st
 }
 
 // diffWithFilesystem compares a snapshot against the current filesystem.
-// Direction: snapshot (source) → filesystem (target).
-//   - snapshot has, filesystem doesn't → deleted (文件被删除)
-//   - snapshot doesn't have, filesystem has → added (新增文件)
-//   - both have but different content → modified
+//
+// Direction: source = snapshot, target = filesystem.
+// "added" means present in target but not in source → new file on filesystem.
+// "deleted" means present in source but not in target → file removed from filesystem.
+// "modified" means present in both but content differs.
+//
+// 为什么不直接返回错误当 rescanFilesystem 失败：
+// 降级为单向对比（只检查快照文件是否存在于文件系统）仍然能提供有价值的 modified/deleted 信息，
+// 只是无法检测新增文件。这比直接报错或让所有文件都显示为 deleted 更友好。
 func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
 	logger.Info("对比快照与文件系统",
 		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
@@ -530,9 +536,11 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 	}
 
 	// 第二步：重新扫描当前文件系统，收集目标文件集合
-	fsFiles, err := s.rescanFilesystem(snapshot)
-	if err != nil {
-		logger.Warn("重新扫描文件系统失败，仅基于快照文件列表对比", zap.Error(err))
+	fsFiles, rescanErr := s.rescanFilesystem(snapshot)
+	if rescanErr != nil {
+		logger.Warn("重新扫描文件系统失败，降级为单向对比（无法检测新增文件）", zap.Error(rescanErr))
+		// 降级为单向对比：只检查快照中的文件在文件系统上的状态
+		return s.diffWithFilesystemFallback(snapshot, snapshotFiles, verbose)
 	}
 
 	fsFileMap := make(map[string]models.SnapshotFile, len(fsFiles))
@@ -566,7 +574,7 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 				ToolType: sf.ToolType,
 			}
 			if !sf.IsBinary {
-				change.DelLines = len(strings.Split(string(sf.Content), "\n"))
+				change.DelLines = countLines(sf.Content)
 			}
 			changes = append(changes, change)
 
@@ -580,7 +588,7 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 				ToolType: ff.ToolType,
 			}
 			if !ff.IsBinary {
-				change.AddLines = len(strings.Split(string(ff.Content), "\n"))
+				change.AddLines = countLines(ff.Content)
 			}
 			changes = append(changes, change)
 
@@ -621,6 +629,85 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 	return result, nil
 }
 
+// diffWithFilesystemFallback is the degraded comparison mode when rescanFilesystem fails.
+// It can only detect modified and deleted files (not newly added ones).
+func (s *Service) diffWithFilesystemFallback(snapshot *models.Snapshot, snapshotFiles map[string]models.SnapshotFile, verbose bool) (*typesSnapshot.DiffResult, error) {
+	var changes []typesSnapshot.DiffFileChange
+
+	for _, sf := range snapshot.Files {
+		info, err := os.Stat(sf.OriginalPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// 快照中有但文件系统没有 → 文件被删除
+				change := typesSnapshot.DiffFileChange{
+					Path:     sf.Path,
+					Status:   typesSnapshot.FileDeleted,
+					IsBinary: sf.IsBinary,
+					OldSize:  sf.Size,
+					ToolType: sf.ToolType,
+				}
+				if !sf.IsBinary {
+					change.DelLines = countLines(sf.Content)
+				}
+				changes = append(changes, change)
+			}
+			continue
+		}
+
+		if info.IsDir() {
+			continue
+		}
+
+		currentContent, err := os.ReadFile(sf.OriginalPath)
+		if err != nil {
+			continue
+		}
+
+		currentHash := crypto.SHA256Hash(currentContent)
+		if currentHash != sf.Hash {
+			change := typesSnapshot.DiffFileChange{
+				Path:     sf.Path,
+				Status:   typesSnapshot.FileModified,
+				IsBinary: sf.IsBinary,
+				OldSize:  sf.Size,
+				NewSize:  info.Size(),
+				ToolType: sf.ToolType,
+			}
+			if verbose && !sf.IsBinary {
+				change.Hunks = computeFileHunks(sf.Content, currentContent)
+			}
+			if !sf.IsBinary {
+				change.AddLines, change.DelLines = countLineChanges(sf.Content, currentContent)
+			}
+			changes = append(changes, change)
+		}
+	}
+
+	sort.Slice(changes, func(i, j int) bool {
+		return changes[i].Path < changes[j].Path
+	})
+
+	result := &typesSnapshot.DiffResult{
+		SourceName: snapshot.Name,
+		TargetName: "当前文件系统",
+		Files:      changes,
+	}
+	result.Stats = s.computeDiffStats(changes)
+	result.HasDiff = len(changes) > 0
+
+	return result, nil
+}
+
+// countLines returns the number of lines in content.
+// Uses strings.Count to avoid the off-by-one issue with strings.Split
+// (Split("abc\n", "\n") returns ["abc", ""] → count 2 instead of 1).
+func countLines(content []byte) int {
+	if len(content) == 0 {
+		return 0
+	}
+	return strings.Count(string(content), "\n")
+}
+
 // rescanFilesystem re-collects files from the current filesystem using the same
 // project and tools as the original snapshot, so that newly added files can be detected.
 func (s *Service) rescanFilesystem(snapshot *models.Snapshot) ([]models.SnapshotFile, error) {
@@ -653,6 +740,16 @@ func (s *Service) rescanFilesystem(snapshot *models.Snapshot) ([]models.Snapshot
 }
 
 // diffTwoSnapshots compares two snapshots and returns detailed differences.
+//
+// Direction: source = old snapshot, target = new snapshot.
+// "added" means present in source but not in target → file was added in source's perspective
+// (the file content comes from the source snapshot).
+// "deleted" means present in target but not in source → file was removed from source's perspective.
+// "modified" means present in both but content (hash) differs.
+//
+// 为什么 added/deleted 看起来反直觉：
+// 这里的语义是 "source 相对于 target 有什么变化"——source 多出的文件是 "added"（相对 target 新增），
+// target 多出的文件是 "deleted"（相对 target 已不存在）。
 func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
 	logger.Info("对比两个快照",
 		zap.Uint64("source_id", uint64(source.ID)),
@@ -692,7 +789,7 @@ func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool
 				ToolType: sf.ToolType,
 			}
 			if !sf.IsBinary {
-				change.AddLines = len(strings.Split(string(sf.Content), "\n"))
+				change.AddLines = countLines(sf.Content)
 			}
 			changes = append(changes, change)
 
@@ -705,7 +802,7 @@ func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool
 				ToolType: tf.ToolType,
 			}
 			if !tf.IsBinary {
-				change.DelLines = len(strings.Split(string(tf.Content), "\n"))
+				change.DelLines = countLines(tf.Content)
 			}
 			changes = append(changes, change)
 
