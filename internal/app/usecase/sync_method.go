@@ -5,12 +5,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"flux/internal/models"
-	typesSnapshot "flux/internal/types/snapshot"
 	typesSync "flux/internal/types/sync"
 	"flux/pkg/git"
 	"flux/pkg/logger"
@@ -21,11 +20,13 @@ import (
 // SyncPush pushes the latest snapshot of a project to its configured remote repository.
 //
 // 流程：
-//  1. 查找 project 的远端配置
-//  2. 确保工作目录存在（不存在则 clone）
-//  3. 重新扫描本地文件系统，创建最新快照（而不是用 SQLite 中存储的旧快照）
-//  4. 清空 repo 中该项目子目录，确保只保留最新快照内容
-//  5. 写入快照文件 → Git commit + push
+//  1. 获取远端配置
+//  2. 确保 repo 存在（不存在则询问是否 clone）
+//  3. fetch 远端最新代码
+//  4. 从 SQLite 读取该项目的最新快照
+//  5. 把快照文件写入 repo 工作目录
+//  6. git diff 展示快照 vs 远端 HEAD 的差异预览
+//  7. 用户确认后才 commit + push
 func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error) {
 	// 第一步：参数校验
 	projectName := strings.TrimSpace(input.Project)
@@ -52,7 +53,6 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		}
 	}
 
-	// 使用第一个活跃的配置（简化实现，后续可按 project 绑定）
 	var remoteConfig *models.RemoteConfig
 	for _, cfg := range configs {
 		if cfg.Status == models.StatusActive {
@@ -67,158 +67,110 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		}
 	}
 
-	// 第三步：重新扫描本地文件系统，创建最新快照
-	// 为什么：推送前必须以当前时刻的本地配置为准，而不是 SQLite 中存储的旧快照。
+	// 第三步：确保 repo 存在（不存在则询问是否 clone）
+	dataDir := w.dataDir
+	repoPath := filepath.Join(dataDir, "repos", projectName)
+	gitClient := git.NewGitClient()
+
+	if !git.IsRepository(repoPath) {
+		fmt.Printf("本地仓库不存在（%s）\n", repoPath)
+		fmt.Printf("是否从远程拉取现有配置？[Y/n]: ")
+
+		reader := bufio.NewReader(os.Stdin)
+		confirm, _ := reader.ReadString('\n')
+		confirm = strings.TrimSpace(strings.ToLower(confirm))
+		if confirm != "" && confirm != "y" && confirm != "yes" {
+			return &typesSync.SyncPushResult{
+				Success:     true,
+				Project:     projectName,
+				FilesPushed: 0,
+				Message:     "已取消推送",
+			}, nil
+		}
+
+		cloneOpts := &git.CloneOptions{
+			URL:    remoteConfig.URL,
+			Path:   repoPath,
+			Auth:   convertAuthFromModel(&remoteConfig.Auth),
+			Branch: remoteConfig.Branch,
+		}
+		if _, cloneErr := gitClient.Clone(ctx, cloneOpts); cloneErr != nil {
+			return nil, &UserError{
+				Message:    fmt.Sprintf("拉取远端仓库失败（远端: %s）", remoteConfig.URL),
+				Suggestion: "请检查网络连接和仓库地址",
+				Err:        cloneErr,
+			}
+		}
+		fmt.Println("远端配置拉取成功")
+	}
+
+	// 第四步：fetch 远端最新代码
+	branch := remoteConfig.Branch
+	if branch == "" {
+		branch = "main"
+	}
+	fetchResult, fetchErr := gitClient.Fetch(ctx, &git.FetchOptions{
+		Path:   repoPath,
+		Auth:   convertAuthFromModel(&remoteConfig.Auth),
+		Remote: "origin",
+	})
+	if fetchErr != nil && !strings.Contains(fetchErr.Error(), "already up-to-date") {
+		logger.Warn("fetch 远端失败，跳过",
+			zap.String("project", projectName),
+			zap.Error(fetchErr),
+		)
+		_ = fetchResult
+	}
+
+	// 第五步：从 SQLite 读取该项目的最新快照
 	if w.snapshots == nil {
 		return nil, &UserError{
 			Message:    "推送失败：快照服务不可用",
 			Suggestion: "请重新启动程序",
 		}
 	}
-
-	// 自动推导工具类型
-	tools := w.inferToolsFromProject(projectName)
-	if len(tools) == 0 {
+	items, listErr := w.snapshots.ListSnapshots(0, 0)
+	if listErr != nil {
 		return nil, &UserError{
-			Message:    "推送失败：无法确定项目 \"" + projectName + "\" 的工具类型",
-			Suggestion: "请确保项目已注册，或通过 scan add 重新注册",
+			Message:    "推送失败：无法读取快照列表",
+			Suggestion: "请检查本地数据库是否可访问",
+			Err:        listErr,
 		}
 	}
-
-	snapshotName := fmt.Sprintf("sync-push-%s", time.Now().Format("20060102-150405"))
-	snapshotPkg, snapErr := w.snapshots.CreateSnapshot(typesSnapshot.CreateSnapshotOptions{
-		Message:     fmt.Sprintf("自动快照（sync push %s）", projectName),
-		Tools:       tools,
-		Name:        snapshotName,
-		ProjectName: projectName,
-	})
-	if snapErr != nil {
-		return nil, &UserError{
-			Message:    fmt.Sprintf("推送失败：创建快照失败（项目: %s）", projectName),
-			Suggestion: "请检查本地配置文件是否可读",
-			Err:        snapErr,
+	var snapshotID string
+	for _, item := range items {
+		if item.Project == projectName {
+			snapshotID = fmt.Sprintf("%d", item.ID)
+			break
 		}
 	}
-	snapshot, err := w.snapshots.GetSnapshot(fmt.Sprintf("%d", snapshotPkg.Snapshot.ID))
+	if snapshotID == "" {
+		return nil, &UserError{
+			Message:    "推送失败：项目 \"" + projectName + "\" 没有快照",
+			Suggestion: "请先执行 fl snapshot create -p " + projectName + " 创建快照",
+		}
+	}
+	snapshot, err := w.snapshots.GetSnapshot(snapshotID)
 	if err != nil {
 		return nil, &UserError{
-			Message:    "推送失败：无法读取新创建的快照",
+			Message:    "推送失败：无法读取快照数据",
 			Suggestion: "请检查本地数据库是否可访问",
 			Err:        err,
 		}
 	}
 
-	// 第三步补充：显示提交预览并确认
-	// 为什么：推送会覆盖远程配置，需要用户明确知情后再执行。
-	fmt.Println()
-	fmt.Printf("本次提交：快照「%s」\n", snapshot.Name)
-	fmt.Printf("  - 远端仓库：%s\n", remoteConfig.URL)
-	fmt.Printf("  - 提交文件：%d 个（共 %s）\n", len(snapshot.Files), formatSize(snapshotPkg.Size))
-	if len(snapshot.Files) > 0 {
-		// 显示前 3 个文件示例
-		limit := len(snapshot.Files)
-		if limit > 3 {
-			limit = 3
-		}
-		for i := 0; i < limit; i++ {
-			fmt.Printf("  - %s\n", snapshot.Files[i].Path)
-		}
-		if len(snapshot.Files) > 3 {
-			fmt.Printf("  - ... 等 %d 个文件\n", len(snapshot.Files))
-		}
-	}
-	fmt.Println()
-	fmt.Println("警告：本次推送将以本地快照覆盖远端仓库中的对应文件！")
-	fmt.Printf("确认推送？[Y/n]: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	confirm, _ := reader.ReadString('\n')
-	confirm = strings.TrimSpace(strings.ToLower(confirm))
-	if confirm != "" && confirm != "y" && confirm != "yes" {
-		return &typesSync.SyncPushResult{
-			Success:   true,
-			Project:   projectName,
-			FilesPushed: 0,
-			Message:   "已取消推送",
-		}, nil
-	}
-	fmt.Println()
-
-	// 第四步：确保工作目录存在
-	dataDir := w.dataDir
-	repoPath := filepath.Join(dataDir, "repos", projectName)
-
-	gitClient := git.NewGitClient()
-	if !git.IsRepository(repoPath) {
-		fmt.Printf("本地仓库不存在（%s）\n", repoPath)
-		fmt.Printf("是否从远程拉取现有配置？[Y/n]: ")
-
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(strings.ToLower(input))
-
-		if input == "" || input == "y" || input == "yes" {
-			// 用户选择拉取远程配置
-			cloneOpts := &git.CloneOptions{
-				URL:    remoteConfig.URL,
-				Path:   repoPath,
-				Auth:   convertAuthFromModel(&remoteConfig.Auth),
-				Branch: remoteConfig.Branch,
-			}
-			if _, cloneErr := gitClient.Clone(ctx, cloneOpts); cloneErr != nil {
-				return nil, &UserError{
-					Message:    fmt.Sprintf("拉取远端仓库失败（远端: %s）", remoteConfig.URL),
-					Suggestion: "请检查网络连接和仓库地址，或输入 n 初始化空仓库",
-					Err:        cloneErr,
-				}
-			}
-			fmt.Println("远端配置拉取成功")
-		} else {
-			// 用户选择跳过，初始化空仓库
-			if _, initErr := git.InitRepository(repoPath, false); initErr != nil {
-				return nil, &UserError{
-					Message:    fmt.Sprintf("无法创建工作目录（远端: %s）", remoteConfig.URL),
-					Suggestion: "请检查磁盘空间和文件权限",
-					Err:        initErr,
-				}
-			}
-			_ = git.AddRemote(repoPath, "origin", remoteConfig.URL)
-			fmt.Println("空仓库初始化成功，将以本地配置覆盖远端")
-		}
-	}
-
-	// 确保分枝正确：clone 空仓库或 init 后，HEAD 可能指向 master 而非 main
-	targetBranch := remoteConfig.Branch
-	if targetBranch == "" {
-		targetBranch = "main"
-	}
-	if branchErr := git.EnsureBranch(repoPath, targetBranch); branchErr != nil {
-		logger.Warn("设置分枝失败，将使用默认分枝",
-			zap.String("repo_path", repoPath),
-			zap.String("branch", targetBranch),
-			zap.Error(branchErr),
-		)
-	}
-
-	// 第五步：清空 repo 中该项目子目录，确保只保留最新快照内容
-	// 为什么：旧快照可能不包含某些文件（远程多余），只写不删会导致垃圾文件残留。
+	// 第六步：把快照文件写入 repo 工作目录
+	// 先清空项目子目录，确保只保留本次快照的内容
 	projectSubDir := filepath.Join(repoPath, projectName)
 	if exists, _ := pathExists(projectSubDir); exists {
 		entries, readErr := os.ReadDir(projectSubDir)
 		if readErr == nil {
 			for _, entry := range entries {
 				entryPath := filepath.Join(projectSubDir, entry.Name())
-				if rmErr := os.RemoveAll(entryPath); rmErr != nil {
-					logger.Warn("清理旧文件失败",
-						zap.String("path", entryPath),
-						zap.Error(rmErr),
-					)
-				}
+				os.RemoveAll(entryPath)
 			}
 		}
 	}
-
-	// 第六步：从快照文件写入工作目录
 	filesWritten := 0
 	for _, file := range snapshot.Files {
 		if len(file.Content) == 0 {
@@ -226,166 +178,145 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		}
 		targetPath := filepath.Join(repoPath, projectName, file.Path)
 		dir := filepath.Dir(targetPath)
-		if mkErr := mkdirAll(dir); mkErr != nil {
-			continue
-		}
-		if err := writeFile(targetPath, file.Content); err != nil {
-			continue
-		}
+		mkdirAll(dir)
+		writeFile(targetPath, file.Content)
 		filesWritten++
 	}
 
-	logger.Info("文件写入完成",
-		zap.String("repo_path", repoPath),
-		zap.Int("files_written", filesWritten),
-	)
+	// 第七步：git diff 展示快照 vs 远端 HEAD 的差异预览
+	fmt.Println()
+	fmt.Printf("快照「%s」vs 远端 origin/%s 差异预览：\n", snapshot.Name, branch)
+	fmt.Println(strings.Repeat("-", 60))
 
-	// 诊断：写入后检查 git status
-	statusResult, statusErr := gitClient.GetStatus(&git.StatusOptions{Path: repoPath})
-	if statusErr != nil {
-		logger.Warn("无法获取 git status",
-			zap.String("repo_path", repoPath),
-			zap.Error(statusErr),
-		)
+	// 执行 git diff --stat origin/<branch>
+	diffCmd := exec.Command("git", "diff", "--stat", "origin/"+branch)
+	diffCmd.Dir = repoPath
+	diffOutput, diffErr := diffCmd.Output()
+	if diffErr == nil && len(diffOutput) > 0 {
+		fmt.Print(string(diffOutput))
 	} else {
-		logger.Info("Git status 诊断",
-			zap.Bool("is_clean", statusResult.IsClean),
-			zap.String("branch", statusResult.Branch),
-			zap.Int("changed_files", len(statusResult.Files)),
-		)
-		for i, f := range statusResult.Files {
-			if i >= 5 {
-				break
-			}
-			logger.Info("Git status 文件",
-				zap.String("path", f.Path),
-				zap.String("worktree", f.Worktree),
-				zap.String("staging", f.Staging),
-			)
-		}
+		fmt.Println("  无文件变更（快照与远端一致）")
 	}
 
-	// 第七步：Git add + commit
+	// 执行 git diff --name-status origin/<branch> 获取详细变更列表
+	diffNameCmd := exec.Command("git", "diff", "--name-status", "origin/"+branch)
+	diffNameCmd.Dir = repoPath
+	diffNameOutput, diffNameErr := diffNameCmd.Output()
+
+	var added, modified, deleted int
+	if diffNameErr == nil {
+		lines := strings.Split(strings.TrimSpace(string(diffNameOutput)), "\n")
+		for _, line := range lines {
+			if len(line) == 0 {
+				continue
+			}
+			parts := strings.SplitN(line, "\t", 2)
+			if len(parts) < 2 {
+				continue
+			}
+			status := parts[0]
+			path := parts[1]
+			switch status {
+			case "A":
+				added++
+				if added <= 5 {
+					fmt.Printf("  [新增] %s\n", path)
+				}
+			case "M":
+				modified++
+				if modified <= 5 {
+					fmt.Printf("  [修改] %s\n", path)
+				}
+			case "D":
+				deleted++
+				if deleted <= 5 {
+					fmt.Printf("  [删除] %s\n", path)
+				}
+			}
+		}
+		if added > 5 {
+			fmt.Printf("  ... 等 %d 个新增文件\n", added-5)
+		}
+		if modified > 5 {
+			fmt.Printf("  ... 等 %d 个修改文件\n", modified-5)
+		}
+		if deleted > 5 {
+			fmt.Printf("  ... 等 %d 个删除文件\n", deleted-5)
+		}
+	}
+	if added == 0 && modified == 0 && deleted == 0 {
+		fmt.Println("  无文件变更")
+	}
+	fmt.Println(strings.Repeat("-", 60))
+	fmt.Println()
+
+	// 第八步：询问用户确认
+	fmt.Printf("快照「%s」：新增 %d，修改 %d，删除 %d\n",
+		snapshot.Name, added, modified, deleted)
+	fmt.Println("警告：以快照内容覆盖远端仓库，确认推送？[Y/n]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	confirmInput, _ := reader.ReadString('\n')
+	confirmInput = strings.TrimSpace(strings.ToLower(confirmInput))
+	if confirmInput != "" && confirmInput != "y" && confirmInput != "yes" {
+		return &typesSync.SyncPushResult{
+			Success:     true,
+			Project:     projectName,
+			FilesPushed: 0,
+			Message:     "已取消推送",
+		}, nil
+	}
+	fmt.Println()
+
+	// 第九步：git add + commit
 	commitMsg := fmt.Sprintf("Snapshot: %s\nID: %d\nProject: %s\nFiles: %d",
 		snapshot.Name, snapshot.ID, snapshot.Project, filesWritten)
-	commitResult, err := gitClient.Commit(ctx, &git.CommitOptions{
+	commitResult, commitErr := gitClient.Commit(ctx, &git.CommitOptions{
 		Path:    repoPath,
 		Message: commitMsg,
 		All:     true,
 	})
-	if err != nil {
-		// commit 失败可能是因为没有变更
-		// 为什么：go-git 返回 "cannot create empty commit: clean working tree"，而不是 "nothing to commit"
-		errMsg := err.Error()
+	if commitErr != nil {
+		errMsg := commitErr.Error()
 		if strings.Contains(errMsg, "nothing to commit") || strings.Contains(errMsg, "empty commit") {
-			// 为什么需要区分 filesWritten：用户第一次推送时如果远端已有相同内容，
-			// 会写入大量文件但 git 认为无变更，需要给出明确说明。
-			msg := "远端仓库内容与本地快照一致，无需推送"
-			if filesWritten == 0 {
-				msg = "快照中没有需要推送的文件"
-			} else {
-				logger.Warn("文件已写入但 Git 未检测到变更",
-					zap.String("project", projectName),
-					zap.Int("files_written", filesWritten),
-					zap.String("repo_path", repoPath),
-					zap.Error(err),
-				)
-			}
 			return &typesSync.SyncPushResult{
 				Success:     true,
 				Project:     projectName,
 				FilesPushed: 0,
 				RemoteURL:   remoteConfig.URL,
-				Message:     msg,
+				Message:     "快照与远端一致，无需推送",
 			}, nil
 		}
 		return nil, &UserError{
 			Message:    fmt.Sprintf("推送失败：Git commit 失败（远端: %s）", remoteConfig.URL),
 			Suggestion: "请检查工作目录状态",
-			Err:        err,
+			Err:        commitErr,
 		}
 	}
 
-	// 第八步：Git push
-	branch := remoteConfig.Branch
-	if branch == "" {
-		branch = "main"
-	}
-	pushResult, err := gitClient.Push(ctx, &git.PushOptions{
+	// 第十步：git push
+	_, pushErr := gitClient.Push(ctx, &git.PushOptions{
 		Path:       repoPath,
 		Auth:       convertAuthFromModel(&remoteConfig.Auth),
 		RemoteName: "origin",
 		Branch:     branch,
 	})
-	if err != nil {
-		// push 失败不影响本地
+	if pushErr != nil {
 		logger.Error("推送失败",
 			zap.String("project", projectName),
 			zap.String("remote_url", remoteConfig.URL),
-			zap.String("branch", branch),
-			zap.Error(err),
+			zap.Error(pushErr),
 		)
 		return nil, &UserError{
-			Message:    fmt.Sprintf("推送失败：无法推送到远端仓库 \"%s\" (%s)", remoteConfig.Name, remoteConfig.URL),
-			Suggestion: "请检查网络连接和仓库权限。本地数据未受影响。",
-			Err:        err,
+			Message:    fmt.Sprintf("推送失败：无法推送到远端仓库（%s）", remoteConfig.URL),
+			Suggestion: "请检查网络连接和仓库权限",
+			Err:        pushErr,
 		}
 	}
-	// 诊断：push 后的仓库状态
-	logger.Info("Push 返回结果",
-		zap.String("project", projectName),
-		zap.Bool("success", pushResult.Success),
-		zap.String("message", pushResult.Message),
-	)
-	localHead, _ := gitClient.GetHeadHash(repoPath)
-	logger.Info("本地 HEAD",
-		zap.String("project", projectName),
-		zap.String("local_head", localHead),
-	)
-	remoteHead, remoteHeadErr := gitClient.GetRemoteHeadHash(repoPath, "origin", branch)
-	logger.Info("远端 HEAD",
-		zap.String("project", projectName),
-		zap.String("branch", branch),
-		zap.String("remote_head", remoteHead),
-		zap.Error(remoteHeadErr),
-	)
 
 	commitHash := ""
 	if commitResult != nil {
 		commitHash = commitResult.CommitHash
-	}
-
-	// 第九步：验证远端是否真的收到了提交
-	logger.Info("验证远端提交",
-		zap.String("project", projectName),
-		zap.String("commit", commitHash),
-		zap.String("remote_url", remoteConfig.URL),
-		zap.String("branch", remoteConfig.Branch),
-	)
-	remoteHash, err := gitClient.GetRemoteHeadHash(repoPath, "origin", remoteConfig.Branch)
-	if err != nil {
-		logger.Warn("无法获取远端 HEAD，跳过验证",
-			zap.String("project", projectName),
-			zap.Error(err),
-		)
-	} else if commitHash != "" && remoteHash != commitHash {
-		// 本地和远端不一致，push 可能失败
-		logger.Error("远端提交验证失败",
-			zap.String("project", projectName),
-			zap.String("local_commit", commitHash),
-			zap.String("remote_commit", remoteHash),
-		)
-		return nil, &UserError{
-			Message:    fmt.Sprintf("推送失败：远端仓库未收到提交（本地: %s, 远端: %s）", commitHash[:8], remoteHash[:8]),
-			Suggestion: "请检查远端仓库状态、分支配置和网络连接。本地数据未受影响。",
-			Err:        err,
-		}
-	} else {
-		logger.Info("推送验证成功",
-			zap.String("project", projectName),
-			zap.String("commit", commitHash),
-			zap.Int("files_pushed", filesWritten),
-		)
 	}
 
 	return &typesSync.SyncPushResult{
@@ -394,19 +325,9 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		FilesPushed: filesWritten,
 		CommitHash:  commitHash,
 		RemoteURL:   remoteConfig.URL,
+		Message:     "推送成功",
 	}, nil
 }
-
-// SyncPull pulls the latest configuration from remote and updates SQLite.
-//
-// 流程（含冲突检测）：
-//  1. 获取远端配置
-//  2. 确保 repo 存在（不存在则询问是否 clone）
-//  3. 执行 git fetch（不 merge）
-//  4. 对比本地 HEAD 和远端 HEAD 获取变更文件
-//  5. 对每个变更文件做三方对比（本地快照 vs 远端版本）检测冲突
-//  6. 无冲突 → hard reset 到远端版本 + 更新 SQLite
-//  7. 有冲突 → 返回冲突列表，等待用户解决
 func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error) {
 	// 第一步：参数校验
 	projectName := strings.TrimSpace(input.Project)
