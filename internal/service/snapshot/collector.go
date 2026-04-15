@@ -132,6 +132,7 @@ func (c *Collector) collectMatch(
 }
 
 // collectFilesUnderDir 递归遍历目录，但仍会经过排除规则和 seen 去重。
+// 支持跟随符号链接目录，确保 ~/.claude/skills/ 等由符号链接组成的目录能被正确收集。
 func (c *Collector) collectFilesUnderDir(
 	basePath string,
 	toolName string,
@@ -146,6 +147,20 @@ func (c *Collector) collectFilesUnderDir(
 			errors = append(errors, CollectError{Path: path, Message: err.Error()})
 			return nil
 		}
+
+		// filepath.Walk 内部用 os.Lstat，不跟踪符号链接。
+		// 当遇到符号链接时，info.IsDir()=false（因为它本身是 symlink 而非目录）。
+		// 此时需要用 os.Stat 跟随链接判断目标是否为目录，如果是则递归遍历。
+		if !info.IsDir() && info.Mode()&os.ModeSymlink != 0 {
+			realInfo, statErr := os.Stat(path)
+			if statErr == nil && realInfo.IsDir() {
+				linkedFiles, linkedErrs := c.collectFilesUnderDir(path, toolName, options, seen)
+				files = append(files, linkedFiles...)
+				errors = append(errors, linkedErrs...)
+				return nil
+			}
+		}
+
 		if info.IsDir() {
 			return nil
 		}

@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"flux/internal/models"
+	typesSnapshot "flux/internal/types/snapshot"
 	typesSync "flux/internal/types/sync"
 	"flux/pkg/git"
 	"flux/pkg/logger"
@@ -18,10 +20,11 @@ import (
 // SyncPush pushes the latest snapshot of a project to its configured remote repository.
 //
 // 流程：
-//  1. 查找 project 最新快照
-//  2. 查找 project 的远端配置
-//  3. 确保工作目录存在（不存在则 clone）
-//  4. 从 SQLite 读文件 → 写入工作目录 → Git commit + push
+//  1. 查找 project 的远端配置
+//  2. 确保工作目录存在（不存在则 clone）
+//  3. 重新扫描本地文件系统，创建最新快照（而不是用 SQLite 中存储的旧快照）
+//  4. 清空 repo 中该项目子目录，确保只保留最新快照内容
+//  5. 写入快照文件 → Git commit + push
 func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error) {
 	// 第一步：参数校验
 	projectName := strings.TrimSpace(input.Project)
@@ -63,40 +66,42 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		}
 	}
 
-	// 第三步：查找 project 最新快照
+	// 第三步：重新扫描本地文件系统，创建最新快照
+	// 为什么：推送前必须以当前时刻的本地配置为准，而不是 SQLite 中存储的旧快照。
 	if w.snapshots == nil {
 		return nil, &UserError{
 			Message:    "推送失败：快照服务不可用",
 			Suggestion: "请重新启动程序",
 		}
 	}
-	items, err := w.snapshots.ListSnapshots(0, 0)
-	if err != nil {
+
+	// 自动推导工具类型
+	tools := w.inferToolsFromProject(projectName)
+	if len(tools) == 0 {
 		return nil, &UserError{
-			Message:    "推送失败：无法读取快照列表",
-			Suggestion: "请检查本地数据库是否可访问",
-			Err:        err,
+			Message:    "推送失败：无法确定项目 \"" + projectName + "\" 的工具类型",
+			Suggestion: "请确保项目已注册，或通过 scan add 重新注册",
 		}
 	}
 
-	var targetID string
-	for _, item := range items {
-		if item.Project == projectName {
-			targetID = fmt.Sprintf("%d", item.ID)
-			break
-		}
-	}
-	if targetID == "" {
+	snapshotName := fmt.Sprintf("sync-push-%s", time.Now().Format("20060102-150405"))
+	snapshotPkg, snapErr := w.snapshots.CreateSnapshot(typesSnapshot.CreateSnapshotOptions{
+		Message:     fmt.Sprintf("自动快照（sync push %s）", projectName),
+		Tools:       tools,
+		Name:        snapshotName,
+		ProjectName: projectName,
+	})
+	if snapErr != nil {
 		return nil, &UserError{
-			Message:    "推送失败：项目 \"" + projectName + "\" 没有快照",
-			Suggestion: "请先执行 fl snapshot create -p " + projectName + " 创建快照",
+			Message:    fmt.Sprintf("推送失败：创建快照失败（项目: %s）", projectName),
+			Suggestion: "请检查本地配置文件是否可读",
+			Err:        snapErr,
 		}
 	}
-
-	snapshot, err := w.snapshots.GetSnapshot(targetID)
+	snapshot, err := w.snapshots.GetSnapshot(fmt.Sprintf("%d", snapshotPkg.Snapshot.ID))
 	if err != nil {
 		return nil, &UserError{
-			Message:    "推送失败：无法读取快照数据",
+			Message:    "推送失败：无法读取新创建的快照",
 			Suggestion: "请检查本地数据库是否可访问",
 			Err:        err,
 		}
@@ -148,7 +153,25 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		)
 	}
 
-	// 第五步：从 SQLite 读文件 → 写入工作目录
+	// 第五步：清空 repo 中该项目子目录，确保只保留最新快照内容
+	// 为什么：旧快照可能不包含某些文件（远程多余），只写不删会导致垃圾文件残留。
+	projectSubDir := filepath.Join(repoPath, projectName)
+	if exists, _ := pathExists(projectSubDir); exists {
+		entries, readErr := os.ReadDir(projectSubDir)
+		if readErr == nil {
+			for _, entry := range entries {
+				entryPath := filepath.Join(projectSubDir, entry.Name())
+				if rmErr := os.RemoveAll(entryPath); rmErr != nil {
+					logger.Warn("清理旧文件失败",
+						zap.String("path", entryPath),
+						zap.Error(rmErr),
+					)
+				}
+			}
+		}
+	}
+
+	// 第六步：从快照文件写入工作目录
 	filesWritten := 0
 	for _, file := range snapshot.Files {
 		if len(file.Content) == 0 {
@@ -195,7 +218,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		}
 	}
 
-	// 第六步：Git add + commit
+	// 第七步：Git add + commit
 	commitMsg := fmt.Sprintf("Snapshot: %s\nID: %d\nProject: %s\nFiles: %d",
 		snapshot.Name, snapshot.ID, snapshot.Project, filesWritten)
 	commitResult, err := gitClient.Commit(ctx, &git.CommitOptions{
@@ -236,7 +259,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		}
 	}
 
-	// 第七步：Git push
+	// 第八步：Git push
 	branch := remoteConfig.Branch
 	if branch == "" {
 		branch = "main"
@@ -285,7 +308,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		commitHash = commitResult.CommitHash
 	}
 
-	// 第八步：验证远端是否真的收到了提交
+	// 第九步：验证远端是否真的收到了提交
 	logger.Info("验证远端提交",
 		zap.String("project", projectName),
 		zap.String("commit", commitHash),
@@ -681,4 +704,16 @@ func parseGitError(errStr, remoteURL string) (errorMsg, suggestion string) {
 	// 默认返回原始错误
 	return fmt.Sprintf("拉取失败：%s", errStr),
 		"请查看日志了解详细错误信息"
+}
+
+// pathExists 检查指定路径是否存在（文件或目录）。
+func pathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
