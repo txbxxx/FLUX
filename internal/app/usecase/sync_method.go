@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -107,36 +108,82 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		}
 	}
 
+	// 第三步补充：显示提交预览并确认
+	// 为什么：推送会覆盖远程配置，需要用户明确知情后再执行。
+	fmt.Println()
+	fmt.Printf("本次提交：快照「%s」\n", snapshot.Name)
+	fmt.Printf("  - 远端仓库：%s\n", remoteConfig.URL)
+	fmt.Printf("  - 提交文件：%d 个（共 %s）\n", len(snapshot.Files), formatSize(snapshotPkg.Size))
+	if len(snapshot.Files) > 0 {
+		// 显示前 3 个文件示例
+		limit := len(snapshot.Files)
+		if limit > 3 {
+			limit = 3
+		}
+		for i := 0; i < limit; i++ {
+			fmt.Printf("  - %s\n", snapshot.Files[i].Path)
+		}
+		if len(snapshot.Files) > 3 {
+			fmt.Printf("  - ... 等 %d 个文件\n", len(snapshot.Files))
+		}
+	}
+	fmt.Println()
+	fmt.Println("警告：本次推送将以本地快照覆盖远端仓库中的对应文件！")
+	fmt.Printf("确认推送？[Y/n]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	confirm, _ := reader.ReadString('\n')
+	confirm = strings.TrimSpace(strings.ToLower(confirm))
+	if confirm != "" && confirm != "y" && confirm != "yes" {
+		return &typesSync.SyncPushResult{
+			Success:   true,
+			Project:   projectName,
+			FilesPushed: 0,
+			Message:   "已取消推送",
+		}, nil
+	}
+	fmt.Println()
+
 	// 第四步：确保工作目录存在
 	dataDir := w.dataDir
 	repoPath := filepath.Join(dataDir, "repos", projectName)
 
 	gitClient := git.NewGitClient()
 	if !git.IsRepository(repoPath) {
-		// 尝试 clone 远端仓库
-		cloneOpts := &git.CloneOptions{
-			URL:    remoteConfig.URL,
-			Path:   repoPath,
-			Auth:   convertAuthFromModel(&remoteConfig.Auth),
-			Branch: remoteConfig.Branch,
-		}
-		if _, cloneErr := gitClient.Clone(ctx, cloneOpts); cloneErr != nil {
-			logger.Info("Clone 失败，尝试初始化新仓库",
-				zap.String("repo_path", repoPath),
-				zap.Error(cloneErr),
-			)
-			// clone 失败则初始化新仓库
+		fmt.Printf("本地仓库不存在（%s）\n", repoPath)
+		fmt.Printf("是否从远程拉取现有配置？[Y/n]: ", remoteConfig.URL)
+
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		if input == "" || input == "y" || input == "yes" {
+			// 用户选择拉取远程配置
+			cloneOpts := &git.CloneOptions{
+				URL:    remoteConfig.URL,
+				Path:   repoPath,
+				Auth:   convertAuthFromModel(&remoteConfig.Auth),
+				Branch: remoteConfig.Branch,
+			}
+			if _, cloneErr := gitClient.Clone(ctx, cloneOpts); cloneErr != nil {
+				return nil, &UserError{
+					Message:    fmt.Sprintf("拉取远端仓库失败（远端: %s）", remoteConfig.URL),
+					Suggestion: "请检查网络连接和仓库地址，或输入 n 初始化空仓库",
+					Err:        cloneErr,
+				}
+			}
+			fmt.Println("远端配置拉取成功")
+		} else {
+			// 用户选择跳过，初始化空仓库
 			if _, initErr := git.InitRepository(repoPath, false); initErr != nil {
 				return nil, &UserError{
-					Message:    fmt.Sprintf("推送失败：无法创建工作目录（远端: %s）", remoteConfig.URL),
+					Message:    fmt.Sprintf("无法创建工作目录（远端: %s）", remoteConfig.URL),
 					Suggestion: "请检查磁盘空间和文件权限",
 					Err:        initErr,
 				}
 			}
 			_ = git.AddRemote(repoPath, "origin", remoteConfig.URL)
-			logger.Info("新仓库初始化成功", zap.String("repo_path", repoPath))
-		} else {
-			logger.Info("Clone 成功", zap.String("repo_path", repoPath))
+			fmt.Println("空仓库初始化成功，将以本地配置覆盖远端")
 		}
 	}
 
@@ -716,4 +763,22 @@ func pathExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+// formatSize 将字节数转换为人类可读的字符串（KB/MB/GB）。
+func formatSize(bytes int64) string {
+	const KB = 1024
+	const MB = 1024 * KB
+	const GB = 1024 * MB
+
+	if bytes >= GB {
+		return fmt.Sprintf("%.1f GB", float64(bytes)/GB)
+	}
+	if bytes >= MB {
+		return fmt.Sprintf("%.1f MB", float64(bytes)/MB)
+	}
+	if bytes >= KB {
+		return fmt.Sprintf("%.1f KB", float64(bytes)/KB)
+	}
+	return fmt.Sprintf("%d B", bytes)
 }
