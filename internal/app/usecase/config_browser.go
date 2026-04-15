@@ -278,29 +278,31 @@ func (w *LocalWorkflow) getSnapshotConfig(input GetConfigInput) (*GetConfigResul
 		}
 	}
 
-	relativePath := strings.TrimSpace(input.Path)
+	// 统一使用正斜杠，与快照中的路径格式一致
+	relativePath := filepath.ToSlash(strings.TrimSpace(input.Path))
 
-	// 无路径时，列出快照中所有文件
+	// 提取所有文件路径用于目录结构推导（统一为正斜杠）
+	filePaths := make([]string, 0, len(snapshot.Files))
+	for _, file := range snapshot.Files {
+		filePaths = append(filePaths, filepath.ToSlash(file.Path))
+	}
+
+	// 无路径时，列出快照根目录的直属条目（目录和文件）
 	if relativePath == "" {
+		entries := listSnapshotEntries(filePaths, "")
 		result := &GetConfigResult{
 			Tool:         input.Tool,
 			RelativePath: "",
 			AbsolutePath: "[快照] " + snapshot.Name,
 			Kind:         ConfigTargetDirectory,
-		}
-		for _, file := range snapshot.Files {
-			result.Entries = append(result.Entries, ConfigEntry{
-				Name:         filepath.Base(file.Path),
-				RelativePath: file.Path,
-				IsDir:        false,
-			})
+			Entries:      entries,
 		}
 		return result, nil
 	}
 
-	// 查找匹配的文件
+	// 第一步：精确匹配文件
 	for _, file := range snapshot.Files {
-		if file.Path == relativePath {
+		if filepath.ToSlash(file.Path) == relativePath {
 			result := &GetConfigResult{
 				Tool:         input.Tool,
 				RelativePath: file.Path,
@@ -313,16 +315,38 @@ func (w *LocalWorkflow) getSnapshotConfig(input GetConfigInput) (*GetConfigResul
 		}
 	}
 
+	// 第二步：匹配虚拟目录（路径作为前缀出现在其他文件路径中）
+	prefix := relativePath + "/"
+	hasChildren := false
+	for _, p := range filePaths {
+		if strings.HasPrefix(p, prefix) {
+			hasChildren = true
+			break
+		}
+	}
+	if hasChildren {
+		entries := listSnapshotEntries(filePaths, relativePath)
+		result := &GetConfigResult{
+			Tool:         input.Tool,
+			RelativePath: relativePath,
+			AbsolutePath: "[快照] " + snapshot.Name + "/" + relativePath,
+			Kind:         ConfigTargetDirectory,
+			Entries:      entries,
+		}
+		return result, nil
+	}
+
 	return nil, &UserError{
-		Message:    "快照中未找到文件: " + relativePath,
-		Suggestion: "省略路径可查看快照中的所有文件列表",
+		Message:    "快照中未找到文件或目录: " + relativePath,
+		Suggestion: "省略路径可查看快照中的目录列表",
 	}
 }
 
 // saveSnapshotConfig 更新快照中指定文件的内容。
 func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
 	snapshotID := strings.TrimSpace(input.Snapshot)
-	relativePath := strings.TrimSpace(input.Path)
+	// 统一使用正斜杠，与快照中的路径格式一致
+	relativePath := filepath.ToSlash(strings.TrimSpace(input.Path))
 
 	if relativePath == "" {
 		return &UserError{
@@ -369,7 +393,7 @@ func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
 	// 查找并更新文件内容
 	found := false
 	for i, file := range snapshot.Files {
-		if file.Path == relativePath {
+		if filepath.ToSlash(file.Path) == relativePath {
 			snapshot.Files[i].Content = []byte(input.Content)
 			found = true
 			break
@@ -379,7 +403,7 @@ func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
 	if !found {
 		return &UserError{
 			Message:    "快照中未找到文件: " + relativePath,
-			Suggestion: "省略路径可查看快照中的所有文件列表",
+			Suggestion: "省略路径可查看快照中的目录列表",
 		}
 	}
 
@@ -393,6 +417,57 @@ func (w *LocalWorkflow) saveSnapshotConfig(input SaveConfigInput) error {
 	}
 
 	return nil
+}
+
+// listSnapshotEntries returns the immediate children (directories and files) at the given virtual directory path.
+// Builds a virtual directory tree from flat file paths: "a/b.txt" and "a/c/d.txt" produce directory "a" at root.
+func listSnapshotEntries(filePaths []string, dirPath string) []ConfigEntry {
+	seen := make(map[string]bool)
+	var entries []ConfigEntry
+
+	prefix := dirPath
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+
+	for _, path := range filePaths {
+		// 跳过不在当前目录下的文件
+		if prefix != "" && !strings.HasPrefix(path, prefix) {
+			continue
+		}
+
+		// 获取相对于当前目录的路径
+		relPath := path
+		if prefix != "" {
+			relPath = strings.TrimPrefix(path, prefix)
+		}
+
+		// 提取第一个路径组件作为当前层级的条目
+		parts := strings.SplitN(relPath, "/", 2)
+		firstName := parts[0]
+
+		if seen[firstName] {
+			continue
+		}
+		seen[firstName] = true
+
+		if len(parts) > 1 {
+			// 还有更深层级，说明这是一个目录
+			entries = append(entries, ConfigEntry{
+				Name:         firstName,
+				RelativePath: prefix + firstName,
+				IsDir:        true,
+			})
+		} else {
+			entries = append(entries, ConfigEntry{
+				Name:         firstName,
+				RelativePath: prefix + firstName,
+				IsDir:        false,
+			})
+		}
+	}
+
+	return entries
 }
 
 // sanitizeContent 清理文件内容中的特殊字符，确保在终端编辑器中正常显示。
