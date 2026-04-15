@@ -181,7 +181,7 @@ if localHash == "" || remoteHash == "" || localHash == remoteHash {
 | 文件 | 修改内容 |
 |------|---------|
 | `internal/service/snapshot/collector.go` | 增加符号链接目录的递归遍历 |
-| `internal/app/usecase/sync_method.go` | push 前自动创建新快照；写入前清空项目子目录 |
+| `internal/app/usecase/sync_method.go` | push 前自动创建新快照；写入前清空项目子目录；增加交互确认流程 |
 
 ## 修复后行为
 
@@ -189,6 +189,31 @@ if localHash == "" || remoteHash == "" || localHash == remoteHash {
 2. 写入 repo 前清空项目子目录，确保远程只有最新快照中的文件
 3. `skills/` 等由符号链接组成的目录能被正确收集
 4. 推送后本地和远程 HEAD 一致，pull 不再误报"0 更新"
+5. **交互确认**：本地仓库不存在时询问是否先拉取远程配置
+6. **提交预览**：显示快照名称、远端地址、文件数量和大小、文件示例
+7. **覆盖警告**：明确告知本次推送将覆盖远端配置，用户确认后才执行
+
+### 交互流程示例
+
+```
+$ fl sync push -p claude-global
+本地仓库不存在（C:\Users\xxx\.ai-sync-manager\repos\claude-global）
+是否从远程拉取现有配置？[Y/n]: Y
+远端配置拉取成功
+
+本次提交：快照「sync-push-20260415-182600」
+  - 远端仓库：ssh://gogs@git.tanc.fun:2222/txbxxx/RemoteConfig.git
+  - 提交文件：1205 个（共 5.2 MB）
+  - settings.json
+  - skills/lark-approval/SKILL.md
+  - skills/lark-approval/...
+  - ... 等 1205 个文件
+
+警告：本次推送将以本地快照覆盖远端仓库中的对应文件！
+确认推送？[Y/n]: Y
+```
+
+用户输入 `n` 则取消推送，返回"已取消推送"。
 
 ## 测试场景
 
@@ -197,5 +222,8 @@ if localHash == "" || remoteHash == "" || localHash == remoteHash {
 | 推送本地有变化的配置 | 修改 settings.json 后 sync push | 产生新 commit，推送成功 | 通过 |
 | 推送本地新增的 skills 文件 | 在 skills/ 下新增文件后 sync push | 新文件出现在远程仓库 | 通过 |
 | 推送后远程有本地没有的文件 | 远程有多余文件时 sync push | 多余文件被删除 | 通过 |
+| skills/ 全为符号链接 | sync push 包含符号链接的 skills | 符号链接目标内容被收集推送 | 通过 |
+| 本地仓库不存在时 push | sync push 新项目 | 询问是否拉取远程，用户可选择 | 通过 |
+| 推送时用户取消确认 | sync push 输入 n | 返回"已取消推送"，无任何变更 | 通过 |
 | skills/ 全为符号链接 | sync push 包含符号链接的 skills | 符号链接目标内容被收集推送 | 通过 |
 | sync pull 检测到差异 | 远程有变更时 sync pull | 检测到变更并更新 SQLite | 通过（待 pull 逻辑改进后）|
