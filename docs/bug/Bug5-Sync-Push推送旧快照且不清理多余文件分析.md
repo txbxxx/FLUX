@@ -54,17 +54,28 @@ snapshot, err := w.snapshots.GetSnapshot(targetID)
 
 #### 修复
 
-改为在推送前**重新扫描本地文件系统**，创建新快照：
+改为**从 SQLite 读取现有快照**，并在写入 repo 后用 `git diff` 展示差异预览：
 
 ```go
-// 第三步：重新扫描本地文件系统，创建最新快照
-snapshotName := fmt.Sprintf("sync-push-%s", time.Now().Format("20060102-150405"))
-snapshotPkg, snapErr := w.snapshots.CreateSnapshot(typesSnapshot.CreateSnapshotOptions{
-    Message:     fmt.Sprintf("自动快照（sync push %s）", projectName),
-    Tools:       tools,
-    Name:        snapshotName,
-    ProjectName: projectName,
-})
+// 第四步：fetch 远端最新代码
+fetchResult, fetchErr := gitClient.Fetch(ctx, &git.FetchOptions{...})
+
+// 第五步：从 SQLite 读取该项目的最新快照
+items, _ := w.snapshots.ListSnapshots(0, 0)
+for _, item := range items {
+    if item.Project == projectName {
+        targetID = fmt.Sprintf("%d", item.ID)
+    }
+}
+snapshot, _ := w.snapshots.GetSnapshot(targetID)
+
+// 第六步：把快照文件写入 repo 工作目录
+// 第七步：git diff 展示快照 vs 远端 HEAD 的差异预览
+diffCmd := exec.Command("git", "diff", "--name-status", "origin/"+branch)
+diffOutput, _ := diffCmd.Output()
+// 解析 A/M/D 分类统计后...
+
+// 第八步：用户确认后才 commit + push
 ```
 
 ---
@@ -204,18 +215,16 @@ if !git.IsRepository(repoPath) {
 | 文件 | 修改内容 |
 |------|---------|
 | `internal/service/snapshot/collector.go` | 增加符号链接目录的递归遍历 |
-| `internal/app/usecase/sync_method.go` | push 前自动创建新快照；写入前清空项目子目录；push/pull 仓库不存在时均询问是否 clone |
+| `internal/app/usecase/sync_method.go` | 重新设计 SyncPush：fetch 远端→写入 SQLite 快照→git diff 预览→用户确认→commit+push；写入前清空项目子目录；push/pull 仓库不存在时均询问是否 clone |
 
 ## 修复后行为
 
-1. `sync push` 先重新扫描本地文件系统创建新快照，确保推送的是最新配置
-2. 写入 repo 前清空项目子目录，确保远程只有最新快照中的文件
+1. `sync push` 从 SQLite 读取现有快照写入 repo，展示 `git diff` 差异预览，让用户在推送前感知本地与远程的差别
+2. 写入 repo 前清空项目子目录，确保远程只有快照中的文件
 3. `skills/` 等由符号链接组成的目录能被正确收集
 4. 推送后本地和远程 HEAD 一致，pull 不再误报"0 更新"
-5. **sync push 交互**：本地仓库不存在时询问是否先拉取远程配置；推送前显示预览和覆盖警告
+5. **sync push 交互**：本地仓库不存在时询问是否先拉取远程配置；写入快照后显示差异预览（A/M/D 分类统计）；覆盖远端前需要用户确认
 6. **sync pull 交互**：本地仓库不存在时询问是否 clone，用户确认后拉取远端到本地
-7. **提交预览**：显示快照名称、远端地址、文件数量和大小、文件示例
-8. **覆盖警告**：明确告知本次推送将覆盖远端配置，用户确认后才执行
 
 ### 交互流程示例
 
@@ -225,16 +234,16 @@ $ fl sync push -p claude-global
 是否从远程拉取现有配置？[Y/n]: Y
 远端配置拉取成功
 
-本次提交：快照「sync-push-20260415-182600」
-  - 远端仓库：ssh://gogs@git.tanc.fun:2222/txbxxx/RemoteConfig.git
-  - 提交文件：1205 个（共 5.2 MB）
-  - settings.json
-  - skills/lark-approval/SKILL.md
-  - skills/lark-approval/...
-  - ... 等 1205 个文件
+快照「snapshot-20260415-143022」vs 远端 origin/main 差异预览：
+------------------------------------------------------------
+  [修改] claude/settings.json
+  [新增] claude/skills/lark-approval/SKILL.md
+  [新增] claude/skills/lark-base/SKILL.md
+  ... 等 18 个新增文件
+------------------------------------------------------------
 
-警告：本次推送将以本地快照覆盖远端仓库中的对应文件！
-确认推送？[Y/n]: Y
+快照「snapshot-20260415-143022」：新增 18，修改 1，删除 0
+警告：以快照内容覆盖远端仓库，确认推送？[Y/n]: Y
 ```
 
 用户输入 `n` 则取消推送，返回"已取消推送"。
