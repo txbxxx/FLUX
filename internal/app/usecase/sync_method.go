@@ -71,6 +71,7 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 	repoPath := filepath.Join(dataDir, "repos", projectName)
 
 	continuePush, err := w.ensureRepoExists(
+		ctx,
 		repoPath,
 		remoteConfig.URL,
 		convertAuthFromModel(&remoteConfig.Auth),
@@ -392,6 +393,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	repoPath := filepath.Join(dataDir, "repos", projectName)
 
 	continuePull, err := w.ensureRepoExists(
+		ctx,
 		repoPath,
 		remoteConfig.URL,
 		convertAuthFromModel(&remoteConfig.Auth),
@@ -720,7 +722,7 @@ func pathExists(path string) (bool, error) {
 
 // ensureRepoExists 确保本地仓库存在，不存在时询问用户是否从远程 clone。
 // 返回是否继续执行（用户取消则返回 false）。
-func (w *LocalWorkflow) ensureRepoExists(repoPath string, remoteURL string, auth *git.GitAuthConfig, branch string, promptMsg string) (bool, error) {
+func (w *LocalWorkflow) ensureRepoExists(ctx context.Context, repoPath string, remoteURL string, auth *git.GitAuthConfig, branch string, promptMsg string) (bool, error) {
 	if git.IsRepository(repoPath) {
 		return true, nil
 	}
@@ -736,7 +738,7 @@ func (w *LocalWorkflow) ensureRepoExists(repoPath string, remoteURL string, auth
 	}
 
 	gitClient := git.NewGitClient()
-	_, cloneErr := gitClient.Clone(context.Background(), &git.CloneOptions{
+	_, cloneErr := gitClient.Clone(ctx, &git.CloneOptions{
 		URL:    remoteURL,
 		Path:   repoPath,
 		Auth:   auth,
