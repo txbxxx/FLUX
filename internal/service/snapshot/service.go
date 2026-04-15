@@ -540,7 +540,13 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 	if rescanErr != nil {
 		logger.Warn("重新扫描文件系统失败，降级为单向对比（无法检测新增文件）", zap.Error(rescanErr))
 		// 降级为单向对比：只检查快照中的文件在文件系统上的状态
-		return s.diffWithFilesystemFallback(snapshot, snapshotFiles, verbose)
+		result, fallbackErr := s.diffWithFilesystemFallback(snapshot, snapshotFiles, verbose)
+		if fallbackErr != nil {
+			return nil, fallbackErr
+		}
+		result.Partial = true
+		result.PartialReason = fmt.Sprintf("文件系统扫描失败（%s），无法检测新增文件", rescanErr.Error())
+		return result, nil
 	}
 
 	fsFileMap := make(map[string]models.SnapshotFile, len(fsFiles))
