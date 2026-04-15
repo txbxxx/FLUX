@@ -56,6 +56,8 @@ type DiffResult struct {
 	Files      []DiffFileChange // 变更文件列表
 	Stats      DiffStats        // 变更统计
 	HasDiff    bool             // 是否存在差异
+	Partial    bool             // 降级模式：无法检测新增文件（rescanFilesystem 失败时为 true）
+	PartialReason string        // 降级原因（供 CLI 展示）
 }
 
 // DiffStats holds aggregate statistics for a diff.

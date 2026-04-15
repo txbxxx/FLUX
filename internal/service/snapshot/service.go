@@ -515,25 +515,147 @@ func (s *Service) DiffSnapshots(sourceID, targetID string, verbose bool, tool st
 }
 
 // diffWithFilesystem compares a snapshot against the current filesystem.
+//
+// Direction: source = snapshot, target = filesystem.
+// "added" means present in target but not in source → new file on filesystem.
+// "deleted" means present in source but not in target → file removed from filesystem.
+// "modified" means present in both but content differs.
+//
+// 为什么不直接返回错误当 rescanFilesystem 失败：
+// 降级为单向对比（只检查快照文件是否存在于文件系统）仍然能提供有价值的 modified/deleted 信息，
+// 只是无法检测新增文件。这比直接报错或让所有文件都显示为 deleted 更友好。
 func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
 	logger.Info("对比快照与文件系统",
 		zap.Uint64("snapshot_id", uint64(snapshot.ID)),
 	)
 
+	// 第一步：构建快照文件索引
+	snapshotFiles := make(map[string]models.SnapshotFile, len(snapshot.Files))
+	for _, f := range snapshot.Files {
+		snapshotFiles[f.Path] = f
+	}
+
+	// 第二步：重新扫描当前文件系统，收集目标文件集合
+	fsFiles, rescanErr := s.rescanFilesystem(snapshot)
+	if rescanErr != nil {
+		logger.Warn("重新扫描文件系统失败，降级为单向对比（无法检测新增文件）", zap.Error(rescanErr))
+		// 降级为单向对比：只检查快照中的文件在文件系统上的状态
+		result, fallbackErr := s.diffWithFilesystemFallback(snapshot, snapshotFiles, verbose)
+		if fallbackErr != nil {
+			return nil, fallbackErr
+		}
+		result.Partial = true
+		result.PartialReason = fmt.Sprintf("文件系统扫描失败（%s），无法检测新增文件", rescanErr.Error())
+		return result, nil
+	}
+
+	fsFileMap := make(map[string]models.SnapshotFile, len(fsFiles))
+	for _, f := range fsFiles {
+		fsFileMap[f.Path] = f
+	}
+
+	// 第三步：合并所有路径，做双向对比
+	allPaths := make(map[string]bool)
+	for p := range snapshotFiles {
+		allPaths[p] = true
+	}
+	for p := range fsFileMap {
+		allPaths[p] = true
+	}
+
+	var changes []typesSnapshot.DiffFileChange
+
+	for p := range allPaths {
+		sf, inSnapshot := snapshotFiles[p]
+		ff, inFS := fsFileMap[p]
+
+		switch {
+		case inSnapshot && !inFS:
+			// 快照中有但文件系统没有 → 文件被删除
+			change := typesSnapshot.DiffFileChange{
+				Path:     p,
+				Status:   typesSnapshot.FileDeleted,
+				IsBinary: sf.IsBinary,
+				OldSize:  sf.Size,
+				ToolType: sf.ToolType,
+			}
+			if !sf.IsBinary {
+				change.DelLines = countLines(sf.Content)
+			}
+			changes = append(changes, change)
+
+		case !inSnapshot && inFS:
+			// 文件系统中有但快照没有 → 新增文件
+			change := typesSnapshot.DiffFileChange{
+				Path:     p,
+				Status:   typesSnapshot.FileAdded,
+				IsBinary: ff.IsBinary,
+				NewSize:  ff.Size,
+				ToolType: ff.ToolType,
+			}
+			if !ff.IsBinary {
+				change.AddLines = countLines(ff.Content)
+			}
+			changes = append(changes, change)
+
+		case inSnapshot && inFS:
+			// 两边都有，比较内容
+			if sf.Hash != ff.Hash {
+				change := typesSnapshot.DiffFileChange{
+					Path:     p,
+					Status:   typesSnapshot.FileModified,
+					IsBinary: sf.IsBinary || ff.IsBinary,
+					OldSize:  sf.Size,
+					NewSize:  ff.Size,
+					ToolType: sf.ToolType,
+				}
+				if verbose && !change.IsBinary {
+					change.Hunks = computeFileHunks(sf.Content, ff.Content)
+				}
+				if !change.IsBinary {
+					change.AddLines, change.DelLines = countLineChanges(sf.Content, ff.Content)
+				}
+				changes = append(changes, change)
+			}
+		}
+	}
+
+	sort.Slice(changes, func(i, j int) bool {
+		return changes[i].Path < changes[j].Path
+	})
+
+	result := &typesSnapshot.DiffResult{
+		SourceName: snapshot.Name,
+		TargetName: "当前文件系统",
+		Files:      changes,
+	}
+	result.Stats = s.computeDiffStats(changes)
+	result.HasDiff = len(changes) > 0
+
+	return result, nil
+}
+
+// diffWithFilesystemFallback is the degraded comparison mode when rescanFilesystem fails.
+// It can only detect modified and deleted files (not newly added ones).
+func (s *Service) diffWithFilesystemFallback(snapshot *models.Snapshot, snapshotFiles map[string]models.SnapshotFile, verbose bool) (*typesSnapshot.DiffResult, error) {
 	var changes []typesSnapshot.DiffFileChange
 
 	for _, sf := range snapshot.Files {
 		info, err := os.Stat(sf.OriginalPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				// 快照中有但文件系统没有 → 相对文件系统是新增
-				changes = append(changes, typesSnapshot.DiffFileChange{
+				// 快照中有但文件系统没有 → 文件被删除
+				change := typesSnapshot.DiffFileChange{
 					Path:     sf.Path,
-					Status:   typesSnapshot.FileAdded,
+					Status:   typesSnapshot.FileDeleted,
 					IsBinary: sf.IsBinary,
-					NewSize:  sf.Size,
+					OldSize:  sf.Size,
 					ToolType: sf.ToolType,
-				})
+				}
+				if !sf.IsBinary {
+					change.DelLines = countLines(sf.Content)
+				}
+				changes = append(changes, change)
 			}
 			continue
 		}
@@ -582,7 +704,58 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 	return result, nil
 }
 
+// countLines returns the number of lines in content.
+// Uses strings.Count to avoid the off-by-one issue with strings.Split
+// (Split("abc\n", "\n") returns ["abc", ""] → count 2 instead of 1).
+func countLines(content []byte) int {
+	if len(content) == 0 {
+		return 0
+	}
+	return strings.Count(string(content), "\n")
+}
+
+// rescanFilesystem re-collects files from the current filesystem using the same
+// project and tools as the original snapshot, so that newly added files can be detected.
+func (s *Service) rescanFilesystem(snapshot *models.Snapshot) ([]models.SnapshotFile, error) {
+	projectPath := snapshot.Metadata.ProjectPath
+	if projectPath == "" {
+		return nil, fmt.Errorf("快照缺少项目路径元数据")
+	}
+
+	// 从快照文件中提取唯一的工具类型列表
+	toolSet := make(map[string]bool)
+	for _, f := range snapshot.Files {
+		toolSet[f.ToolType] = true
+	}
+	tools := make([]string, 0, len(toolSet))
+	for t := range toolSet {
+		tools = append(tools, t)
+	}
+
+	collectOpts := CollectOptions{
+		Tools:       tools,
+		ProjectPath: projectPath,
+	}
+
+	result, err := s.collector.Collect(collectOpts)
+	if err != nil {
+		return nil, fmt.Errorf("重新扫描文件系统失败: %w", err)
+	}
+
+	return result.Files, nil
+}
+
 // diffTwoSnapshots compares two snapshots and returns detailed differences.
+//
+// Direction: source = old snapshot, target = new snapshot.
+// "added" means present in source but not in target → file was added in source's perspective
+// (the file content comes from the source snapshot).
+// "deleted" means present in target but not in source → file was removed from source's perspective.
+// "modified" means present in both but content (hash) differs.
+//
+// 为什么 added/deleted 看起来反直觉：
+// 这里的语义是 "source 相对于 target 有什么变化"——source 多出的文件是 "added"（相对 target 新增），
+// target 多出的文件是 "deleted"（相对 target 已不存在）。
 func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool, context int) (*typesSnapshot.DiffResult, error) {
 	logger.Info("对比两个快照",
 		zap.Uint64("source_id", uint64(source.ID)),
@@ -622,7 +795,7 @@ func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool
 				ToolType: sf.ToolType,
 			}
 			if !sf.IsBinary {
-				change.AddLines = len(strings.Split(string(sf.Content), "\n"))
+				change.AddLines = countLines(sf.Content)
 			}
 			changes = append(changes, change)
 
@@ -635,7 +808,7 @@ func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool
 				ToolType: tf.ToolType,
 			}
 			if !tf.IsBinary {
-				change.DelLines = len(strings.Split(string(tf.Content), "\n"))
+				change.DelLines = countLines(tf.Content)
 			}
 			changes = append(changes, change)
 
