@@ -595,3 +595,183 @@ func TestServiceCreateSnapshotIncludesRegisteredProjectAndCustomRule(t *testing.
 	assert.Contains(t, paths, filepath.Join(projectPath, ".codex", "config.toml"))
 	assert.Contains(t, paths, filepath.Join(projectPath, "AGENTS.md"))
 }
+
+// TestDiffTwoSnapshots tests the snapshot-vs-snapshot diff logic.
+func TestDiffTwoSnapshots(t *testing.T) {
+	db, err := database.InitTestDB(t)
+	require.NoError(t, err)
+
+	service := NewService(db, tool.NewRuleResolver(nil), nil)
+
+	t.Run("source has extra file → added", func(t *testing.T) {
+		// source 相对 target 多了 b.toml → 从 source 视角看是 added
+		source := &models.Snapshot{
+			Name: "source", CreatedAt: time.Now(), Project: "test",
+			Files: []models.SnapshotFile{
+				{Path: "a.toml", Hash: "h1", Content: []byte("a"), ToolType: "claude", IsBinary: false, Size: 1},
+				{Path: "b.toml", Hash: "h2", Content: []byte("b"), ToolType: "claude", IsBinary: false, Size: 1},
+			},
+		}
+		target := &models.Snapshot{
+			Name: "target", CreatedAt: time.Now(), Project: "test",
+			Files: []models.SnapshotFile{
+				{Path: "a.toml", Hash: "h1", Content: []byte("a"), ToolType: "claude", IsBinary: false, Size: 1},
+			},
+		}
+
+		result, err := service.diffTwoSnapshots(source, target, false, 0)
+		require.NoError(t, err)
+		require.Len(t, result.Files, 1)
+		assert.Equal(t, typesSnapshot.FileAdded, result.Files[0].Status)
+		assert.Equal(t, "b.toml", result.Files[0].Path)
+	})
+
+	t.Run("target has extra file → deleted", func(t *testing.T) {
+		// source 相对 target 少了 b.toml → 从 source 视角看是 deleted
+		source := &models.Snapshot{
+			Name: "source", CreatedAt: time.Now(), Project: "test",
+			Files: []models.SnapshotFile{
+				{Path: "a.toml", Hash: "h1", Content: []byte("a"), ToolType: "claude", IsBinary: false, Size: 1},
+			},
+		}
+		target := &models.Snapshot{
+			Name: "target", CreatedAt: time.Now(), Project: "test",
+			Files: []models.SnapshotFile{
+				{Path: "a.toml", Hash: "h1", Content: []byte("a"), ToolType: "claude", IsBinary: false, Size: 1},
+				{Path: "b.toml", Hash: "h2", Content: []byte("b"), ToolType: "claude", IsBinary: false, Size: 1},
+			},
+		}
+
+		result, err := service.diffTwoSnapshots(source, target, false, 0)
+		require.NoError(t, err)
+		require.Len(t, result.Files, 1)
+		assert.Equal(t, typesSnapshot.FileDeleted, result.Files[0].Status)
+		assert.Equal(t, "b.toml", result.Files[0].Path)
+	})
+
+	t.Run("modified file", func(t *testing.T) {
+		source := &models.Snapshot{
+			Name: "source", CreatedAt: time.Now(), Project: "test",
+			Files: []models.SnapshotFile{
+				{Path: "a.toml", Hash: "h1", Content: []byte("old"), ToolType: "claude", IsBinary: false, Size: 3},
+			},
+		}
+		target := &models.Snapshot{
+			Name: "target", CreatedAt: time.Now(), Project: "test",
+			Files: []models.SnapshotFile{
+				{Path: "a.toml", Hash: "h2", Content: []byte("new"), ToolType: "claude", IsBinary: false, Size: 3},
+			},
+		}
+
+		result, err := service.diffTwoSnapshots(source, target, false, 0)
+		require.NoError(t, err)
+		require.Len(t, result.Files, 1)
+		assert.Equal(t, typesSnapshot.FileModified, result.Files[0].Status)
+	})
+
+	t.Run("no changes", func(t *testing.T) {
+		snap := &models.Snapshot{
+			Name: "snap", CreatedAt: time.Now(), Project: "test",
+			Files: []models.SnapshotFile{
+				{Path: "a.toml", Hash: "h1", Content: []byte("a"), ToolType: "claude", IsBinary: false, Size: 1},
+			},
+		}
+
+		result, err := service.diffTwoSnapshots(snap, snap, false, 0)
+		require.NoError(t, err)
+		assert.False(t, result.HasDiff)
+		assert.Empty(t, result.Files)
+	})
+}
+
+// TestDiffWithFilesystemFallback tests the degraded mode when rescanFilesystem fails.
+func TestDiffWithFilesystemFallback(t *testing.T) {
+	db, err := database.InitTestDB(t)
+	require.NoError(t, err)
+
+	service := NewService(db, tool.NewRuleResolver(nil), nil)
+	tempDir := t.TempDir()
+
+	t.Run("file deleted from filesystem", func(t *testing.T) {
+		snapshotFiles := map[string]models.SnapshotFile{
+			"deleted.toml": {
+				Path: "deleted.toml", OriginalPath: filepath.Join(tempDir, "nonexistent.toml"),
+				Hash: "h1", Content: []byte("gone"), ToolType: "claude", IsBinary: false, Size: 4,
+			},
+		}
+
+		snapshot := &models.Snapshot{
+			Name: "test", Files: []models.SnapshotFile{snapshotFiles["deleted.toml"]},
+		}
+
+		result, err := service.diffWithFilesystemFallback(snapshot, snapshotFiles, false)
+		require.NoError(t, err)
+		require.Len(t, result.Files, 1)
+		assert.Equal(t, typesSnapshot.FileDeleted, result.Files[0].Status)
+	})
+
+	t.Run("file modified on filesystem", func(t *testing.T) {
+		modifiedFile := filepath.Join(tempDir, "modified.toml")
+		newContent := []byte("new content")
+		require.NoError(t, os.WriteFile(modifiedFile, newContent, 0644))
+
+		snapshotFiles := map[string]models.SnapshotFile{
+			"modified.toml": {
+				Path: "modified.toml", OriginalPath: modifiedFile,
+				Hash: "old_hash", Content: []byte("old content"), ToolType: "claude", IsBinary: false, Size: 11,
+			},
+		}
+
+		snapshot := &models.Snapshot{
+			Name: "test", Files: []models.SnapshotFile{snapshotFiles["modified.toml"]},
+		}
+
+		result, err := service.diffWithFilesystemFallback(snapshot, snapshotFiles, false)
+		require.NoError(t, err)
+		require.Len(t, result.Files, 1)
+		assert.Equal(t, typesSnapshot.FileModified, result.Files[0].Status)
+	})
+
+	t.Run("file unchanged", func(t *testing.T) {
+		unchangedFile := filepath.Join(tempDir, "unchanged.toml")
+		content := []byte("same content")
+		require.NoError(t, os.WriteFile(unchangedFile, content, 0644))
+
+		hash := crypto.SHA256Hash(content)
+		snapshotFiles := map[string]models.SnapshotFile{
+			"unchanged.toml": {
+				Path: "unchanged.toml", OriginalPath: unchangedFile,
+				Hash: hash, Content: content, ToolType: "claude", IsBinary: false, Size: int64(len(content)),
+			},
+		}
+
+		snapshot := &models.Snapshot{
+			Name: "test", Files: []models.SnapshotFile{snapshotFiles["unchanged.toml"]},
+		}
+
+		result, err := service.diffWithFilesystemFallback(snapshot, snapshotFiles, false)
+		require.NoError(t, err)
+		assert.False(t, result.HasDiff)
+	})
+}
+
+// TestCountLines tests the countLines helper.
+func TestCountLines(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  []byte
+		expected int
+	}{
+		{"empty", []byte(""), 0},
+		{"single line no newline", []byte("hello"), 0},
+		{"single line with newline", []byte("hello\n"), 1},
+		{"two lines", []byte("hello\nworld\n"), 2},
+		{"three lines no trailing", []byte("a\nb\nc"), 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, countLines(tt.content))
+		})
+	}
+}

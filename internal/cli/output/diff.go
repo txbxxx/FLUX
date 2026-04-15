@@ -78,6 +78,16 @@ func RenderDiffSummary(w io.Writer, result *typesSnapshot.DiffResult, useColor b
 	} else {
 		fmt.Fprintln(w, summary)
 	}
+
+	// Partial mode warning
+	if result.Partial {
+		warning := fmt.Sprintf("注意: %s", result.PartialReason)
+		if useColor {
+			fmt.Fprintln(w, diffDeletedStyle.Render(warning))
+		} else {
+			fmt.Fprintln(w, warning)
+		}
+	}
 }
 
 // RenderUnifiedDiff renders a unified diff output with colored lines.
