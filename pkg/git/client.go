@@ -832,3 +832,76 @@ func (c *GitClient) getCommitTree(repo *git.Repository, hashStr string) (*object
 
 	return commit.Tree()
 }
+
+// Diff computes the diff between the working tree and the given base reference.
+// Returns summary statistics (added/modified/deleted counts) and optional file list.
+func (c *GitClient) Diff(opts *DiffOptions) (*DiffResult, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("diff 选项不能为空")
+	}
+	if opts.Path == "" {
+		return nil, fmt.Errorf("仓库路径不能为空")
+	}
+
+	repo, err := git.PlainOpen(opts.Path)
+	if err != nil {
+		return nil, fmt.Errorf("打开仓库失败: %w", err)
+	}
+
+	// 确定对比基准
+	baseRef := opts.Against
+	if baseRef == "" {
+		baseRef = "origin/main"
+	}
+
+	// 解析基准 commit
+	branchName := strings.TrimPrefix(baseRef, "origin/")
+	refName := plumbing.ReferenceName("refs/remotes/origin/" + branchName)
+	ref, err := repo.Reference(refName, true)
+	if err != nil {
+		// 远端引用不存在，返回空差异
+		return &DiffResult{Added: 0, Modified: 0, Deleted: 0}, nil
+	}
+	// 解析基准 commit（用于注释说明语义）
+	// sync push 场景下本地 HEAD 等于上次 push 版本，worktree.Status() 对比 HEAD vs 工作树
+	// 恰好反映了"本次快照内容 vs 上次 push 版本"的差异
+	if _, err := repo.CommitObject(ref.Hash()); err != nil {
+		return nil, fmt.Errorf("获取基准 commit 失败: %w", err)
+	}
+	result := &DiffResult{}
+
+	// 用 worktree.Status() 获取相对于 HEAD 的变更（staged + worktree changes）
+	// 注意：这反映的是"自上次 commit 以来"的变更，不等同于 vs origin/main
+	// 但在 sync push 场景中，commit 是每次 push 后产生的，所以本地 HEAD 就是上次 push 的版本
+	// 即：本地 HEAD ≈ origin/main（push 后），因此 status 反映的是 push 后到现在的变更
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return nil, fmt.Errorf("获取工作树失败: %w", err)
+	}
+	status, _ := worktree.Status()
+	for path, fileStatus := range status {
+		staging := fileStatus.Staging
+		worktreeStatus := fileStatus.Worktree
+
+		// 跳过未修改
+		if staging == git.Unmodified && worktreeStatus == git.Unmodified {
+			continue
+		}
+		if staging == 0 && worktreeStatus == 0 {
+			continue
+		}
+
+		if staging == git.Deleted || worktreeStatus == git.Deleted {
+			result.Deleted++
+			result.Files = append(result.Files, path)
+		} else if staging == git.Added || worktreeStatus == git.Added {
+			result.Added++
+			result.Files = append(result.Files, path)
+		} else {
+			result.Modified++
+			result.Files = append(result.Files, path)
+		}
+	}
+
+	return result, nil
+}

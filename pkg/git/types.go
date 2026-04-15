@@ -146,8 +146,22 @@ type CommitInfo struct {
 
 // FileDiff 文件差异描述
 type FileDiff struct {
-	Path    string `json:"path"`    // 文件路径
-	Status  string `json:"status"`  // added / modified / deleted
-	OldHash string `json:"old_hash"` // 变更前哈希
-	NewHash string `json:"new_hash"` // 变更后哈希
+	Path    string `json:"path"`              // 文件路径
+	Status  string `json:"status"`            // added / modified / deleted
+	OldHash string `json:"old_hash"`           // 变更前哈希
+	NewHash string `json:"new_hash"`           // 变更后哈希
+}
+
+// DiffOptions git diff 选项
+type DiffOptions struct {
+	Path    string `json:"path"`             // 仓库路径
+	Against string `json:"against,omitempty"` // 对比基准（默认为 origin/<branch>）
+}
+
+// DiffResult git diff 结果
+type DiffResult struct {
+	Added    int      `json:"added"`              // 新增文件数
+	Modified int      `json:"modified"`           // 修改文件数
+	Deleted  int      `json:"deleted"`            // 删除文件数
+	Files    []string `json:"files,omitempty"`    // 变更文件路径
 }
