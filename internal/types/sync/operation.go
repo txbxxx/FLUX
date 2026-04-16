@@ -37,9 +37,11 @@ type SyncPullResult struct {
 // ConflictInfo describes a file conflict detected during sync pull.
 type ConflictInfo struct {
 	Path          string `json:"path"`
-	ConflictType  string `json:"conflict_type"`  // "both_modified", "local_modified_remote_added", etc.
-	LocalSummary  string `json:"local_summary"`  // Brief summary of local version
-	RemoteSummary string `json:"remote_summary"` // Brief summary of remote version
+	ConflictType  string `json:"conflict_type"`              // "both_modified", "local_modified_remote_added", etc.
+	LocalSummary  string `json:"local_summary"`              // Brief summary of local version
+	RemoteSummary string `json:"remote_summary"`             // Brief summary of remote version
+	LocalHash     string `json:"local_hash,omitempty"`      // Git hash of local HEAD version (for resolve)
+	RemoteHash    string `json:"remote_hash,omitempty"`      // Git hash of remote HEAD version (for resolve)
 }
 
 // SyncStatusInput is the input for checking sync status.
