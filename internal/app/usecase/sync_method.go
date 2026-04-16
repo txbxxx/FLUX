@@ -9,6 +9,7 @@ import (
 	"os"
 	pathpkg "path/filepath"
 	"strings"
+	"time"
 
 	"flux/internal/models"
 	typesSync "flux/internal/types/sync"
@@ -526,8 +527,9 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 				switch input {
 				case "1", "overwrite":
 					// 使用远端：更新 SQLite 快照为远端内容
+					projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
 					fmt.Println("正在将远端配置同步到本地快照...")
-					if err := w.applyRemoteToSnapshot(ctx, repoPath, remoteHash, localSnapshot, projectPrefix); err != nil {
+					if err := w.applyRemoteToSnapshot(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, projectBasePath, projectToolType); err != nil {
 						logger.Warn("同步远端到快照失败", zap.Error(err))
 					} else {
 						fmt.Println("快照已更新为远端版本。")
@@ -752,9 +754,10 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 
 	// 批量更新 localSnapshot 并写入 SQLite
 	// 使用 updateSnapshotFile 确保新增文件也能被正确添加（#6 修复）
+	projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
 	if localSnapshot != nil && len(fileUpdates) > 0 {
 		for path, content := range fileUpdates {
-			w.updateSnapshotFile(localSnapshot, path, content)
+			w.updateSnapshotFile(localSnapshot, path, content, projectBasePath, projectToolType)
 		}
 		if err := w.snapshots.UpdateSnapshot(localSnapshot); err != nil {
 			logger.Error("更新快照失败", zap.Error(err))
@@ -859,6 +862,8 @@ func (w *LocalWorkflow) applyRemoteToSnapshot(
 	remoteHash string,
 	localSnapshot *models.Snapshot,
 	projectPrefix string,
+	projectBasePath string,
+	toolType string,
 ) error {
 	if localSnapshot == nil {
 		return fmt.Errorf("本地快照不存在")
@@ -876,7 +881,7 @@ func (w *LocalWorkflow) applyRemoteToSnapshot(
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			if err := w.applyRemoteToSnapshotSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, entry.Name(), 10, existingPaths); err != nil {
+			if err := w.applyRemoteToSnapshotSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, entry.Name(), 10, existingPaths, projectBasePath, toolType); err != nil {
 				logger.Warn("遍历远端目录失败", zap.String("dir", entry.Name()), zap.Error(err))
 			}
 		} else {
@@ -888,7 +893,7 @@ func (w *LocalWorkflow) applyRemoteToSnapshot(
 				logger.Warn("读取远端文件失败", zap.String("file", fullPath), zap.Error(readErr))
 				continue
 			}
-			w.updateSnapshotFile(localSnapshot, relativePath, content)
+			w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, toolType)
 		}
 	}
 
@@ -917,6 +922,8 @@ func (w *LocalWorkflow) applyRemoteToSnapshotSub(
 	subPath string,
 	depth int,
 	existingPaths map[string]bool,
+	projectBasePath string,
+	toolType string,
 ) error {
 	if depth <= 0 {
 		return nil
@@ -929,7 +936,7 @@ func (w *LocalWorkflow) applyRemoteToSnapshotSub(
 	for _, entry := range entries {
 		relativePath := pathpkg.ToSlash(pathpkg.Join(subPath, entry.Name()))
 		if entry.IsDir() {
-			if err := w.applyRemoteToSnapshotSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, relativePath, depth-1, existingPaths); err != nil {
+			if err := w.applyRemoteToSnapshotSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, relativePath, depth-1, existingPaths, projectBasePath, toolType); err != nil {
 				logger.Warn("遍历远端目录失败", zap.String("dir", relativePath), zap.Error(err))
 			}
 		} else {
@@ -939,15 +946,16 @@ func (w *LocalWorkflow) applyRemoteToSnapshotSub(
 				logger.Warn("读取远端文件失败", zap.String("file", pathpkg.Join(fullPath, entry.Name())), zap.Error(readErr))
 				continue
 			}
-			w.updateSnapshotFile(localSnapshot, relativePath, content)
+			w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, toolType)
 		}
 	}
 	return nil
 }
 
 // updateSnapshotFile updates or adds a file in the snapshot.
-// 新增文件时补全 Hash 和 Size。
-func (w *LocalWorkflow) updateSnapshotFile(snapshot *models.Snapshot, relativePath string, content []byte) {
+// 对于已有文件：只更新 Content、Size、Hash。
+// 对于新增文件：补全所有字段，包括 OriginalPath（使用 projectBasePath 拼接相对路径）。
+func (w *LocalWorkflow) updateSnapshotFile(snapshot *models.Snapshot, relativePath string, content []byte, projectBasePath string, toolType string) {
 	// 统一路径为正斜杠，避免跨平台不匹配
 	normalizedPath := pathpkg.ToSlash(relativePath)
 	for i := range snapshot.Files {
@@ -958,12 +966,22 @@ func (w *LocalWorkflow) updateSnapshotFile(snapshot *models.Snapshot, relativePa
 			return
 		}
 	}
+	// 新增文件：使用 projectBasePath 拼接相对路径构建完整的 OriginalPath
+	originalPath := normalizedPath
+	if projectBasePath != "" {
+		originalPath = pathpkg.Join(projectBasePath, normalizedPath)
+	}
+	isBinary := isBinaryContent(content)
 	snapshot.Files = append(snapshot.Files, models.SnapshotFile{
 		Path:         normalizedPath,
-		OriginalPath: normalizedPath,
+		OriginalPath: originalPath,
 		Size:         int64(len(content)),
 		Hash:         computeHash(content),
 		Content:      content,
+		ToolType:     toolType,
+		Category:     categorizeFile(normalizedPath, isBinary),
+		IsBinary:     isBinary,
+		ModifiedAt:   time.Now(),
 	})
 }
 
@@ -971,6 +989,73 @@ func (w *LocalWorkflow) updateSnapshotFile(snapshot *models.Snapshot, relativePa
 func computeHash(content []byte) string {
 	h := sha256.Sum256(content)
 	return hex.EncodeToString(h[:])
+}
+
+// isBinaryContent checks if content appears to be binary (contains null bytes).
+func isBinaryContent(content []byte) bool {
+	if len(content) == 0 {
+		return false
+	}
+	limit := 512
+	if len(content) < limit {
+		limit = len(content)
+	}
+	for i := 0; i < limit; i++ {
+		if content[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// categorizeFile categorizes a file based on its path and binary status.
+func categorizeFile(path string, isBinary bool) models.FileCategory {
+	filename := pathpkg.Base(path)
+	ext := strings.TrimPrefix(pathpkg.Ext(path), ".")
+
+	switch strings.ToLower(filename) {
+	case "skills.yml", "skills.yaml":
+		return models.CategorySkills
+	case "commands.yml", "commands.yaml":
+		return models.CategoryCommands
+	case "plugins.yml", "plugins.yaml":
+		return models.CategoryPlugins
+	case "agents.md", "agents.yml", "agents.yaml":
+		return models.CategoryAgents
+	case "rules.md", "rules.yml", "rules.yaml":
+		return models.CategoryRules
+	}
+
+	switch strings.ToLower(ext) {
+	case "md", "markdown":
+		return models.CategoryDocs
+	case "yml", "yaml", "json", "toml":
+		return models.CategoryConfig
+	}
+
+	if strings.Contains(strings.ToLower(path), "mcp") {
+		return models.CategoryMCP
+	}
+
+	if isBinary {
+		return models.CategoryOther
+	}
+
+	return models.CategoryConfig
+}
+
+// resolveProjectInfo looks up a registered project and returns its base path and tool type.
+func (w *LocalWorkflow) resolveProjectInfo(projectName string) (basePath string, toolType string) {
+	if w.rules == nil {
+		return "", ""
+	}
+	projects, _ := w.rules.ListRegisteredProjects(nil)
+	for _, p := range projects {
+		if p.ProjectName == projectName {
+			return p.ProjectPath, p.ToolType
+		}
+	}
+	return "", ""
 }
 
 // compareSnapshotWithRemote compares the local SQLite snapshot with remote HEAD
