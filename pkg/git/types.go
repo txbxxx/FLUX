@@ -163,5 +163,8 @@ type DiffResult struct {
 	Added    int      `json:"added"`              // 新增文件数
 	Modified int      `json:"modified"`           // 修改文件数
 	Deleted  int      `json:"deleted"`            // 删除文件数
-	Files    []string `json:"files,omitempty"`    // 变更文件路径
+	Files    []string `json:"files,omitempty"`    // 变更文件路径（保留，用于兼容）
+	AddedFiles    []string `json:"added_files"`    // 新增文件路径
+	ModifiedFiles []string `json:"modified_files"` // 修改文件路径
+	DeletedFiles  []string `json:"deleted_files"`  // 删除文件路径
 }
