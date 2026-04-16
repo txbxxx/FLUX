@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -705,13 +706,11 @@ func (s *Service) diffWithFilesystemFallback(snapshot *models.Snapshot, snapshot
 }
 
 // countLines returns the number of lines in content.
-// Uses strings.Count to avoid the off-by-one issue with strings.Split
-// (Split("abc\n", "\n") returns ["abc", ""] → count 2 instead of 1).
 func countLines(content []byte) int {
 	if len(content) == 0 {
 		return 0
 	}
-	return strings.Count(string(content), "\n")
+	return bytes.Count(content, []byte("\n"))
 }
 
 // rescanFilesystem re-collects files from the current filesystem using the same

@@ -390,6 +390,48 @@ func TestApplier_ApplySnapshot(t *testing.T) {
 	assert.True(t, result.Success)
 }
 
+// TestApplier_ApplySnapshot_EmptyOriginalPath 测试 OriginalPath 为空时的处理
+func TestApplier_ApplySnapshot_EmptyOriginalPath(t *testing.T) {
+	collector := NewCollector(tool.NewRuleResolver(nil))
+	applier := NewApplier(collector)
+
+	// 模拟快照数据不完整（OriginalPath 为空）的情况
+	snapshot := &models.Snapshot{
+		ID:        0,
+		Name:      "Test Empty Path",
+		Message:   "Test message",
+		CreatedAt: time.Now(),
+		Project:   "claude-global",
+		Files: []models.SnapshotFile{
+			{
+				Path:         "settings.json",
+				OriginalPath: "", // 空路径，模拟数据不完整
+				Size:         100,
+				Hash:         "abc",
+				ModifiedAt:   time.Now(),
+				Content:      []byte("{}"),
+				ToolType:     "claude",
+				Category:     models.CategoryConfig,
+				IsBinary:     false,
+			},
+		},
+		Metadata: models.SnapshotMetadata{},
+	}
+
+	// 干运行模式
+	result, err := applier.ApplySnapshot(snapshot, typesSnapshot.ApplyOptions{DryRun: true})
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// 文件应被跳过（而不是显示为空路径的"新增"）
+	assert.Equal(t, 1, result.Summary.Skipped)
+	assert.Equal(t, 0, result.Summary.Updated)
+	assert.Len(t, result.SkippedFiles, 1)
+	assert.Contains(t, result.SkippedFiles[0].Reason, "原始路径为空")
+	// SkippedFile.Path 回退到相对路径
+	assert.Equal(t, "settings.json", result.SkippedFiles[0].Path)
+}
+
 // TestComparator_CompareSnapshots 测试比较快照
 func TestComparator_CompareSnapshots(t *testing.T) {
 	collector := NewCollector(tool.NewRuleResolver(nil))
