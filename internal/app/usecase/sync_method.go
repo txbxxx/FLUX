@@ -213,22 +213,20 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 		showFile := func(label, path string) { fmt.Printf("  [%s] %s\n", label, path) }
 		showMore := func(label string, n int) { fmt.Printf("  ... 等 %d 个%s文件\n", n, label) }
 
-		// 粗略按比例分配显示：新增/修改/删除
+		// 粗略按比例分配显示：新增/修改/删除（使用分类 slices，不再依赖文件顺序）
 		total := added + modified + deleted
 		if total > 15 {
 			showAdded := min(added, 5)
 			showModified := min(modified, 5)
 			showDeleted := min(deleted, 5)
-			for i := 0; i < showAdded && i < len(diffResult.Files); i++ {
-				showFile("新增", diffResult.Files[i])
+			for i := 0; i < showAdded; i++ {
+				showFile("新增", diffResult.AddedFiles[i])
 			}
-			offset := showAdded
-			for i := 0; i < showModified && offset+i < len(diffResult.Files); i++ {
-				showFile("修改", diffResult.Files[offset+i])
+			for i := 0; i < showModified; i++ {
+				showFile("修改", diffResult.ModifiedFiles[i])
 			}
-			offset += showModified
-			for i := 0; i < showDeleted && offset+i < len(diffResult.Files); i++ {
-				showFile("删除", diffResult.Files[offset+i])
+			for i := 0; i < showDeleted; i++ {
+				showFile("删除", diffResult.DeletedFiles[i])
 			}
 			if added > showAdded {
 				showMore("新增", added-showAdded)
@@ -240,17 +238,15 @@ func (w *LocalWorkflow) SyncPush(ctx context.Context, input typesSync.SyncPushIn
 				showMore("删除", deleted-showDeleted)
 			}
 		} else {
-			// 文件少，按顺序输出（新增在前，修改在中，删除在后）
-			for i, path := range diffResult.Files {
-				var label string
-				if i < added {
-					label = "新增"
-				} else if i < added+modified {
-					label = "修改"
-				} else {
-					label = "删除"
-				}
-				fmt.Printf("  [%s] %s\n", label, path)
+			// 文件少，逐类输出（直接使用分类 slices，不依赖文件顺序）
+			for _, path := range diffResult.AddedFiles {
+				fmt.Printf("  [新增] %s\n", path)
+			}
+			for _, path := range diffResult.ModifiedFiles {
+				fmt.Printf("  [修改] %s\n", path)
+			}
+			for _, path := range diffResult.DeletedFiles {
+				fmt.Printf("  [删除] %s\n", path)
 			}
 		}
 	} else {
@@ -696,7 +692,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	}
 
 	// 第八步（续）：如果用户选择了保留本地版本的文件，
-	// ResetToRef 已覆盖为远端内容，需要从 localSnapshot 恢复到工作目录
+	// 直接使用快照内容恢复工作目录（不经过磁盘读写）
 	for _, relativePath := range keepLocalFiles {
 		if localSnapshot == nil {
 			continue
@@ -730,17 +726,20 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		fileUpdates[relativePath] = content
 	}
 
-	// 冲突解决后的 keep_local 文件：已恢复到工作目录，需要读回来更新 SQLite
+	// keep_local 文件：直接用快照内容，不需要读磁盘（#5 修复）
 	for _, relativePath := range keepLocalFiles {
-		targetPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
-		content, readErr := os.ReadFile(targetPath)
-		if readErr != nil {
+		if localSnapshot == nil {
 			continue
 		}
-		fileUpdates[relativePath] = content
+		for _, f := range localSnapshot.Files {
+			if f.Path == relativePath {
+				fileUpdates[relativePath] = f.Content
+				break
+			}
+		}
 	}
 
-	// 冲突解决后选择"使用远端"或"跳过"的文件：从工作目录读取（ResetToRef 后已是远端版本）
+	// 选择"使用远端"或"跳过"的文件：从工作目录读取（ResetToRef 后已是远端版本）
 	for _, relativePath := range useRemoteFiles {
 		targetPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
 		content, readErr := os.ReadFile(targetPath)
@@ -752,16 +751,14 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	}
 
 	// 批量更新 localSnapshot 并写入 SQLite
+	// 使用 updateSnapshotFile 确保新增文件也能被正确添加（#6 修复）
 	if localSnapshot != nil && len(fileUpdates) > 0 {
-		updated := false
-		for i := range localSnapshot.Files {
-			if newContent, ok := fileUpdates[localSnapshot.Files[i].Path]; ok {
-				localSnapshot.Files[i].Content = newContent
-				updated = true
-			}
+		for path, content := range fileUpdates {
+			w.updateSnapshotFile(localSnapshot, path, content)
 		}
-		if updated {
-			_ = w.snapshots.UpdateSnapshot(localSnapshot)
+		if err := w.snapshots.UpdateSnapshot(localSnapshot); err != nil {
+			logger.Error("更新快照失败", zap.Error(err))
+		} else {
 			updatedCount = len(fileUpdates)
 		}
 	}

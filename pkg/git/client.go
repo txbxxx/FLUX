@@ -894,12 +894,15 @@ func (c *GitClient) Diff(opts *DiffOptions) (*DiffResult, error) {
 		if staging == git.Deleted || worktreeStatus == git.Deleted {
 			result.Deleted++
 			result.Files = append(result.Files, path)
+			result.DeletedFiles = append(result.DeletedFiles, path)
 		} else if staging == git.Added || worktreeStatus == git.Added {
 			result.Added++
 			result.Files = append(result.Files, path)
+			result.AddedFiles = append(result.AddedFiles, path)
 		} else {
 			result.Modified++
 			result.Files = append(result.Files, path)
+			result.ModifiedFiles = append(result.ModifiedFiles, path)
 		}
 	}
 
