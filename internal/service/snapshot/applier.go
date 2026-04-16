@@ -1,7 +1,9 @@
 package snapshot
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,8 +63,13 @@ func (a *Applier) ApplySnapshot(
 		}
 	}
 
-	// 应用每个文件
+	// 应用每个文件并统计分组信息
+	result.Summary.FilesByTool = make(map[string]int)
+	result.Summary.FilesByCategory = make(map[string]int)
 	for _, file := range snapshot.Files {
+		result.Summary.FilesByTool[file.ToolType]++
+		result.Summary.FilesByCategory[string(file.Category)]++
+
 		applied, skipped, err := a.applyFile(file, options)
 		if err != nil {
 			result.Success = false
@@ -78,14 +85,6 @@ func (a *Applier) ApplySnapshot(
 			result.Summary.Skipped++
 		}
 		result.Summary.TotalFiles++
-	}
-
-	// 统计按工具和类别分组的文件数
-	result.Summary.FilesByTool = make(map[string]int)
-	result.Summary.FilesByCategory = make(map[string]int)
-	for _, file := range snapshot.Files {
-		result.Summary.FilesByTool[file.ToolType]++
-		result.Summary.FilesByCategory[string(file.Category)]++
 	}
 
 	if result.Success {
@@ -110,6 +109,18 @@ func (a *Applier) applyFile(
 	options typesSnapshot.ApplyOptions,
 ) (*typesSnapshot.AppliedFile, *typesSnapshot.SkippedFile, error) {
 	targetPath := file.OriginalPath
+
+	// 防护：original_path 为空时无法恢复，跳过并记录。
+	if targetPath == "" {
+		logger.Warn("文件原始路径为空，跳过",
+			zap.String("path", file.Path),
+			zap.String("tool", file.ToolType),
+		)
+		return nil, &typesSnapshot.SkippedFile{
+			Path:   file.Path, // 回退到相对路径，确保输出有意义
+			Reason: "原始路径为空（快照数据不完整）",
+		}, nil
+	}
 
 	// 检查文件是否已存在
 	exists := a.fileExists(targetPath)
@@ -207,18 +218,7 @@ func (a *Applier) contentMatches(path string, content []byte) bool {
 		return false
 	}
 
-	// 简单比较
-	if len(existing) != len(content) {
-		return false
-	}
-
-	for i := range existing {
-		if existing[i] != content[i] {
-			return false
-		}
-	}
-
-	return true
+	return bytes.Equal(existing, content)
 }
 
 // getCurrentTimestamp 获取当前时间戳
@@ -250,8 +250,14 @@ func (a *Applier) RestoreFromBackup(backupDir string, snapshot *models.Snapshot)
 	errors := make([]string, 0)
 
 	for _, file := range snapshot.Files {
-		backupPath := filepath.Join(backupDir, file.Path)
 		targetPath := file.OriginalPath
+		if targetPath == "" {
+			logger.Warn("文件原始路径为空，跳过恢复",
+				zap.String("path", file.Path),
+			)
+			continue
+		}
+		backupPath := filepath.Join(backupDir, file.Path)
 
 		if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 			logger.Debug("备份文件不存在，跳过",
@@ -287,12 +293,19 @@ func (a *Applier) DeleteSnapshotFiles(snapshot *models.Snapshot) ([]string, erro
 	errors := make([]string, 0)
 
 	for _, file := range snapshot.Files {
-		if err := os.Remove(file.OriginalPath); err != nil {
+		targetPath := file.OriginalPath
+		if targetPath == "" {
+			logger.Warn("文件原始路径为空，跳过删除",
+				zap.String("path", file.Path),
+			)
+			continue
+		}
+		if err := os.Remove(targetPath); err != nil {
 			if !os.IsNotExist(err) {
 				errors = append(errors, fmt.Sprintf("%s: %s", file.Path, err.Error()))
 			}
 		} else {
-			deleted = append(deleted, file.OriginalPath)
+			deleted = append(deleted, targetPath)
 		}
 	}
 
@@ -368,7 +381,7 @@ func isDirEmpty(path string) (bool, error) {
 	if err == nil {
 		return false, nil
 	}
-	if err.Error() == "EOF" {
+	if err == io.EOF {
 		return true, nil
 	}
 	return false, err
