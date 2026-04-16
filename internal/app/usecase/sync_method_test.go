@@ -68,7 +68,7 @@ func TestUpdateSnapshotFile_WindowsBackslashPath(t *testing.T) {
 		{Path: "claude/settings.json", Content: []byte("old")},
 	}}
 
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "claude/settings.json", []byte("updated"), "", "")
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "claude\\settings.json", []byte("updated"), "", "")
 
 	if len(snapshot.Files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(snapshot.Files))
@@ -84,7 +84,7 @@ func TestUpdateSnapshotFile_WindowsBackslashPath(t *testing.T) {
 func TestUpdateSnapshotFile_AddsNewFileWithWindowsPath(t *testing.T) {
 	snapshot := &models.Snapshot{Files: []models.SnapshotFile{}}
 
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "skills/lark-approval/SKILL.md", []byte("skill content"), "", "")
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "skills\\lark-approval\\SKILL.md", []byte("skill content"), "", "")
 
 	if len(snapshot.Files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(snapshot.Files))
@@ -104,6 +104,24 @@ func TestUpdateSnapshotFile_OriginalPathPreserved(t *testing.T) {
 	}
 	if snapshot.Files[0].OriginalPath != snapshot.Files[0].Path {
 		t.Fatalf("expected OriginalPath == Path, got %q vs %q", snapshot.Files[0].OriginalPath, snapshot.Files[0].Path)
+	}
+}
+
+func TestUpdateSnapshotFile_OriginalPathConcatenated(t *testing.T) {
+	snapshot := &models.Snapshot{Files: []models.SnapshotFile{}}
+
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "skills/test.md", []byte("content"), "C:\\Users\\xxx\\.claude", "claude")
+
+	if len(snapshot.Files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(snapshot.Files))
+	}
+	f := snapshot.Files[0]
+	if f.Path != "skills/test.md" {
+		t.Fatalf("expected Path='skills/test.md', got %q", f.Path)
+	}
+	// OriginalPath should be projectBasePath + relativePath
+	if f.OriginalPath != "C:\\Users\\xxx\\.claude\\skills\\test.md" {
+		t.Fatalf("expected OriginalPath='C:\\Users\\xxx\\.claude\\skills\\test.md', got %q", f.OriginalPath)
 	}
 }
 
