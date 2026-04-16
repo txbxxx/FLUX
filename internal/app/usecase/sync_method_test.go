@@ -22,7 +22,7 @@ func TestUpdateSnapshotFile_UpdatesExistingFile(t *testing.T) {
 	}}
 
 	newContent := []byte("new content here")
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "settings.json", newContent)
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "settings.json", newContent, "", "")
 
 	if len(snapshot.Files) != 2 {
 		t.Fatalf("expected 2 files, got %d", len(snapshot.Files))
@@ -44,7 +44,7 @@ func TestUpdateSnapshotFile_AddsNewFile(t *testing.T) {
 		{Path: "settings.json", Content: []byte("existing")},
 	}}
 
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "new-file.txt", []byte("brand new"))
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "new-file.txt", []byte("brand new"), "", "")
 
 	if len(snapshot.Files) != 2 {
 		t.Fatalf("expected 2 files, got %d", len(snapshot.Files))
@@ -68,7 +68,7 @@ func TestUpdateSnapshotFile_WindowsBackslashPath(t *testing.T) {
 		{Path: "claude/settings.json", Content: []byte("old")},
 	}}
 
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "claude\\settings.json", []byte("updated"))
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "claude/settings.json", []byte("updated"), "", "")
 
 	if len(snapshot.Files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(snapshot.Files))
@@ -84,7 +84,7 @@ func TestUpdateSnapshotFile_WindowsBackslashPath(t *testing.T) {
 func TestUpdateSnapshotFile_AddsNewFileWithWindowsPath(t *testing.T) {
 	snapshot := &models.Snapshot{Files: []models.SnapshotFile{}}
 
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "skills\\lark-approval\\SKILL.md", []byte("skill content"))
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "skills/lark-approval/SKILL.md", []byte("skill content"), "", "")
 
 	if len(snapshot.Files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(snapshot.Files))
@@ -97,7 +97,7 @@ func TestUpdateSnapshotFile_AddsNewFileWithWindowsPath(t *testing.T) {
 func TestUpdateSnapshotFile_OriginalPathPreserved(t *testing.T) {
 	snapshot := &models.Snapshot{Files: []models.SnapshotFile{}}
 
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "sub\\nested\\file.txt", []byte("content"))
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "sub/nested/file.txt", []byte("content"), "", "")
 
 	if len(snapshot.Files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(snapshot.Files))
@@ -110,7 +110,7 @@ func TestUpdateSnapshotFile_OriginalPathPreserved(t *testing.T) {
 func TestUpdateSnapshotFile_AllFieldsPopulated(t *testing.T) {
 	snapshot := &models.Snapshot{Files: []models.SnapshotFile{}}
 
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "file.txt", []byte("hello world"))
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "file.txt", []byte("hello world"), "", "")
 
 	f := snapshot.Files[0]
 	if f.Path == "" || f.OriginalPath == "" || f.Size == 0 || f.Hash == "" || len(f.Content) == 0 {
@@ -129,7 +129,7 @@ func TestUpdateSnapshotFile_ByteContentPreserved(t *testing.T) {
 	binaryContent := []byte{0xFF, 0xFE, 0x00, 0x01, '\n', '\t'}
 
 	snapshot := &models.Snapshot{Files: []models.SnapshotFile{}}
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "binary.bin", binaryContent)
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "binary.bin", binaryContent, "", "")
 
 	if !bytes.Equal(snapshot.Files[0].Content, binaryContent) {
 		t.Error("binary content not preserved correctly")
@@ -145,7 +145,7 @@ func TestUpdateSnapshotFile_ByteContentPreserved(t *testing.T) {
 func TestUpdateSnapshotFile_EmptyContent(t *testing.T) {
 	snapshot := &models.Snapshot{Files: []models.SnapshotFile{}}
 
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "empty.txt", []byte{})
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "empty.txt", []byte{}, "", "")
 
 	if len(snapshot.Files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(snapshot.Files))
@@ -162,7 +162,7 @@ func TestUpdateSnapshotFile_UnicodeContent(t *testing.T) {
 	unicodeContent := []byte("你好世界 🌍 مرحبا")
 
 	snapshot := &models.Snapshot{Files: []models.SnapshotFile{}}
-	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "unicode.txt", unicodeContent)
+	(&LocalWorkflow{}).updateSnapshotFile(snapshot, "unicode.txt", unicodeContent, "", "")
 
 	if string(snapshot.Files[0].Content) != "你好世界 🌍 مرحبا" {
 		t.Error("unicode content not preserved")
@@ -370,7 +370,7 @@ func TestApplyRemoteToSnapshot_UpdatesExistingFile(t *testing.T) {
 
 	w := &LocalWorkflow{snapshots: &snapshotServiceForTest{}}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix)
+	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestApplyRemoteToSnapshot_AddsNewRemoteFile(t *testing.T) {
 
 	w := &LocalWorkflow{snapshots: &snapshotServiceForTest{}}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix)
+	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -444,7 +444,7 @@ func TestApplyRemoteToSnapshot_RemovesDeletedFile(t *testing.T) {
 
 	w := &LocalWorkflow{snapshots: &snapshotServiceForTest{}}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix)
+	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -474,7 +474,7 @@ func TestApplyRemoteToSnapshot_HandlesSubdirectory(t *testing.T) {
 
 	w := &LocalWorkflow{snapshots: &snapshotServiceForTest{}}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix)
+	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -509,7 +509,7 @@ func TestApplyRemoteToSnapshot_WindowsBackslashRemovesDeletedFile(t *testing.T) 
 
 	w := &LocalWorkflow{snapshots: &snapshotServiceForTest{}}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix)
+	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -536,7 +536,7 @@ func TestApplyRemoteToSnapshot_WindowsBackslashAddsNewFile(t *testing.T) {
 
 	w := &LocalWorkflow{snapshots: &snapshotServiceForTest{}}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix)
+	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -578,7 +578,7 @@ func TestSnapshotFilesConsistency_AfterApplyRemote(t *testing.T) {
 
 	w := &LocalWorkflow{snapshots: &snapshotServiceForTest{}}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix)
+	err := w.applyRemoteToSnapshot(context.Background(), repoPath, "remoteHash", localSnapshot, projectPrefix, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

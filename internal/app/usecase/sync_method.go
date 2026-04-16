@@ -526,8 +526,21 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 				switch input {
 				case "1", "overwrite":
 					// 使用远端：更新 SQLite 快照为远端内容
+					// 查找本地项目信息，用于构建新增文件的 OriginalPath 和 ToolType
+					var projectBasePath string
+					var projectToolType string
+					if w.rules != nil {
+						projects, _ := w.rules.ListRegisteredProjects(nil)
+						for _, p := range projects {
+							if p.ProjectName == projectName {
+								projectBasePath = p.ProjectPath
+								projectToolType = p.ToolType
+								break
+							}
+						}
+					}
 					fmt.Println("正在将远端配置同步到本地快照...")
-					if err := w.applyRemoteToSnapshot(ctx, repoPath, remoteHash, localSnapshot, projectPrefix); err != nil {
+					if err := w.applyRemoteToSnapshot(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, projectBasePath, projectToolType); err != nil {
 						logger.Warn("同步远端到快照失败", zap.Error(err))
 					} else {
 						fmt.Println("快照已更新为远端版本。")
@@ -752,9 +765,22 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 
 	// 批量更新 localSnapshot 并写入 SQLite
 	// 使用 updateSnapshotFile 确保新增文件也能被正确添加（#6 修复）
+	// 查找本地项目信息，用于构建新增文件的 OriginalPath 和 ToolType
+	var projectBasePath string
+	var projectToolType string
+	if w.rules != nil {
+		projects, _ := w.rules.ListRegisteredProjects(nil)
+		for _, p := range projects {
+			if p.ProjectName == projectName {
+				projectBasePath = p.ProjectPath
+				projectToolType = p.ToolType
+				break
+			}
+		}
+	}
 	if localSnapshot != nil && len(fileUpdates) > 0 {
 		for path, content := range fileUpdates {
-			w.updateSnapshotFile(localSnapshot, path, content)
+			w.updateSnapshotFile(localSnapshot, path, content, projectBasePath, projectToolType)
 		}
 		if err := w.snapshots.UpdateSnapshot(localSnapshot); err != nil {
 			logger.Error("更新快照失败", zap.Error(err))
@@ -859,6 +885,8 @@ func (w *LocalWorkflow) applyRemoteToSnapshot(
 	remoteHash string,
 	localSnapshot *models.Snapshot,
 	projectPrefix string,
+	projectBasePath string,
+	toolType string,
 ) error {
 	if localSnapshot == nil {
 		return fmt.Errorf("本地快照不存在")
@@ -876,7 +904,7 @@ func (w *LocalWorkflow) applyRemoteToSnapshot(
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			if err := w.applyRemoteToSnapshotSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, entry.Name(), 10, existingPaths); err != nil {
+			if err := w.applyRemoteToSnapshotSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, entry.Name(), 10, existingPaths, projectBasePath, toolType); err != nil {
 				logger.Warn("遍历远端目录失败", zap.String("dir", entry.Name()), zap.Error(err))
 			}
 		} else {
@@ -888,7 +916,7 @@ func (w *LocalWorkflow) applyRemoteToSnapshot(
 				logger.Warn("读取远端文件失败", zap.String("file", fullPath), zap.Error(readErr))
 				continue
 			}
-			w.updateSnapshotFile(localSnapshot, relativePath, content)
+			w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, toolType)
 		}
 	}
 
@@ -917,6 +945,8 @@ func (w *LocalWorkflow) applyRemoteToSnapshotSub(
 	subPath string,
 	depth int,
 	existingPaths map[string]bool,
+	projectBasePath string,
+	toolType string,
 ) error {
 	if depth <= 0 {
 		return nil
@@ -929,7 +959,7 @@ func (w *LocalWorkflow) applyRemoteToSnapshotSub(
 	for _, entry := range entries {
 		relativePath := pathpkg.ToSlash(pathpkg.Join(subPath, entry.Name()))
 		if entry.IsDir() {
-			if err := w.applyRemoteToSnapshotSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, relativePath, depth-1, existingPaths); err != nil {
+			if err := w.applyRemoteToSnapshotSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, relativePath, depth-1, existingPaths, projectBasePath, toolType); err != nil {
 				logger.Warn("遍历远端目录失败", zap.String("dir", relativePath), zap.Error(err))
 			}
 		} else {
@@ -939,15 +969,16 @@ func (w *LocalWorkflow) applyRemoteToSnapshotSub(
 				logger.Warn("读取远端文件失败", zap.String("file", pathpkg.Join(fullPath, entry.Name())), zap.Error(readErr))
 				continue
 			}
-			w.updateSnapshotFile(localSnapshot, relativePath, content)
+			w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, toolType)
 		}
 	}
 	return nil
 }
 
 // updateSnapshotFile updates or adds a file in the snapshot.
-// 新增文件时补全 Hash 和 Size。
-func (w *LocalWorkflow) updateSnapshotFile(snapshot *models.Snapshot, relativePath string, content []byte) {
+// 对于已有文件：只更新 Content、Size、Hash。
+// 对于新增文件：补全所有字段，包括 OriginalPath（使用 projectBasePath 拼接相对路径）。
+func (w *LocalWorkflow) updateSnapshotFile(snapshot *models.Snapshot, relativePath string, content []byte, projectBasePath string, toolType string) {
 	// 统一路径为正斜杠，避免跨平台不匹配
 	normalizedPath := pathpkg.ToSlash(relativePath)
 	for i := range snapshot.Files {
@@ -958,12 +989,18 @@ func (w *LocalWorkflow) updateSnapshotFile(snapshot *models.Snapshot, relativePa
 			return
 		}
 	}
+	// 新增文件：使用 projectBasePath 拼接相对路径构建完整的 OriginalPath
+	originalPath := normalizedPath
+	if projectBasePath != "" {
+		originalPath = pathpkg.Join(projectBasePath, normalizedPath)
+	}
 	snapshot.Files = append(snapshot.Files, models.SnapshotFile{
 		Path:         normalizedPath,
-		OriginalPath: normalizedPath,
+		OriginalPath: originalPath,
 		Size:         int64(len(content)),
 		Hash:         computeHash(content),
 		Content:      content,
+		ToolType:     toolType,
 	})
 }
 
