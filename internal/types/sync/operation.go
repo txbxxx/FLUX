@@ -25,13 +25,14 @@ type SyncPullInput struct {
 
 // SyncPullResult is the result of a pull operation.
 type SyncPullResult struct {
-	Success       bool           `json:"success"`
-	Project       string         `json:"project"`
-	FilesUpdated  int            `json:"files_updated"`
-	HasConflicts  bool           `json:"has_conflicts"`
-	ConflictCount int            `json:"conflict_count"`
-	Conflicts     []ConflictInfo `json:"conflicts,omitempty"`
-	Error         string         `json:"error,omitempty"`
+	Success       bool             `json:"success"`
+	Project       string           `json:"project"`
+	FilesUpdated  int              `json:"files_updated"`
+	HasConflicts  bool             `json:"has_conflicts"`
+	ConflictCount int              `json:"conflict_count"`
+	Conflicts     []ConflictInfo  `json:"conflicts,omitempty"`
+	AutoResolved  []AutoResolvedInfo `json:"auto_resolved,omitempty"`
+	Error         string           `json:"error,omitempty"`
 }
 
 // ConflictInfo describes a file conflict detected during sync pull.
@@ -42,6 +43,16 @@ type ConflictInfo struct {
 	RemoteSummary string `json:"remote_summary"`             // Brief summary of remote version
 	LocalHash     string `json:"local_hash,omitempty"`      // Git hash of local HEAD version (for resolve)
 	RemoteHash    string `json:"remote_hash,omitempty"`      // Git hash of remote HEAD version (for resolve)
+	LocalContent  []byte `json:"-"`                         // Local file content (not serialized)
+	RemoteContent []byte `json:"-"`                         // Remote file content (not serialized)
+	IsBinary      bool   `json:"is_binary"`                 // Whether the file is binary
+}
+
+// AutoResolvedInfo describes a file that was automatically resolved (no conflict).
+type AutoResolvedInfo struct {
+	Path       string `json:"path"`       // File path
+	Resolution string `json:"resolution"` // "remote_added" | "local_only"
+	Summary    string `json:"summary"`    // Human-readable summary
 }
 
 // SyncStatusInput is the input for checking sync status.

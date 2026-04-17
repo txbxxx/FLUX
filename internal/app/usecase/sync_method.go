@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flux/internal/models"
+	"flux/internal/util/diffutil"
 	typesSync "flux/internal/types/sync"
 	"flux/pkg/git"
 	"flux/pkg/logger"
@@ -481,15 +482,26 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		}
 
 		// 比较本地快照与远端 HEAD（clone 后工作目录就是 remote HEAD）
-		snapshotConflicts, cmpErr := w.compareSnapshotWithRemote(
+		// 使用新的 classifySnapshotDifferences 函数，区分冲突和自动解决
+		snapshotConflicts, autoResolved, cmpErr := w.classifySnapshotDifferences(
 			ctx, repoPath, remoteHash, localSnapshot, projectPrefix)
 		if cmpErr != nil {
 			logger.Warn("快照对比失败", zap.Error(cmpErr))
 		}
 
+		// 打印自动解决通知
+		if len(autoResolved) > 0 {
+			fmt.Println()
+			fmt.Println("自动同步（无冲突）：")
+			for _, ar := range autoResolved {
+				fmt.Printf("  - %s — %s\n", ar.Path, ar.Summary)
+			}
+			fmt.Println()
+		}
+
 		if len(snapshotConflicts) > 0 {
 			fmt.Println()
-			fmt.Printf("共有 %d 个文件与远端不同：\n", len(snapshotConflicts))
+			fmt.Printf("检测到 %d 个冲突文件：\n", len(snapshotConflicts))
 			showLimit := 10
 			for i := 0; i < len(snapshotConflicts) && i < showLimit; i++ {
 				c := snapshotConflicts[i]
@@ -500,67 +512,64 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			}
 			fmt.Println()
 
-			// 询问是否查看全部
-			reader := bufio.NewReader(os.Stdin)
-			if len(snapshotConflicts) > showLimit {
-				fmt.Print("查看全部？[y/N]: ")
-				if input, _ := reader.ReadString('\n'); strings.TrimSpace(strings.ToLower(input)) == "y" {
-					for _, c := range snapshotConflicts {
-						fmt.Printf("  - %s  (%s vs %s)\n", c.Path, c.LocalSummary, c.RemoteSummary)
-					}
-					fmt.Println()
+			// 逐文件交互解决
+			var keepLocalFiles, useRemoteFiles []string
+			cancelled, resolvedKeepLocal, resolvedUseRemote, err := w.resolveConflicts(ctx, snapshotConflicts, repoPath, remoteHash, localHash, localSnapshot, projectPrefix)
+			if err != nil {
+				return nil, err
+			}
+			if cancelled {
+				return &typesSync.SyncPullResult{
+					Success:      true,
+					Project:      projectName,
+					FilesUpdated: 0,
+				}, nil
+			}
+			keepLocalFiles = resolvedKeepLocal
+			useRemoteFiles = resolvedUseRemote
+
+			// 应用用户选择：使用远端的文件从工作目录读取，使用本地的文件从快照恢复
+			projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
+			if len(useRemoteFiles) > 0 {
+				fmt.Println("正在将远端配置同步到本地快照...")
+				if err := w.applyRemoteToSnapshot(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, projectBasePath, projectToolType); err != nil {
+					logger.Warn("同步远端到快照失败", zap.Error(err))
 				}
 			}
-
-			fmt.Println("请选择处理方式：")
-			fmt.Println("  [1] 使用远端版本（覆盖本地快照）")
-			fmt.Println("  [2] 保留本地快照")
-			fmt.Println("  [3] 取消本次拉取")
-			fmt.Println()
-
-			reader = bufio.NewReader(os.Stdin)
-			for {
-				fmt.Print("请选择 [1-3](默认=2): ")
-				input, _ := reader.ReadString('\n')
-				input = strings.TrimSpace(strings.ToLower(input))
-
-				switch input {
-				case "1", "overwrite":
-					// 使用远端：更新 SQLite 快照为远端内容
-					projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
-					fmt.Println("正在将远端配置同步到本地快照...")
-					if err := w.applyRemoteToSnapshot(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, projectBasePath, projectToolType); err != nil {
-						logger.Warn("同步远端到快照失败", zap.Error(err))
-					} else {
-						fmt.Println("快照已更新为远端版本。")
+			// 恢复用户选择保留本地的文件到工作目录
+			for _, relativePath := range keepLocalFiles {
+				if localSnapshot == nil {
+					continue
+				}
+				for _, f := range localSnapshot.Files {
+					if f.Path == relativePath {
+						targetPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
+						dir := pathpkg.Dir(targetPath)
+						if err := os.MkdirAll(dir, 0755); err != nil {
+							logger.Warn("创建目录失败", zap.String("dir", dir), zap.Error(err))
+							continue
+						}
+						if err := os.WriteFile(targetPath, f.Content, 0644); err != nil {
+							logger.Warn("恢复本地文件失败", zap.String("file", relativePath), zap.Error(err))
+						}
+						break
 					}
-					return &typesSync.SyncPullResult{
-						Success:      true,
-						Project:      projectName,
-						FilesUpdated: len(snapshotConflicts),
-					}, nil
-				case "2", "keep", "":
-					// 保留本地快照，下次 pull 会再次提示
-					return &typesSync.SyncPullResult{
-						Success:      true,
-						Project:      projectName,
-						FilesUpdated: 0,
-					}, nil
-				case "3", "cancel", "q":
-					return &typesSync.SyncPullResult{
-						Success: true,
-						Project: projectName,
-					}, nil
-				default:
-					fmt.Println("无效输入，请重新选择")
 				}
 			}
+			fmt.Println("快照已更新。")
+			return &typesSync.SyncPullResult{
+				Success:       true,
+				Project:       projectName,
+				FilesUpdated:  len(useRemoteFiles) + len(keepLocalFiles),
+				AutoResolved:  autoResolved,
+			}, nil
 		}
 
 		return &typesSync.SyncPullResult{
-			Success:      true,
-			Project:      projectName,
-			FilesUpdated: 0,
+			Success:       true,
+			Project:       projectName,
+			FilesUpdated:  0,
+			AutoResolved:  autoResolved,
 		}, nil
 	}
 
@@ -633,6 +642,9 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 				RemoteSummary: fmt.Sprintf("远端更新 %d 字节", len(remoteContent)),
 				LocalHash:     "",
 				RemoteHash:    remoteHash,
+				LocalContent:  localContent,
+				RemoteContent: remoteContent,
+				IsBinary:      diffutil.IsBinaryContent(localContent) || diffutil.IsBinaryContent(remoteContent),
 			})
 			continue
 		}
@@ -647,6 +659,9 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 				RemoteSummary: fmt.Sprintf("远端已修改 (%d 字节)", len(remoteContent)),
 				LocalHash:     localHash,
 				RemoteHash:    remoteHash,
+				LocalContent:  localContent,
+				RemoteContent: remoteContent,
+				IsBinary:      diffutil.IsBinaryContent(localContent) || diffutil.IsBinaryContent(remoteContent),
 			})
 		} else {
 			// 本地没有修改，只有远端修改 → 安全合并
@@ -791,7 +806,13 @@ func (w *LocalWorkflow) resolveConflicts(
 	showLimit := 10
 	for i := 0; i < len(conflicts) && i < showLimit; i++ {
 		c := conflicts[i]
-		fmt.Printf("  - %s  (%s vs %s)\n", c.Path, c.LocalSummary, c.RemoteSummary)
+		// Show line-level diff stats if available
+		if len(c.LocalContent) > 0 && len(c.RemoteContent) > 0 {
+			addLines, delLines := diffutil.CountLineChanges(c.LocalContent, c.RemoteContent)
+			fmt.Printf("  - %s  (%s, +%d/-%d 行  vs  %s)\n", c.Path, c.LocalSummary, addLines, delLines, c.RemoteSummary)
+		} else {
+			fmt.Printf("  - %s  (%s vs %s)\n", c.Path, c.LocalSummary, c.RemoteSummary)
+		}
 	}
 	if len(conflicts) > showLimit {
 		fmt.Printf("  ... 等 %d 个文件\n", len(conflicts)-showLimit)
@@ -812,7 +833,7 @@ func (w *LocalWorkflow) resolveConflicts(
 	fmt.Println("请选择处理方式：")
 	fmt.Println("  [1] 使用本地版本（保留本地修改）")
 	fmt.Println("  [2] 使用远端版本（用远端覆盖）")
-	fmt.Println("  [3] 跳过此文件")
+	fmt.Println("  [3] 查看差异")
 	fmt.Println("  [4] 取消本次拉取")
 	fmt.Println()
 
@@ -822,7 +843,13 @@ func (w *LocalWorkflow) resolveConflicts(
 		relativePath = pathpkg.ToSlash(relativePath)
 
 		for {
-			fmt.Printf("%s [1-4](默认=3): ", relativePath)
+			// Show line stats in prompt if available
+			if len(conflict.LocalContent) > 0 && len(conflict.RemoteContent) > 0 {
+				addLines, delLines := diffutil.CountLineChanges(conflict.LocalContent, conflict.RemoteContent)
+				fmt.Printf("%s [1-4](默认=2, +%d/-%d 行): ", relativePath, addLines, delLines)
+			} else {
+				fmt.Printf("%s [1-4](默认=2): ", relativePath)
+			}
 			input, _ := reader.ReadString('\n')
 			input = strings.TrimSpace(strings.ToLower(input))
 
@@ -830,15 +857,16 @@ func (w *LocalWorkflow) resolveConflicts(
 			case "1", "local":
 				// 保留本地：ResetToRef 后会被远端覆盖，第八步后会恢复到工作目录
 				keepLocalFiles = append(keepLocalFiles, relativePath)
-				fmt.Printf("  处理 %s：保留本地版本\n", relativePath)
-			case "2", "remote":
+				fmt.Printf("  -> 保留本地版本\n")
+			case "2", "remote", "":
 				// 使用远端：由第九步统一从工作目录读取并更新 SQLite
 				useRemoteFiles = append(useRemoteFiles, relativePath)
-				fmt.Printf("  处理 %s：使用远端版本\n", relativePath)
-			case "3", "skip", "":
-				// 跳过视为使用远端：ResetToRef 后工作目录是远端版本，第九步会统一处理
-				useRemoteFiles = append(useRemoteFiles, relativePath)
-				fmt.Printf("  处理 %s：跳过（将使用远端版本）\n", relativePath)
+				fmt.Printf("  -> 使用远端版本\n")
+			case "3", "diff":
+				// 查看差异后重新提示
+				w.showConflictDiff(conflict)
+				fmt.Println()
+				continue
 			case "4", "cancel", "q":
 				// 取消
 				fmt.Println("  已取消拉取")
@@ -1058,106 +1086,6 @@ func (w *LocalWorkflow) resolveProjectInfo(projectName string) (basePath string,
 	return "", ""
 }
 
-// compareSnapshotWithRemote compares the local SQLite snapshot with remote HEAD
-// and returns files that differ (modified in remote or missing locally).
-// clone 后工作目录就是 remote HEAD，直接遍历工作目录。
-func (w *LocalWorkflow) compareSnapshotWithRemote(
-	ctx context.Context,
-	repoPath string,
-	remoteHash string,
-	localSnapshot *models.Snapshot,
-	projectPrefix string,
-) ([]typesSync.ConflictInfo, error) {
-	var conflicts []typesSync.ConflictInfo
-
-	err := w.compareSnapshotWithRemoteSub(repoPath, remoteHash, localSnapshot, projectPrefix, "", &conflicts, 10)
-	if err != nil {
-		return nil, err
-	}
-	_ = ctx // unused
-	return conflicts, nil
-}
-
-// compareSnapshotWithRemoteSub recursively compares subdirectories.
-func (w *LocalWorkflow) compareSnapshotWithRemoteSub(
-	repoPath string,
-	remoteHash string,
-	localSnapshot *models.Snapshot,
-	projectPrefix string,
-	subPath string,
-	conflicts *[]typesSync.ConflictInfo,
-	depth int,
-) error {
-	if depth <= 0 {
-		return nil
-	}
-	fullPath := pathpkg.Join(repoPath, projectPrefix, subPath)
-	entries, err := os.ReadDir(fullPath)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		relativePath := entry.Name()
-		if subPath != "" {
-			relativePath = pathpkg.ToSlash(pathpkg.Join(subPath, entry.Name()))
-		}
-		if entry.IsDir() {
-			if err := w.compareSnapshotWithRemoteSub(repoPath, remoteHash, localSnapshot, projectPrefix, relativePath, conflicts, depth-1); err != nil {
-				logger.Warn("遍历远端目录失败", zap.String("dir", relativePath), zap.Error(err))
-			}
-			continue
-		}
-		fullFilePath := pathpkg.Join(fullPath, entry.Name())
-		remoteContent, readErr := os.ReadFile(fullFilePath)
-		if readErr != nil {
-			continue
-		}
-
-		if localSnapshot == nil {
-			*conflicts = append(*conflicts, typesSync.ConflictInfo{
-				Path:          relativePath,
-				ConflictType:  "remote_new",
-				LocalSummary:  "本地无快照",
-				RemoteSummary: fmt.Sprintf("远端新增 (%d 字节)", len(remoteContent)),
-				LocalHash:     "",
-				RemoteHash:    remoteHash,
-			})
-			continue
-		}
-
-		// 在本地快照中查找（统一用正斜杠比较路径）
-		normalizedPath := pathpkg.ToSlash(relativePath)
-		var localContent []byte
-		for _, f := range localSnapshot.Files {
-			if pathpkg.ToSlash(f.Path) == normalizedPath {
-				localContent = f.Content
-				break
-			}
-		}
-
-		if localContent == nil {
-			*conflicts = append(*conflicts, typesSync.ConflictInfo{
-				Path:          normalizedPath,
-				ConflictType:  "remote_new",
-				LocalSummary:  "本地无此文件",
-				RemoteSummary: fmt.Sprintf("远端新增 (%d 字节)", len(remoteContent)),
-				LocalHash:     "",
-				RemoteHash:    remoteHash,
-			})
-		} else if string(localContent) != string(remoteContent) {
-			*conflicts = append(*conflicts, typesSync.ConflictInfo{
-				Path:          normalizedPath,
-				ConflictType:  "both_modified",
-				LocalSummary:  fmt.Sprintf("本地已修改 (%d 字节)", len(localContent)),
-				RemoteSummary: fmt.Sprintf("远端已修改 (%d 字节)", len(remoteContent)),
-				LocalHash:     "",
-				RemoteHash:    remoteHash,
-			})
-		}
-	}
-	return nil
-}
-
 // SyncStatus checks the sync status of a project.
 func (w *LocalWorkflow) SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error) {
 	return nil, &UserError{
@@ -1238,6 +1166,148 @@ func parseGitError(errStr, remoteURL string) (errorMsg, suggestion string) {
 	// 默认返回原始错误
 	return fmt.Sprintf("拉取失败：%s", errStr),
 		"请查看日志了解详细错误信息"
+}
+
+// showConflictDiff displays a unified diff for a conflict file.
+func (w *LocalWorkflow) showConflictDiff(conflict typesSync.ConflictInfo) {
+	fmt.Println()
+	if conflict.IsBinary {
+		fmt.Printf("  [二进制文件，大小: %d → %d 字节]\n", len(conflict.LocalContent), len(conflict.RemoteContent))
+		return
+	}
+
+	diffResult := diffutil.ComputeConflictDiff(conflict.LocalContent, conflict.RemoteContent, conflict.Path)
+	if diffResult == nil || len(diffResult.Files) == 0 {
+		return
+	}
+
+	fileChange := diffResult.Files[0]
+	fmt.Printf("  --- 本地 (%dB) → 远端 (%dB) ---\n", fileChange.OldSize, fileChange.NewSize)
+
+	for _, hunk := range fileChange.Hunks {
+		fmt.Printf("  @@ -%d,%d +%d,%d @@\n", hunk.OldStart, hunk.OldCount, hunk.NewStart, hunk.NewCount)
+		for _, line := range hunk.Lines {
+			switch line.Type {
+			case 1: // LineAdded
+				fmt.Printf("  +%s\n", line.Content)
+			case 2: // LineDeleted
+				fmt.Printf("  -%s\n", line.Content)
+			default: // LineContext
+				fmt.Printf("  %s\n", line.Content)
+			}
+		}
+	}
+}
+
+// classifySnapshotDifferences categorizes differences between local snapshot and remote.
+// Returns conflicts and auto-resolved files.
+func (w *LocalWorkflow) classifySnapshotDifferences(
+	ctx context.Context,
+	repoPath string,
+	remoteHash string,
+	localSnapshot *models.Snapshot,
+	projectPrefix string,
+) (conflicts []typesSync.ConflictInfo, autoResolved []typesSync.AutoResolvedInfo, err error) {
+	conflicts = []typesSync.ConflictInfo{}
+	autoResolved = []typesSync.AutoResolvedInfo{}
+
+	err = w.classifySnapshotDifferencesSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, "", &conflicts, &autoResolved, 10)
+	return conflicts, autoResolved, err
+}
+
+// classifySnapshotDifferencesSub recursively processes subdirectories.
+func (w *LocalWorkflow) classifySnapshotDifferencesSub(
+	ctx context.Context,
+	repoPath string,
+	remoteHash string,
+	localSnapshot *models.Snapshot,
+	projectPrefix string,
+	subPath string,
+	conflicts *[]typesSync.ConflictInfo,
+	autoResolved *[]typesSync.AutoResolvedInfo,
+	depth int,
+) error {
+	if depth <= 0 {
+		return nil
+	}
+	fullPath := pathpkg.Join(repoPath, projectPrefix, subPath)
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return err
+	}
+
+	// Build a map of files in local snapshot for quick lookup
+	snapshotFileMap := make(map[string][]byte)
+	if localSnapshot != nil {
+		for _, f := range localSnapshot.Files {
+			snapshotFileMap[pathpkg.ToSlash(f.Path)] = f.Content
+		}
+	}
+
+	// Track which snapshot files have been processed
+	processedPaths := make(map[string]bool)
+
+	for _, entry := range entries {
+		relativePath := entry.Name()
+		if subPath != "" {
+			relativePath = pathpkg.ToSlash(pathpkg.Join(subPath, entry.Name()))
+		}
+
+		if entry.IsDir() {
+			if err := w.classifySnapshotDifferencesSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, relativePath, conflicts, autoResolved, depth-1); err != nil {
+				logger.Warn("遍历远端目录失败", zap.String("dir", relativePath), zap.Error(err))
+			}
+			continue
+		}
+
+		processedPaths[relativePath] = true
+		fullFilePath := pathpkg.Join(fullPath, entry.Name())
+		remoteContent, readErr := os.ReadFile(fullFilePath)
+		if readErr != nil {
+			continue
+		}
+
+		localContent, existsInSnapshot := snapshotFileMap[relativePath]
+
+		if !existsInSnapshot {
+			// 远端新增文件 → 自动解决
+			*autoResolved = append(*autoResolved, typesSync.AutoResolvedInfo{
+				Path:       relativePath,
+				Resolution: "remote_added",
+				Summary:    fmt.Sprintf("远端新增文件（%d 字节），本地不存在此文件，已自动同步到本地快照", len(remoteContent)),
+			})
+		} else if string(localContent) != string(remoteContent) {
+			// 双方都有但内容不同 → 冲突
+			*conflicts = append(*conflicts, typesSync.ConflictInfo{
+				Path:          relativePath,
+				ConflictType:  "both_modified",
+				LocalSummary:  fmt.Sprintf("本地已修改 (%d 字节)", len(localContent)),
+				RemoteSummary: fmt.Sprintf("远端已修改 (%d 字节)", len(remoteContent)),
+				LocalHash:     "",
+				RemoteHash:    remoteHash,
+				LocalContent:  localContent,
+				RemoteContent: remoteContent,
+				IsBinary:      diffutil.IsBinaryContent(localContent) || diffutil.IsBinaryContent(remoteContent),
+			})
+		}
+	}
+
+	// Check for files in snapshot that don't exist remotely (local-only files)
+	if localSnapshot != nil {
+		for _, f := range localSnapshot.Files {
+			normalizedPath := pathpkg.ToSlash(f.Path)
+			if !processedPaths[normalizedPath] {
+				// 本地快照有但远端没有 → 自动解决
+				*autoResolved = append(*autoResolved, typesSync.AutoResolvedInfo{
+					Path:       normalizedPath,
+					Resolution: "local_only",
+					Summary:    fmt.Sprintf("本地快照有文件 %s，远端已无此文件，保留本地版本不变", normalizedPath),
+				})
+			}
+		}
+	}
+
+	return nil
 }
 
 // pathExists 检查指定路径是否存在（文件或目录）。

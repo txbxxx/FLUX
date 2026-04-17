@@ -13,13 +13,12 @@ import (
 
 	"flux/internal/models"
 	"flux/internal/service/tool"
+	"flux/internal/util/diffutil"
 	typesSnapshot "flux/internal/types/snapshot"
 	"flux/pkg/crypto"
 	"flux/pkg/database"
 	"flux/pkg/logger"
 
-	"github.com/hexops/gotextdiff"
-	"github.com/hexops/gotextdiff/myers"
 	"go.uber.org/zap"
 )
 
@@ -611,10 +610,10 @@ func (s *Service) diffWithFilesystem(snapshot *models.Snapshot, verbose bool, co
 					ToolType: sf.ToolType,
 				}
 				if verbose && !change.IsBinary {
-					change.Hunks = computeFileHunks(sf.Content, ff.Content)
+					change.Hunks = diffutil.ComputeFileHunks(sf.Content, ff.Content)
 				}
 				if !change.IsBinary {
-					change.AddLines, change.DelLines = countLineChanges(sf.Content, ff.Content)
+					change.AddLines, change.DelLines = diffutil.CountLineChanges(sf.Content, ff.Content)
 				}
 				changes = append(changes, change)
 			}
@@ -681,10 +680,10 @@ func (s *Service) diffWithFilesystemFallback(snapshot *models.Snapshot, snapshot
 				ToolType: sf.ToolType,
 			}
 			if verbose && !sf.IsBinary {
-				change.Hunks = computeFileHunks(sf.Content, currentContent)
+				change.Hunks = diffutil.ComputeFileHunks(sf.Content, currentContent)
 			}
 			if !sf.IsBinary {
-				change.AddLines, change.DelLines = countLineChanges(sf.Content, currentContent)
+				change.AddLines, change.DelLines = diffutil.CountLineChanges(sf.Content, currentContent)
 			}
 			changes = append(changes, change)
 		}
@@ -821,10 +820,10 @@ func (s *Service) diffTwoSnapshots(source, target *models.Snapshot, verbose bool
 				ToolType: sf.ToolType,
 			}
 			if verbose && !change.IsBinary {
-				change.Hunks = computeFileHunks(tf.Content, sf.Content)
+				change.Hunks = diffutil.ComputeFileHunks(tf.Content, sf.Content)
 			}
 			if !change.IsBinary {
-				change.AddLines, change.DelLines = countLineChanges(tf.Content, sf.Content)
+				change.AddLines, change.DelLines = diffutil.CountLineChanges(tf.Content, sf.Content)
 			}
 			changes = append(changes, change)
 		}
@@ -888,74 +887,6 @@ func (s *Service) computeDiffStats(files []typesSnapshot.DiffFileChange) typesSn
 }
 
 
-// computeFileHunks uses gotextdiff to compute structured diff hunks.
-func computeFileHunks(oldContent, newContent []byte) []typesSnapshot.DiffHunk {
-	oldText := string(oldContent)
-	newText := string(newContent)
-
-	edits := myers.ComputeEdits("a", oldText, newText)
-	unified := gotextdiff.ToUnified("a", "b", oldText, edits)
-
-	lines := strings.Split(fmt.Sprint(unified), "\n")
-	return parseUnifiedDiffLines(lines)
-}
-
-// parseUnifiedDiffLines converts unified diff text lines into structured DiffHunks.
-func parseUnifiedDiffLines(lines []string) []typesSnapshot.DiffHunk {
-	var hunks []typesSnapshot.DiffHunk
-	var current *typesSnapshot.DiffHunk
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") || line == "" {
-			continue
-		}
-
-		if strings.HasPrefix(line, "@@") {
-			if current != nil {
-				hunks = append(hunks, *current)
-			}
-			current = &typesSnapshot.DiffHunk{}
-			continue
-		}
-
-		if current == nil || len(line) == 0 {
-			continue
-		}
-
-		switch line[0] {
-		case '+':
-			current.Lines = append(current.Lines, typesSnapshot.DiffLine{
-				Type:    typesSnapshot.LineAdded,
-				Content: line[1:],
-			})
-			current.NewCount++
-		case '-':
-			current.Lines = append(current.Lines, typesSnapshot.DiffLine{
-				Type:    typesSnapshot.LineDeleted,
-				Content: line[1:],
-			})
-			current.OldCount++
-		default:
-			content := line
-			if len(content) > 0 && content[0] == ' ' {
-				content = content[1:]
-			}
-			current.Lines = append(current.Lines, typesSnapshot.DiffLine{
-				Type:    typesSnapshot.LineContext,
-				Content: content,
-			})
-			current.OldCount++
-			current.NewCount++
-		}
-	}
-
-	if current != nil {
-		hunks = append(hunks, *current)
-	}
-
-	return hunks
-}
-
 // CollectForUpdate re-collects files for an existing snapshot's project.
 // Returns the collected files, the project path, and any error.
 func (s *Service) CollectForUpdate(projectName string, tools []string) ([]models.SnapshotFile, string, error) {
@@ -1013,19 +944,3 @@ func DiffFileSets(oldFiles, newFiles []models.SnapshotFile) (added, updated, rem
 	return
 }
 
-// countLineChanges counts added and deleted lines between two byte contents.
-func countLineChanges(oldContent, newContent []byte) (addLines, delLines int) {
-	edits := myers.ComputeEdits("a", string(oldContent), string(newContent))
-	unified := gotextdiff.ToUnified("a", "b", string(oldContent), edits)
-
-	for _, line := range strings.Split(fmt.Sprint(unified), "\n") {
-		if len(line) > 0 {
-			if line[0] == '+' && !strings.HasPrefix(line, "+++") {
-				addLines++
-			} else if line[0] == '-' && !strings.HasPrefix(line, "---") {
-				delLines++
-			}
-		}
-	}
-	return
-}
