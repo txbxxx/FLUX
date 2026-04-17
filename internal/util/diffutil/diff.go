@@ -28,7 +28,8 @@ func ParseUnifiedDiffLines(lines []string) []snapshot.DiffHunk {
 	var current *snapshot.DiffHunk
 
 	for _, line := range lines {
-		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") || line == "" {
+		// Skip diff metadata lines but preserve empty lines as they may be valid context
+		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") {
 			continue
 		}
 
@@ -40,7 +41,18 @@ func ParseUnifiedDiffLines(lines []string) []snapshot.DiffHunk {
 			continue
 		}
 
-		if current == nil || len(line) == 0 {
+		if current == nil {
+			continue
+		}
+
+		// 空行作为 context line 处理（不带 +/- 前缀的空格）
+		if len(line) == 0 {
+			current.Lines = append(current.Lines, snapshot.DiffLine{
+				Type:    snapshot.LineContext,
+				Content: "",
+			})
+			current.OldCount++
+			current.NewCount++
 			continue
 		}
 
