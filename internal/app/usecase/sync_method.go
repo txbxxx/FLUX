@@ -489,16 +489,6 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			logger.Warn("快照对比失败", zap.Error(cmpErr))
 		}
 
-		// 打印自动解决通知
-		if len(autoResolved) > 0 {
-			fmt.Println()
-			fmt.Println("自动同步（无冲突）：")
-			for _, ar := range autoResolved {
-				fmt.Printf("  - %s — %s\n", ar.Path, ar.Summary)
-			}
-			fmt.Println()
-		}
-
 		if len(snapshotConflicts) > 0 {
 			fmt.Println()
 			fmt.Printf("检测到 %d 个冲突文件：\n", len(snapshotConflicts))
