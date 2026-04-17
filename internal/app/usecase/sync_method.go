@@ -1253,33 +1253,36 @@ func (w *LocalWorkflow) classifySnapshotDifferencesSub(
 			relativePath = pathpkg.ToSlash(pathpkg.Join(subPath, entry.Name()))
 		}
 
+		// 统一为正斜杠，避免跨平台路径不匹配
+		normalizedRelativePath := pathpkg.ToSlash(relativePath)
+
 		if entry.IsDir() {
-			if err := w.classifySnapshotDifferencesSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, relativePath, conflicts, autoResolved, depth-1); err != nil {
-				logger.Warn("遍历远端目录失败", zap.String("dir", relativePath), zap.Error(err))
+			if err := w.classifySnapshotDifferencesSub(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, normalizedRelativePath, conflicts, autoResolved, depth-1); err != nil {
+				logger.Warn("遍历远端目录失败", zap.String("dir", normalizedRelativePath), zap.Error(err))
 			}
 			continue
 		}
 
-		processedPaths[relativePath] = true
+		processedPaths[normalizedRelativePath] = true
 		fullFilePath := pathpkg.Join(fullPath, entry.Name())
 		remoteContent, readErr := os.ReadFile(fullFilePath)
 		if readErr != nil {
 			continue
 		}
 
-		localContent, existsInSnapshot := snapshotFileMap[relativePath]
+		localContent, existsInSnapshot := snapshotFileMap[normalizedRelativePath]
 
 		if !existsInSnapshot {
 			// 远端新增文件 → 自动解决
 			*autoResolved = append(*autoResolved, typesSync.AutoResolvedInfo{
-				Path:       relativePath,
+				Path:       normalizedRelativePath,
 				Resolution: "remote_added",
 				Summary:    fmt.Sprintf("远端新增文件（%d 字节），本地不存在此文件，已自动同步到本地快照", len(remoteContent)),
 			})
 		} else if string(localContent) != string(remoteContent) {
 			// 双方都有但内容不同 → 冲突
 			*conflicts = append(*conflicts, typesSync.ConflictInfo{
-				Path:          relativePath,
+				Path:          normalizedRelativePath,
 				ConflictType:  "both_modified",
 				LocalSummary:  fmt.Sprintf("本地已修改 (%d 字节)", len(localContent)),
 				RemoteSummary: fmt.Sprintf("远端已修改 (%d 字节)", len(remoteContent)),
