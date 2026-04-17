@@ -136,6 +136,18 @@ func printSyncPullResult(w io.Writer, result *typesSync.SyncPullResult) {
 		fmt.Fprintf(w, "拉取成功\n\n")
 		fmt.Fprintf(w, "  项目:   %s\n", result.Project)
 		fmt.Fprintf(w, "  文件:   %d 个已更新\n", result.FilesUpdated)
+
+		// 显示自动解决的文件
+		if len(result.AutoResolved) > 0 {
+			fmt.Fprintf(w, "\n  自动同步（无冲突）：\n")
+			for _, ar := range result.AutoResolved {
+				if ar.Resolution == "remote_added" {
+					fmt.Fprintf(w, "    - %s — 远端新增文件（%s），已同步到本地\n", ar.Path, ar.Resolution)
+				} else {
+					fmt.Fprintf(w, "    - %s — 本地独有文件，已保留\n", ar.Path)
+				}
+			}
+		}
 	} else if result.HasConflicts {
 		fmt.Fprintf(w, "拉取完成，发现冲突\n\n")
 		fmt.Fprintf(w, "  项目:   %s\n", result.Project)

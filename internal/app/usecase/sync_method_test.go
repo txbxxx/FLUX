@@ -234,7 +234,7 @@ func TestCompareSnapshotWithRemote_DetectsModifiedFile(t *testing.T) {
 
 	w := &LocalWorkflow{}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	conflicts, err := w.compareSnapshotWithRemote(context.Background(), repoPath, "remoteHash123", localSnapshot, projectPrefix)
+	conflicts, autoResolved, err := w.classifySnapshotDifferences(context.Background(), repoPath, "remoteHash123", localSnapshot, projectPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -247,6 +247,9 @@ func TestCompareSnapshotWithRemote_DetectsModifiedFile(t *testing.T) {
 	}
 	if conflicts[0].ConflictType != "both_modified" {
 		t.Fatalf("expected conflict type 'both_modified', got %q", conflicts[0].ConflictType)
+	}
+	if len(autoResolved) != 0 {
+		t.Fatalf("expected 0 auto-resolved, got %d", len(autoResolved))
 	}
 }
 
@@ -268,19 +271,34 @@ func TestCompareSnapshotWithRemote_DetectsRemoteNewFile(t *testing.T) {
 
 	w := &LocalWorkflow{}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	conflicts, err := w.compareSnapshotWithRemote(context.Background(), repoPath, "remoteHash123", localSnapshot, projectPrefix)
+	conflicts, autoResolved, err := w.classifySnapshotDifferences(context.Background(), repoPath, "remoteHash123", localSnapshot, projectPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(conflicts) != 1 {
-		t.Fatalf("expected 1 conflict, got %d", len(conflicts))
+	// remote_new is now auto-resolved, and local-only files are also auto-resolved
+	if len(conflicts) != 0 {
+		t.Fatalf("expected 0 conflicts (remote_new is auto-resolved), got %d", len(conflicts))
 	}
-	if conflicts[0].Path != "remote-file.txt" {
-		t.Fatalf("expected path 'remote-file.txt', got %q", conflicts[0].Path)
+	if len(autoResolved) != 2 {
+		t.Fatalf("expected 2 auto-resolved (remote-file.txt + settings.json local_only), got %d", len(autoResolved))
 	}
-	if conflicts[0].ConflictType != "remote_new" {
-		t.Fatalf("expected conflict type 'remote_new', got %q", conflicts[0].ConflictType)
+	// Check remote_added
+	foundRemoteAdded := false
+	foundLocalOnly := false
+	for _, ar := range autoResolved {
+		if ar.Path == "remote-file.txt" && ar.Resolution == "remote_added" {
+			foundRemoteAdded = true
+		}
+		if ar.Path == "settings.json" && ar.Resolution == "local_only" {
+			foundLocalOnly = true
+		}
+	}
+	if !foundRemoteAdded {
+		t.Fatalf("expected remote_added for remote-file.txt")
+	}
+	if !foundLocalOnly {
+		t.Fatalf("expected local_only for settings.json")
 	}
 }
 
@@ -302,13 +320,16 @@ func TestCompareSnapshotWithRemote_NoConflictWhenIdentical(t *testing.T) {
 
 	w := &LocalWorkflow{}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	conflicts, err := w.compareSnapshotWithRemote(context.Background(), repoPath, "remoteHash123", localSnapshot, projectPrefix)
+	conflicts, autoResolved, err := w.classifySnapshotDifferences(context.Background(), repoPath, "remoteHash123", localSnapshot, projectPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if len(conflicts) != 0 {
 		t.Fatalf("expected 0 conflicts, got %d", len(conflicts))
+	}
+	if len(autoResolved) != 0 {
+		t.Fatalf("expected 0 auto-resolved, got %d", len(autoResolved))
 	}
 }
 
@@ -332,17 +353,27 @@ func TestCompareSnapshotWithRemote_WindowsBackslashPath(t *testing.T) {
 
 	w := &LocalWorkflow{}
 	repoPath := filepath.Join(tmpDir, "repos", "claude-global")
-	conflicts, err := w.compareSnapshotWithRemote(context.Background(), repoPath, "remoteHash123", localSnapshot, projectPrefix)
+	conflicts, autoResolved, err := w.classifySnapshotDifferences(context.Background(), repoPath, "remoteHash123", localSnapshot, projectPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// Should detect conflict because paths are normalized to forward slash
+	// Note: remote has "claude/settings.json", local has "claude\settings.json" (Windows backslash)
+	// The local path will be normalized to "claude/settings.json" and will conflict with remote
 	if len(conflicts) != 1 {
 		t.Fatalf("expected 1 conflict (Windows backslash normalized), got %d", len(conflicts))
 	}
 	if conflicts[0].Path != "claude/settings.json" {
 		t.Fatalf("expected normalized path 'claude/settings.json', got %q", conflicts[0].Path)
+	}
+	// The local file "claude\settings.json" doesn't exist in remote after normalization
+	// so it's treated as local_only and auto-resolved
+	if len(autoResolved) != 1 {
+		t.Fatalf("expected 1 auto-resolved (local_only: claude/settings.json), got %d", len(autoResolved))
+	}
+	if autoResolved[0].Path != "claude/settings.json" || autoResolved[0].Resolution != "local_only" {
+		t.Fatalf("expected local_only for claude/settings.json, got %+v", autoResolved[0])
 	}
 }
 
