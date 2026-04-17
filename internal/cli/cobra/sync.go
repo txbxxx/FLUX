@@ -178,20 +178,16 @@ func printAutoResolvedSummary(w io.Writer, autoResolved []typesSync.AutoResolved
 	}
 
 	// Aggregate by top-level directory and resolution type.
-	// Key format: "dir/" or "" for root-level files.
 	type aggEntry struct {
-		dir        string
 		resolution string
 		count      int
 	}
-	aggMap := make(map[string]*aggEntry)
-	// Preserve insertion order for root-level files.
+	aggMap := make(map[string]*aggEntry) // key: "dir/|resolution"
 	var rootFiles []typesSync.AutoResolvedInfo
 
 	for _, ar := range autoResolved {
 		dir := topDir(ar.Path)
 		if dir == "" {
-			// Root-level file: keep individual entry
 			rootFiles = append(rootFiles, ar)
 			continue
 		}
@@ -199,42 +195,47 @@ func printAutoResolvedSummary(w io.Writer, autoResolved []typesSync.AutoResolved
 		if e, ok := aggMap[key]; ok {
 			e.count++
 		} else {
-			aggMap[key] = &aggEntry{dir: dir, resolution: ar.Resolution, count: 1}
+			aggMap[key] = &aggEntry{resolution: ar.Resolution, count: 1}
 		}
 	}
 
-	fmt.Fprintf(w, "\n  自动同步（无冲突）：\n")
-
-	// Print aggregated directory entries, sorted by dir name for stable output
+	// Group entries by directory for O(n) lookup instead of nested loop.
+	type dirStats struct {
+		remoteAdded int
+		localOnly   int
+	}
+	byDir := make(map[string]*dirStats)
 	var dirs []string
-	seen := make(map[string]bool)
-	for _, e := range aggMap {
-		if !seen[e.dir] {
-			seen[e.dir] = true
-			dirs = append(dirs, e.dir)
+	dirSet := make(map[string]bool)
+
+	for key, e := range aggMap {
+		// key format: "dir/|resolution"
+		sepIdx := strings.LastIndex(key, "|")
+		d := key[:sepIdx]
+		if !dirSet[d] {
+			dirSet[d] = true
+			dirs = append(dirs, d)
+			byDir[d] = &dirStats{}
+		}
+		switch e.resolution {
+		case "remote_added":
+			byDir[d].remoteAdded = e.count
+		case "local_only":
+			byDir[d].localOnly = e.count
 		}
 	}
 	sort.Strings(dirs)
 
+	fmt.Fprintf(w, "\n  自动同步（无冲突）：\n")
+
 	for _, d := range dirs {
-		// Collect all resolution types for this directory
-		var remoteAdded, localOnly int
-		for _, e := range aggMap {
-			if e.dir == d {
-				switch e.resolution {
-				case "remote_added":
-					remoteAdded = e.count
-				case "local_only":
-					localOnly = e.count
-				}
-			}
-		}
+		st := byDir[d]
 		var parts []string
-		if remoteAdded > 0 {
-			parts = append(parts, fmt.Sprintf("%d 个远端新增", remoteAdded))
+		if st.remoteAdded > 0 {
+			parts = append(parts, fmt.Sprintf("%d 个远端新增", st.remoteAdded))
 		}
-		if localOnly > 0 {
-			parts = append(parts, fmt.Sprintf("%d 个本地独有", localOnly))
+		if st.localOnly > 0 {
+			parts = append(parts, fmt.Sprintf("%d 个本地独有", st.localOnly))
 		}
 		fmt.Fprintf(w, "    %s — %s\n", d, strings.Join(parts, "，"))
 	}
@@ -247,6 +248,8 @@ func printAutoResolvedSummary(w io.Writer, autoResolved []typesSync.AutoResolved
 			fmt.Fprintf(w, "    %s — 本地独有文件，已保留\n", ar.Path)
 		}
 	}
+
+	fmt.Fprintf(w, "    (使用 --verbose 查看完整列表)\n")
 }
 
 // topDir extracts the top-level directory from a file path.

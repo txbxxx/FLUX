@@ -1285,10 +1285,20 @@ func (w *LocalWorkflow) classifySnapshotDifferencesSub(
 		}
 	}
 
-	// Check for files in snapshot that don't exist remotely (local-only files)
+	// Check for files in snapshot that don’t exist remotely (local-only files).
+	// Only check files belonging to the current subPath to avoid duplicating
+	// root-level files in every recursive call.
 	if localSnapshot != nil {
+		prefix := subPath
+		if prefix != "" {
+			prefix = prefix + "/"
+		}
 		for _, f := range localSnapshot.Files {
 			normalizedPath := pathpkg.ToSlash(f.Path)
+			// Skip files outside the current subPath
+			if subPath != "" && !strings.HasPrefix(normalizedPath, prefix) {
+				continue
+			}
 			if !processedPaths[normalizedPath] {
 				// 本地快照有但远端没有 → 自动解决
 				*autoResolved = append(*autoResolved, typesSync.AutoResolvedInfo{
