@@ -471,17 +471,16 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	}
 
 	remoteHash, _ := gitClient.GetRemoteHeadHash(repoPath, "origin", branch)
-	if localHash == "" || remoteHash == "" || localHash == remoteHash {
-		// git 层面没有变更，但需要检查本地快照是否与远端一致
-		if localSnapshot == nil {
-			// 没有本地快照，无冲突
-			return &typesSync.SyncPullResult{
-				Success:      true,
-				Project:      projectName,
-				FilesUpdated: 0,
-			}, nil
-		}
 
+	// 本地无快照时无法确定同步基准，提示用户先创建快照
+	if localSnapshot == nil {
+		return nil, &UserError{
+			Message:    fmt.Sprintf("拉取失败：项目 %q 没有本地快照，无法确定同步基准", projectName),
+			Suggestion: "请先执行 fl snapshot create -p " + projectName + " 建立本地快照",
+		}
+	}
+
+	if localHash == "" || remoteHash == "" || localHash == remoteHash {
 		// 比较本地快照与远端 HEAD（clone 后工作目录就是 remote HEAD）
 		// 使用新的 classifySnapshotDifferences 函数，区分冲突和自动解决
 		snapshotConflicts, autoResolved, cmpErr := w.classifySnapshotDifferences(
