@@ -557,10 +557,38 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			}, nil
 		}
 
+		// 无冲突时，把远端新增文件也写入快照（不写则快照与远端脱节）
+		// applyRemoteToSnapshot 会遍历整个 repo 写快照，此处只处理 auto-resolved 的远端新增文件，更高效
+		autoAddedCount := 0
+		if localSnapshot != nil && len(autoResolved) > 0 {
+			projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
+			for _, ar := range autoResolved {
+				if ar.Resolution != "remote_added" {
+					continue
+				}
+				relativePath := strings.TrimPrefix(ar.Path, projectPrefix)
+				fullPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
+				content, readErr := os.ReadFile(fullPath)
+				if readErr != nil {
+					logger.Warn("读取远端新增文件失败", zap.String("path", fullPath), zap.Error(readErr))
+					continue
+				}
+				w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, projectToolType)
+				autoAddedCount++
+			}
+			if autoAddedCount > 0 {
+				if err := w.snapshots.UpdateSnapshot(localSnapshot); err != nil {
+					logger.Error("更新快照失败", zap.Error(err))
+				} else {
+					logger.Info("快照已更新", zap.Int("新增文件数", autoAddedCount))
+				}
+			}
+		}
+
 		return &typesSync.SyncPullResult{
 			Success:       true,
 			Project:       projectName,
-			FilesUpdated:  0,
+			FilesUpdated:  autoAddedCount,
 			AutoResolved:  autoResolved,
 		}, nil
 	}
