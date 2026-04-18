@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"flux/internal/models"
-	"flux/internal/util/diffutil"
 	typesSync "flux/internal/types/sync"
+	"flux/internal/util/diffutil"
 	"flux/pkg/git"
 	"flux/pkg/logger"
 
@@ -549,10 +549,10 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			}
 			fmt.Println("快照已更新。")
 			return &typesSync.SyncPullResult{
-				Success:       true,
-				Project:       projectName,
-				FilesUpdated:  len(useRemoteFiles) + len(keepLocalFiles),
-				AutoResolved:  autoResolved,
+				Success:      true,
+				Project:      projectName,
+				FilesUpdated: len(useRemoteFiles) + len(keepLocalFiles),
+				AutoResolved: autoResolved,
 			}, nil
 		}
 
@@ -565,6 +565,10 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 				if ar.Resolution != "remote_added" {
 					continue
 				}
+				if !strings.HasPrefix(ar.Path, projectPrefix) {
+					logger.Warn("远端文件路径缺少项目前缀", zap.String("path", ar.Path), zap.String("prefix", projectPrefix))
+					continue
+				}
 				relativePath := strings.TrimPrefix(ar.Path, projectPrefix)
 				fullPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
 				content, readErr := os.ReadFile(fullPath)
@@ -573,6 +577,17 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 					continue
 				}
 				w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, projectToolType)
+				// 检测符号链接，补设 IsSymlink 和 LinkTarget
+				if resolved, linkErr := pathpkg.EvalSymlinks(fullPath); linkErr == nil && resolved != fullPath {
+					normalizedRel := pathpkg.ToSlash(relativePath)
+					for i := range localSnapshot.Files {
+						if pathpkg.ToSlash(localSnapshot.Files[i].Path) == normalizedRel {
+							localSnapshot.Files[i].IsSymlink = true
+							localSnapshot.Files[i].LinkTarget = resolved
+							break
+						}
+					}
+				}
 				autoAddedCount++
 			}
 			if autoAddedCount > 0 {
@@ -585,10 +600,10 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		}
 
 		return &typesSync.SyncPullResult{
-			Success:       true,
-			Project:       projectName,
-			FilesUpdated:  autoAddedCount,
-			AutoResolved:  autoResolved,
+			Success:      true,
+			Project:      projectName,
+			FilesUpdated: autoAddedCount,
+			AutoResolved: autoResolved,
 		}, nil
 	}
 
