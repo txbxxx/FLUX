@@ -137,7 +137,10 @@ func printSyncPushResult(w io.Writer, result *typesSync.SyncPushResult) {
 }
 
 func printSyncPullResult(w io.Writer, result *typesSync.SyncPullResult, verbose bool) {
-	if result.Success {
+	if result.Cancelled {
+		fmt.Fprintf(w, "已取消拉取\n\n")
+		fmt.Fprintf(w, "  项目:   %s\n", result.Project)
+	} else if result.Success {
 		fmt.Fprintf(w, "拉取成功\n\n")
 		fmt.Fprintf(w, "  项目:   %s\n", result.Project)
 		fmt.Fprintf(w, "  文件:   %d 个已更新\n", result.FilesUpdated)

@@ -405,8 +405,9 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	}
 	if !continuePull {
 		return &typesSync.SyncPullResult{
-			Success: true,
-			Project: projectName,
+			Success:   true,
+			Cancelled: true,
+			Project:   projectName,
 		}, nil
 	}
 	fmt.Printf("远端配置已拉取到本地（%s）\n\n", repoPath)
@@ -511,6 +512,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			if cancelled {
 				return &typesSync.SyncPullResult{
 					Success:      true,
+					Cancelled:    true,
 					Project:      projectName,
 					FilesUpdated: 0,
 				}, nil
@@ -667,9 +669,10 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			return nil, err
 		}
 		if cancelled {
-			// 用户取消，保持本地快照不变，返回成功（无更新）
+			// 用户取消，保持本地快照不变
 			return &typesSync.SyncPullResult{
 				Success:      true,
+				Cancelled:    true,
 				Project:      projectName,
 				FilesUpdated: 0,
 			}, nil
@@ -856,6 +859,7 @@ func (w *LocalWorkflow) resolveConflicts(
 				// 查看差异后重新提示
 				w.showConflictDiff(conflict)
 				fmt.Println()
+				fmt.Println("  [1] 本地  [2] 远端  [3] 差异  [4] 取消")
 				continue
 			case "4", "cancel", "q":
 				// 取消
@@ -1179,9 +1183,9 @@ func (w *LocalWorkflow) showConflictDiff(conflict typesSync.ConflictInfo) {
 		for _, line := range hunk.Lines {
 			switch line.Type {
 			case 1: // LineAdded
-				fmt.Printf("  +%s\n", line.Content)
+				fmt.Printf("  \x1b[32m+%s\x1b[0m\n", line.Content)
 			case 2: // LineDeleted
-				fmt.Printf("  -%s\n", line.Content)
+				fmt.Printf("  \x1b[31m-%s\x1b[0m\n", line.Content)
 			default: // LineContext
 				fmt.Printf("  %s\n", line.Content)
 			}
