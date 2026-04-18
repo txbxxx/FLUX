@@ -176,12 +176,13 @@ func (c *Collector) collectFilesUnderDirWithDepth(
 			return nil
 		}
 
-		// filepath.Walk 内部用 os.Lstat，不跟踪符号链接。
-		// 当遇到符号链接时，info.IsDir()=false（因为它本身是 symlink 而非目录）。
+		// filepath.Walk 内部用 os.Lstat，不跟踪符号链接和 Windows junction points。
+		// 当遇到这类目录时，info.IsDir()=false，且 Windows junction 不设置 os.ModeSymlink。
+		// 因此对所有非目录条目用 os.Stat 检查目标是否为目录。
 		// 为什么不用 collectFilesUnderDirWithDepth 递归：该函数内部仍用 filepath.Walk，
-		// 传入符号链接路径后 Walk 同样不跟踪，导致套娃空转（issue #41）。
+		// 传入链接路径后 Walk 同样不跟踪，导致套娃空转（issue #41）。
 		// 改用 os.ReadDir 直接读取链接目标的真实子项，对每个子项递归处理。
-		if !info.IsDir() && info.Mode()&os.ModeSymlink != 0 {
+		if !info.IsDir() {
 			realInfo, statErr := os.Stat(path)
 			if statErr == nil && realInfo.IsDir() {
 				// 解析真实路径用于循环防护和记录
