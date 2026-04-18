@@ -863,7 +863,6 @@ func (w *LocalWorkflow) resolveConflicts(
 				continue
 			case "4", "cancel", "q":
 				// 取消
-				fmt.Println("  已取消拉取")
 				return true, nil, nil, nil
 			default:
 				fmt.Println("  无效输入，请重新选择")
