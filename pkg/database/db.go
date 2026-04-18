@@ -387,8 +387,10 @@ func (db *DB) migrateLegacySchema() error {
 		ToolType     string
 		Category     string
 		IsBinary     bool
+		IsSymlink    bool
+		LinkTarget   string
 	}
-	fileRows, err := sqlDB.Query("SELECT snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary FROM snapshot_files ORDER BY rowid")
+	fileRows, err := sqlDB.Query("SELECT snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary, COALESCE(is_symlink, 0) as is_symlink, COALESCE(link_target, '') as link_target FROM snapshot_files ORDER BY rowid")
 	if err == nil {
 		for fileRows.Next() {
 			var f struct {
@@ -402,8 +404,10 @@ func (db *DB) migrateLegacySchema() error {
 				ToolType     string
 				Category     string
 				IsBinary     bool
+				IsSymlink    bool
+				LinkTarget   string
 			}
-			if err := fileRows.Scan(&f.SnapshotID, &f.Path, &f.OriginalPath, &f.Size, &f.Hash, &f.ModifiedAt, &f.Content, &f.ToolType, &f.Category, &f.IsBinary); err != nil {
+			if err := fileRows.Scan(&f.SnapshotID, &f.Path, &f.OriginalPath, &f.Size, &f.Hash, &f.ModifiedAt, &f.Content, &f.ToolType, &f.Category, &f.IsBinary, &f.IsSymlink, &f.LinkTarget); err != nil {
 				fileRows.Close()
 				return fmt.Errorf("扫描 snapshot_file 行失败: %w", err)
 			}
@@ -596,8 +600,8 @@ func (db *DB) migrateLegacySchema() error {
 			hash = *f.Hash
 		}
 		if _, err := newDB.Exec(
-			"INSERT INTO snapshot_files (snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			newSnapID, f.Path, f.OriginalPath, f.Size, hash, f.ModifiedAt, f.Content, f.ToolType, f.Category, f.IsBinary,
+			"INSERT INTO snapshot_files (snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary, is_symlink, link_target) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			newSnapID, f.Path, f.OriginalPath, f.Size, hash, f.ModifiedAt, f.Content, f.ToolType, f.Category, f.IsBinary, f.IsSymlink, f.LinkTarget,
 		); err != nil {
 			return fmt.Errorf("写入 snapshot_file 失败: %w", err)
 		}
@@ -745,7 +749,9 @@ func (db *DB) createTables(tx *gorm.DB) error {
 				content BLOB,
 				tool_type TEXT NOT NULL,
 				category TEXT NOT NULL,
-				is_binary INTEGER DEFAULT 0
+				is_binary INTEGER DEFAULT 0,
+				is_symlink INTEGER DEFAULT 0,
+				link_target TEXT
 			)`,
 		},
 		{
@@ -1029,6 +1035,8 @@ type SnapshotFileRecord struct {
 	ToolType     string    `gorm:"column:tool_type;not null"`
 	Category     string    `gorm:"column:category;not null"`
 	IsBinary     bool      `gorm:"column:is_binary;default:false"`
+	IsSymlink    bool      `gorm:"column:is_symlink;default:false"`
+	LinkTarget   string    `gorm:"column:link_target;type:TEXT"`
 }
 
 func (SnapshotFileRecord) TableName() string { return "snapshot_files" }

@@ -45,15 +45,17 @@ const (
 
 // SnapshotFile 快照中的文件
 type SnapshotFile struct {
-	Path         string       `json:"path"`           // 文件相对路径
-	OriginalPath string       `json:"original_path"`  // 原始路径
-	Size         int64        `json:"size"`           // 文件大小
-	Hash         string       `json:"hash,omitempty"` // 文件哈希
-	ModifiedAt   time.Time    `json:"modified_at"`    // 修改时间
-	Content      []byte       `json:"-" db:"content"` // 文件内容（不序列化到 JSON）
-	ToolType     string       `json:"tool_type"`      // 所属工具
-	Category     FileCategory `json:"category"`       // 文件类别
-	IsBinary     bool         `json:"is_binary"`      // 是否为二进制文件
+	Path         string       `json:"path"`                     // 文件相对路径
+	OriginalPath string       `json:"original_path"`            // 原始路径
+	Size         int64        `json:"size"`                     // 文件大小
+	Hash         string       `json:"hash,omitempty"`           // 文件哈希
+	ModifiedAt   time.Time    `json:"modified_at"`              // 修改时间
+	Content      []byte       `json:"-" db:"content"`           // 文件内容（不序列化到 JSON）
+	ToolType     string       `json:"tool_type"`                // 所属工具
+	Category     FileCategory `json:"category"`                 // 文件类别
+	IsBinary     bool         `json:"is_binary"`                // 是否为二进制文件
+	IsSymlink    bool         `json:"is_symlink"`               // 是否来自符号链接目录
+	LinkTarget   string       `json:"link_target,omitempty"`    // 符号链接指向的真实路径
 }
 
 // FileCategory 文件类别
@@ -375,6 +377,8 @@ func snapshotFilesToRows(snapshotID uint, files []SnapshotFile) []snapshotFileRo
 			ToolType:     file.ToolType,
 			Category:     string(file.Category),
 			IsBinary:     file.IsBinary,
+			IsSymlink:    file.IsSymlink,
+			LinkTarget:   file.LinkTarget,
 		})
 	}
 	return rows
@@ -432,6 +436,8 @@ func snapshotRowToModel(row snapshotRow, fileRows []snapshotFileRow) (*Snapshot,
 			ToolType:     file.ToolType,
 			Category:     FileCategory(file.Category),
 			IsBinary:     file.IsBinary,
+			IsSymlink:    file.IsSymlink,
+			LinkTarget:   file.LinkTarget,
 		})
 	}
 

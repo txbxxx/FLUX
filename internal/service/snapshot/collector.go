@@ -178,13 +178,61 @@ func (c *Collector) collectFilesUnderDirWithDepth(
 
 		// filepath.Walk 内部用 os.Lstat，不跟踪符号链接。
 		// 当遇到符号链接时，info.IsDir()=false（因为它本身是 symlink 而非目录）。
-		// 此时需要用 os.Stat 跟随链接判断目标是否为目录，如果是则递归遍历。
+		// 为什么不用 collectFilesUnderDirWithDepth 递归：该函数内部仍用 filepath.Walk，
+		// 传入符号链接路径后 Walk 同样不跟踪，导致套娃空转（issue #41）。
+		// 改用 os.ReadDir 直接读取链接目标的真实子项，对每个子项递归处理。
 		if !info.IsDir() && info.Mode()&os.ModeSymlink != 0 {
 			realInfo, statErr := os.Stat(path)
 			if statErr == nil && realInfo.IsDir() {
-				linkedFiles, linkedErrs := c.collectFilesUnderDirWithDepth(path, toolName, options, seen, depth+1, maxDepth)
-				files = append(files, linkedFiles...)
-				errors = append(errors, linkedErrs...)
+				// 解析真实路径用于循环防护和记录
+				realPath, evalErr := filepath.EvalSymlinks(path)
+				if evalErr != nil {
+					errors = append(errors, CollectError{Path: path, Message: evalErr.Error()})
+					return nil
+				}
+				if _, alreadySeen := seen[realPath]; alreadySeen {
+					return nil
+				}
+				seen[realPath] = struct{}{}
+
+				// 用 os.ReadDir 读取真实目录内容，避免 filepath.Walk 套娃问题
+				entries, readErr := os.ReadDir(realPath)
+				if readErr != nil {
+					errors = append(errors, CollectError{Path: path, Message: readErr.Error()})
+					return nil
+				}
+
+				for _, entry := range entries {
+					// 保持符号链接视角的路径，用户看到的路径不变
+					fullPath := filepath.Join(path, entry.Name())
+					entryInfo, entryStatErr := os.Stat(fullPath)
+					if entryStatErr != nil {
+						errors = append(errors, CollectError{Path: fullPath, Message: entryStatErr.Error()})
+						continue
+					}
+
+					if entryInfo.IsDir() {
+						// 子目录递归，深度 +1
+						subFiles, subErrs := c.collectFilesUnderDirWithDepth(fullPath, toolName, options, seen, depth+1, maxDepth)
+						files = append(files, subFiles...)
+						errors = append(errors, subErrs...)
+					} else {
+						if c.shouldExclude(fullPath, options.Excludes) {
+							continue
+						}
+						file, fileErr := c.collectSingleFile(fullPath, toolName, options, seen)
+						if fileErr != nil {
+							errors = append(errors, CollectError{Path: fullPath, Message: fileErr.Error()})
+							continue
+						}
+						if file != nil {
+							// 标记为符号链接文件
+							file.IsSymlink = true
+							file.LinkTarget = realPath
+							files = append(files, *file)
+						}
+					}
+				}
 				return nil
 			}
 		}
