@@ -26,6 +26,7 @@ type SyncPullInput struct {
 // SyncPullResult is the result of a pull operation.
 type SyncPullResult struct {
 	Success       bool             `json:"success"`
+	Cancelled     bool             `json:"cancelled,omitempty"`
 	Project       string           `json:"project"`
 	FilesUpdated  int              `json:"files_updated"`
 	HasConflicts  bool             `json:"has_conflicts"`

@@ -405,8 +405,9 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	}
 	if !continuePull {
 		return &typesSync.SyncPullResult{
-			Success: true,
-			Project: projectName,
+			Success:   true,
+			Cancelled: true,
+			Project:   projectName,
 		}, nil
 	}
 	fmt.Printf("远端配置已拉取到本地（%s）\n\n", repoPath)
@@ -489,16 +490,6 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			logger.Warn("快照对比失败", zap.Error(cmpErr))
 		}
 
-		// 打印自动解决通知
-		if len(autoResolved) > 0 {
-			fmt.Println()
-			fmt.Println("自动同步（无冲突）：")
-			for _, ar := range autoResolved {
-				fmt.Printf("  - %s — %s\n", ar.Path, ar.Summary)
-			}
-			fmt.Println()
-		}
-
 		if len(snapshotConflicts) > 0 {
 			fmt.Println()
 			fmt.Printf("检测到 %d 个冲突文件：\n", len(snapshotConflicts))
@@ -521,6 +512,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			if cancelled {
 				return &typesSync.SyncPullResult{
 					Success:      true,
+					Cancelled:    true,
 					Project:      projectName,
 					FilesUpdated: 0,
 				}, nil
@@ -677,9 +669,10 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			return nil, err
 		}
 		if cancelled {
-			// 用户取消，保持本地快照不变，返回成功（无更新）
+			// 用户取消，保持本地快照不变
 			return &typesSync.SyncPullResult{
 				Success:      true,
+				Cancelled:    true,
 				Project:      projectName,
 				FilesUpdated: 0,
 			}, nil
@@ -866,10 +859,10 @@ func (w *LocalWorkflow) resolveConflicts(
 				// 查看差异后重新提示
 				w.showConflictDiff(conflict)
 				fmt.Println()
+				fmt.Println("  [1] 本地  [2] 远端  [3] 差异  [4] 取消")
 				continue
 			case "4", "cancel", "q":
 				// 取消
-				fmt.Println("  已取消拉取")
 				return true, nil, nil, nil
 			default:
 				fmt.Println("  无效输入，请重新选择")
@@ -1189,9 +1182,9 @@ func (w *LocalWorkflow) showConflictDiff(conflict typesSync.ConflictInfo) {
 		for _, line := range hunk.Lines {
 			switch line.Type {
 			case 1: // LineAdded
-				fmt.Printf("  +%s\n", line.Content)
+				fmt.Printf("  \x1b[32m+%s\x1b[0m\n", line.Content)
 			case 2: // LineDeleted
-				fmt.Printf("  -%s\n", line.Content)
+				fmt.Printf("  \x1b[31m-%s\x1b[0m\n", line.Content)
 			default: // LineContext
 				fmt.Printf("  %s\n", line.Content)
 			}
@@ -1295,10 +1288,20 @@ func (w *LocalWorkflow) classifySnapshotDifferencesSub(
 		}
 	}
 
-	// Check for files in snapshot that don't exist remotely (local-only files)
+	// Check for files in snapshot that don’t exist remotely (local-only files).
+	// Only check files belonging to the current subPath to avoid duplicating
+	// root-level files in every recursive call.
 	if localSnapshot != nil {
+		prefix := subPath
+		if prefix != "" {
+			prefix = prefix + "/"
+		}
 		for _, f := range localSnapshot.Files {
 			normalizedPath := pathpkg.ToSlash(f.Path)
+			// Skip files outside the current subPath
+			if subPath != "" && !strings.HasPrefix(normalizedPath, prefix) {
+				continue
+			}
 			if !processedPaths[normalizedPath] {
 				// 本地快照有但远端没有 → 自动解决
 				*autoResolved = append(*autoResolved, typesSync.AutoResolvedInfo{

@@ -3,6 +3,9 @@ package cobra
 import (
 	"fmt"
 	"io"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	spcobra "github.com/spf13/cobra"
 
@@ -60,6 +63,7 @@ func newSyncPushCommand(deps Dependencies) *spcobra.Command {
 func newSyncPullCommand(deps Dependencies) *spcobra.Command {
 	var project string
 	var all bool
+	var verbose bool
 
 	command := &spcobra.Command{
 		Use:   "pull",
@@ -73,7 +77,7 @@ func newSyncPullCommand(deps Dependencies) *spcobra.Command {
 				return err
 			}
 
-			printSyncPullResult(cmd.OutOrStdout(), result)
+			printSyncPullResult(cmd.OutOrStdout(), result, verbose)
 			return nil
 		},
 	}
@@ -81,6 +85,7 @@ func newSyncPullCommand(deps Dependencies) *spcobra.Command {
 	flags := command.Flags()
 	flags.StringVarP(&project, "project", "p", "", "项目名称")
 	flags.BoolVar(&all, "all", false, "拉取所有项目")
+	flags.BoolVarP(&verbose, "verbose", "v", false, "显示完整的自动同步文件列表")
 
 	return command
 }
@@ -131,22 +136,17 @@ func printSyncPushResult(w io.Writer, result *typesSync.SyncPushResult) {
 	}
 }
 
-func printSyncPullResult(w io.Writer, result *typesSync.SyncPullResult) {
-	if result.Success {
+func printSyncPullResult(w io.Writer, result *typesSync.SyncPullResult, verbose bool) {
+	if result.Cancelled {
+		fmt.Fprintf(w, "已取消拉取\n\n")
+		fmt.Fprintf(w, "  项目:   %s\n", result.Project)
+	} else if result.Success {
 		fmt.Fprintf(w, "拉取成功\n\n")
 		fmt.Fprintf(w, "  项目:   %s\n", result.Project)
 		fmt.Fprintf(w, "  文件:   %d 个已更新\n", result.FilesUpdated)
 
-		// 显示自动解决的文件
 		if len(result.AutoResolved) > 0 {
-			fmt.Fprintf(w, "\n  自动同步（无冲突）：\n")
-			for _, ar := range result.AutoResolved {
-				if ar.Resolution == "remote_added" {
-					fmt.Fprintf(w, "    - %s — 远端新增文件（%s），已同步到本地\n", ar.Path, ar.Resolution)
-				} else {
-					fmt.Fprintf(w, "    - %s — 本地独有文件，已保留\n", ar.Path)
-				}
-			}
+			printAutoResolvedSummary(w, result.AutoResolved, verbose)
 		}
 	} else if result.HasConflicts {
 		fmt.Fprintf(w, "拉取完成，发现冲突\n\n")
@@ -163,6 +163,107 @@ func printSyncPullResult(w io.Writer, result *typesSync.SyncPullResult) {
 	} else {
 		fmt.Fprintf(w, "拉取失败: %s\n", result.Error)
 	}
+}
+
+// printAutoResolvedSummary prints auto-resolved files with directory-level aggregation.
+// When verbose is true, prints every file individually; otherwise aggregates by top-level directory.
+func printAutoResolvedSummary(w io.Writer, autoResolved []typesSync.AutoResolvedInfo, verbose bool) {
+	if verbose {
+		fmt.Fprintf(w, "\n  自动同步（无冲突）：\n")
+		for _, ar := range autoResolved {
+			if ar.Resolution == "remote_added" {
+				fmt.Fprintf(w, "    - %s — 远端新增文件，已同步到本地\n", ar.Path)
+			} else {
+				fmt.Fprintf(w, "    - %s — 本地独有文件，已保留\n", ar.Path)
+			}
+		}
+		return
+	}
+
+	// Aggregate by top-level directory and resolution type.
+	type aggEntry struct {
+		resolution string
+		count      int
+	}
+	aggMap := make(map[string]*aggEntry) // key: "dir/|resolution"
+	var rootFiles []typesSync.AutoResolvedInfo
+
+	for _, ar := range autoResolved {
+		dir := topDir(ar.Path)
+		if dir == "" {
+			rootFiles = append(rootFiles, ar)
+			continue
+		}
+		key := dir + "|" + ar.Resolution
+		if e, ok := aggMap[key]; ok {
+			e.count++
+		} else {
+			aggMap[key] = &aggEntry{resolution: ar.Resolution, count: 1}
+		}
+	}
+
+	// Group entries by directory for O(n) lookup instead of nested loop.
+	type dirStats struct {
+		remoteAdded int
+		localOnly   int
+	}
+	byDir := make(map[string]*dirStats)
+	var dirs []string
+	dirSet := make(map[string]bool)
+
+	for key, e := range aggMap {
+		// key format: "dir/|resolution"
+		sepIdx := strings.LastIndex(key, "|")
+		d := key[:sepIdx]
+		if !dirSet[d] {
+			dirSet[d] = true
+			dirs = append(dirs, d)
+			byDir[d] = &dirStats{}
+		}
+		switch e.resolution {
+		case "remote_added":
+			byDir[d].remoteAdded = e.count
+		case "local_only":
+			byDir[d].localOnly = e.count
+		}
+	}
+	sort.Strings(dirs)
+
+	fmt.Fprintf(w, "\n  自动同步（无冲突）：\n")
+
+	for _, d := range dirs {
+		st := byDir[d]
+		var parts []string
+		if st.remoteAdded > 0 {
+			parts = append(parts, fmt.Sprintf("%d 个远端新增", st.remoteAdded))
+		}
+		if st.localOnly > 0 {
+			parts = append(parts, fmt.Sprintf("%d 个本地独有", st.localOnly))
+		}
+		fmt.Fprintf(w, "    %s — %s\n", d, strings.Join(parts, "，"))
+	}
+
+	// Print root-level files individually
+	for _, ar := range rootFiles {
+		if ar.Resolution == "remote_added" {
+			fmt.Fprintf(w, "    %s — 远端新增文件，已同步到本地\n", ar.Path)
+		} else {
+			fmt.Fprintf(w, "    %s — 本地独有文件，已保留\n", ar.Path)
+		}
+	}
+
+	fmt.Fprintf(w, "    (使用 --verbose 查看完整列表)\n")
+}
+
+// topDir extracts the top-level directory from a file path.
+// "market/aaa.md" → "market/", "settings.json" → "".
+func topDir(p string) string {
+	p = filepath.ToSlash(p)
+	idx := strings.Index(p, "/")
+	if idx < 0 {
+		return ""
+	}
+	return p[:idx+1]
 }
 
 func printSyncStatusResult(w io.Writer, result *typesSync.SyncStatusResult) {
