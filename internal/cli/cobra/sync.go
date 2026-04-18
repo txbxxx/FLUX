@@ -158,6 +158,9 @@ func printSyncPullResult(w io.Writer, result *typesSync.SyncPullResult, verbose 
 			fmt.Fprintf(w, "      本地: %s\n", conflict.LocalSummary)
 			fmt.Fprintf(w, "      远端: %s\n", conflict.RemoteSummary)
 		}
+		if len(result.AutoResolved) > 0 {
+			printAutoResolvedSummary(w, result.AutoResolved, verbose)
+		}
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "请手动解决冲突后重新执行 fl sync pull")
 	} else {
