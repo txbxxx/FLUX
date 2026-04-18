@@ -387,8 +387,10 @@ func (db *DB) migrateLegacySchema() error {
 		ToolType     string
 		Category     string
 		IsBinary     bool
+		IsSymlink    bool
+		LinkTarget   string
 	}
-	fileRows, err := sqlDB.Query("SELECT snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary FROM snapshot_files ORDER BY rowid")
+	fileRows, err := sqlDB.Query("SELECT snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary, COALESCE(is_symlink, 0) as is_symlink, COALESCE(link_target, '') as link_target FROM snapshot_files ORDER BY rowid")
 	if err == nil {
 		for fileRows.Next() {
 			var f struct {
@@ -402,8 +404,10 @@ func (db *DB) migrateLegacySchema() error {
 				ToolType     string
 				Category     string
 				IsBinary     bool
+				IsSymlink    bool
+				LinkTarget   string
 			}
-			if err := fileRows.Scan(&f.SnapshotID, &f.Path, &f.OriginalPath, &f.Size, &f.Hash, &f.ModifiedAt, &f.Content, &f.ToolType, &f.Category, &f.IsBinary); err != nil {
+			if err := fileRows.Scan(&f.SnapshotID, &f.Path, &f.OriginalPath, &f.Size, &f.Hash, &f.ModifiedAt, &f.Content, &f.ToolType, &f.Category, &f.IsBinary, &f.IsSymlink, &f.LinkTarget); err != nil {
 				fileRows.Close()
 				return fmt.Errorf("扫描 snapshot_file 行失败: %w", err)
 			}
@@ -596,8 +600,8 @@ func (db *DB) migrateLegacySchema() error {
 			hash = *f.Hash
 		}
 		if _, err := newDB.Exec(
-			"INSERT INTO snapshot_files (snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			newSnapID, f.Path, f.OriginalPath, f.Size, hash, f.ModifiedAt, f.Content, f.ToolType, f.Category, f.IsBinary,
+			"INSERT INTO snapshot_files (snapshot_id, path, original_path, size, hash, modified_at, content, tool_type, category, is_binary, is_symlink, link_target) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			newSnapID, f.Path, f.OriginalPath, f.Size, hash, f.ModifiedAt, f.Content, f.ToolType, f.Category, f.IsBinary, f.IsSymlink, f.LinkTarget,
 		); err != nil {
 			return fmt.Errorf("写入 snapshot_file 失败: %w", err)
 		}
@@ -694,10 +698,13 @@ func (db *DB) GetConn() *gorm.DB {
 	return db.conn
 }
 
-// migrate 完成建表和建索引。
+// migrate 完成建表、列迁移和建索引。
 func (db *DB) migrate() error {
 	return db.conn.Transaction(func(tx *gorm.DB) error {
 		if err := db.createTables(tx); err != nil {
+			return err
+		}
+		if err := db.alterTables(tx); err != nil {
 			return err
 		}
 		if err := db.createIndexes(tx); err != nil {
@@ -705,6 +712,28 @@ func (db *DB) migrate() error {
 		}
 		return nil
 	})
+}
+
+// alterTables 为已有表补充新列。
+// 为什么：项目不使用 GORM AutoMigrate（避免 SQLite 上重建表的风险），
+// 但 CREATE TABLE IF NOT EXISTS 不会给已存在的表加新列。
+// 用 ALTER TABLE ADD COLUMN 安全地补列，SQLite 下列不存在时会报错，用 IF NOT EXISTS 语义的 try-add 模式处理。
+func (db *DB) alterTables(tx *gorm.DB) error {
+	// snapshot_files 新增 is_symlink 和 link_target 列（v0.x → v0.x+1）
+	alterSQL := []string{
+		"ALTER TABLE snapshot_files ADD COLUMN is_symlink INTEGER DEFAULT 0",
+		"ALTER TABLE snapshot_files ADD COLUMN link_target TEXT DEFAULT ''",
+	}
+	for _, sql := range alterSQL {
+		// SQLite 不支持 IF NOT EXISTS for ALTER TABLE ADD COLUMN，
+		// 重复执行会报 "duplicate column name"，忽略此错误即可。
+		if err := tx.Exec(sql).Error; err != nil {
+			if !strings.Contains(err.Error(), "duplicate column name") {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // createTables 创建表（如果不存在）。
@@ -745,7 +774,9 @@ func (db *DB) createTables(tx *gorm.DB) error {
 				content BLOB,
 				tool_type TEXT NOT NULL,
 				category TEXT NOT NULL,
-				is_binary INTEGER DEFAULT 0
+				is_binary INTEGER DEFAULT 0,
+				is_symlink INTEGER DEFAULT 0,
+				link_target TEXT
 			)`,
 		},
 		{
@@ -1029,6 +1060,8 @@ type SnapshotFileRecord struct {
 	ToolType     string    `gorm:"column:tool_type;not null"`
 	Category     string    `gorm:"column:category;not null"`
 	IsBinary     bool      `gorm:"column:is_binary;default:false"`
+	IsSymlink    bool      `gorm:"column:is_symlink;default:false"`
+	LinkTarget   string    `gorm:"column:link_target;type:TEXT"`
 }
 
 func (SnapshotFileRecord) TableName() string { return "snapshot_files" }
