@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"flux/internal/models"
-	"flux/internal/util/diffutil"
 	typesSync "flux/internal/types/sync"
+	"flux/internal/util/diffutil"
 	"flux/pkg/git"
 	"flux/pkg/logger"
 
@@ -549,10 +549,10 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			}
 			fmt.Println("快照已更新。")
 			return &typesSync.SyncPullResult{
-				Success:       true,
-				Project:       projectName,
-				FilesUpdated:  len(useRemoteFiles) + len(keepLocalFiles),
-				AutoResolved:  autoResolved,
+				Success:      true,
+				Project:      projectName,
+				FilesUpdated: len(useRemoteFiles) + len(keepLocalFiles),
+				AutoResolved: autoResolved,
 			}, nil
 		}
 
@@ -600,10 +600,10 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		}
 
 		return &typesSync.SyncPullResult{
-			Success:       true,
-			Project:       projectName,
-			FilesUpdated:  autoAddedCount,
-			AutoResolved:  autoResolved,
+			Success:      true,
+			Project:      projectName,
+			FilesUpdated: autoAddedCount,
+			AutoResolved: autoResolved,
 		}, nil
 	}
 
