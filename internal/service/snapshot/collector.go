@@ -227,9 +227,9 @@ func (c *Collector) collectFilesUnderDirWithDepth(
 							continue
 						}
 						if file != nil {
-							// 标记为符号链接文件
+							// 标记为符号链接文件，LinkTarget 为文件自身的真实路径
 							file.IsSymlink = true
-							file.LinkTarget = realPath
+							file.LinkTarget = filepath.Join(realPath, entry.Name())
 							files = append(files, *file)
 						}
 					}
