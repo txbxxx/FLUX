@@ -490,21 +490,9 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		}
 
 		if len(snapshotConflicts) > 0 {
-			fmt.Println()
-			fmt.Printf("检测到 %d 个冲突文件：\n", len(snapshotConflicts))
-			showLimit := 10
-			for i := 0; i < len(snapshotConflicts) && i < showLimit; i++ {
-				c := snapshotConflicts[i]
-				fmt.Printf("  - %s  (%s vs %s)\n", c.Path, c.LocalSummary, c.RemoteSummary)
-			}
-			if len(snapshotConflicts) > showLimit {
-				fmt.Printf("  ... 等 %d 个文件\n", len(snapshotConflicts)-showLimit)
-			}
-			fmt.Println()
-
-			// 逐文件交互解决
+			// 逐文件交互解决（resolveConflicts 内部会打印冲突摘要）
 			var keepLocalFiles, useRemoteFiles []string
-			cancelled, resolvedKeepLocal, resolvedUseRemote, err := w.resolveConflicts(ctx, snapshotConflicts, repoPath, remoteHash, localHash, localSnapshot, projectPrefix)
+			cancelled, resolvedKeepLocal, resolvedUseRemote, err := w.resolveConflicts(ctx, snapshotConflicts, repoPath, remoteHash, localHash, localSnapshot, projectPrefix, autoResolved)
 			if err != nil {
 				return nil, err
 			}
@@ -514,6 +502,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 					Cancelled:    true,
 					Project:      projectName,
 					FilesUpdated: 0,
+					AutoResolved: autoResolved,
 				}, nil
 			}
 			keepLocalFiles = resolvedKeepLocal
@@ -706,7 +695,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 	// 第七步：如果有冲突，进入交互解决
 	var keepLocalFiles, useRemoteFiles []string
 	if len(conflicts) > 0 {
-		cancelled, resolvedKeepLocal, resolvedUseRemote, err := w.resolveConflicts(ctx, conflicts, repoPath, remoteHash, localHash, localSnapshot, projectPrefix)
+		cancelled, resolvedKeepLocal, resolvedUseRemote, err := w.resolveConflicts(ctx, conflicts, repoPath, remoteHash, localHash, localSnapshot, projectPrefix, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -833,8 +822,43 @@ func (w *LocalWorkflow) resolveConflicts(
 	localHash string,
 	localSnapshot *models.Snapshot,
 	projectPrefix string,
+	autoResolved []typesSync.AutoResolvedInfo,
 ) (cancelled bool, keepLocalFiles []string, useRemoteFiles []string, err error) {
 	reader := bufio.NewReader(os.Stdin)
+
+	// 展示自动解决的文件信息（远端新增、本地独有），让用户了解完整变更
+	if len(autoResolved) > 0 {
+		fmt.Println()
+		// 按类型分组统计
+		var remoteAdded, localOnly []typesSync.AutoResolvedInfo
+		for _, ar := range autoResolved {
+			if ar.Resolution == "remote_added" {
+				remoteAdded = append(remoteAdded, ar)
+			} else {
+				localOnly = append(localOnly, ar)
+			}
+		}
+		if len(remoteAdded) > 0 {
+			fmt.Printf("检测到 %d 个远端新增文件（将自动同步到本地）：\n", len(remoteAdded))
+			showLimit := 10
+			for i := 0; i < len(remoteAdded) && i < showLimit; i++ {
+				fmt.Printf("  + %s\n", remoteAdded[i].Path)
+			}
+			if len(remoteAdded) > showLimit {
+				fmt.Printf("  ... 等 %d 个文件\n", len(remoteAdded)-showLimit)
+			}
+		}
+		if len(localOnly) > 0 {
+			fmt.Printf("检测到 %d 个本地独有文件（将保留本地版本）：\n", len(localOnly))
+			showLimit := 10
+			for i := 0; i < len(localOnly) && i < showLimit; i++ {
+				fmt.Printf("  = %s\n", localOnly[i].Path)
+			}
+			if len(localOnly) > showLimit {
+				fmt.Printf("  ... 等 %d 个文件\n", len(localOnly)-showLimit)
+			}
+		}
+	}
 
 	fmt.Println()
 	fmt.Printf("检测到 %d 个冲突文件：\n", len(conflicts))
