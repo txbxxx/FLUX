@@ -217,8 +217,17 @@ func (dao *SnapshotDAO) UpdateWithFiles(snapshot *Snapshot) error {
 			return err
 		}
 		if len(fileRows) > 0 {
-			if err := tx.Omit("id").Create(&fileRows).Error; err != nil {
-				return err
+			// 分批插入以避免 SQLite SQL 变量数量限制（默认 999）
+			const batchSize = 500
+			for i := 0; i < len(fileRows); i += batchSize {
+				end := i + batchSize
+				if end > len(fileRows) {
+					end = len(fileRows)
+				}
+				batch := fileRows[i:end]
+				if err := tx.Omit("id").Create(&batch).Error; err != nil {
+					return err
+				}
 			}
 		}
 		// 更新快照记录字段。

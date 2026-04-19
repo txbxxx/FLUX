@@ -427,26 +427,23 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		Remote: "origin",
 	})
 	if err != nil {
-		// fetch 失败可能是网络问题
 		if strings.Contains(err.Error(), "already up-to-date") {
-			return &typesSync.SyncPullResult{
-				Success:      true,
-				Project:      projectName,
-				FilesUpdated: 0,
-			}, nil
-		}
-
-		// 解析错误类型并返回具体信息
-		errorMsg, suggestion := parseGitError(err.Error(), remoteConfig.URL)
-		logger.Error("拉取远端更新失败",
-			zap.String("project", projectName),
-			zap.String("remote_url", remoteConfig.URL),
-			zap.Error(err),
-		)
-		return nil, &UserError{
-			Message:    errorMsg,
-			Suggestion: suggestion,
-			Err:        err,
+			// fetch 无新内容，但快照可能与远端不一致，继续走后续对比逻辑
+			logger.Info("远端无新提交，继续检查快照一致性",
+				zap.String("project", projectName))
+		} else {
+			// 解析错误类型并返回具体信息
+			errorMsg, suggestion := parseGitError(err.Error(), remoteConfig.URL)
+			logger.Error("拉取远端更新失败",
+				zap.String("project", projectName),
+				zap.String("remote_url", remoteConfig.URL),
+				zap.Error(err),
+			)
+			return nil, &UserError{
+				Message:    errorMsg,
+				Suggestion: suggestion,
+				Err:        err,
+			}
 		}
 	}
 
@@ -490,39 +487,51 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 		}
 
 		if len(snapshotConflicts) > 0 {
-			// 逐文件交互解决（resolveConflicts 内部会打印冲突摘要）
+			// 逐文件交互解决
 			var keepLocalFiles, useRemoteFiles []string
 			cancelled, resolvedKeepLocal, resolvedUseRemote, err := w.resolveConflicts(ctx, snapshotConflicts, repoPath, remoteHash, localHash, localSnapshot, projectPrefix, autoResolved)
 			if err != nil {
 				return nil, err
 			}
 			if cancelled {
+				// 用户取消：仍应用 auto-resolved 的 remote_added，避免快照严重脱节
+				projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
+				autoAdded := w.applyAutoResolvedToSnapshot(autoResolved, repoPath, projectPrefix, localSnapshot, projectBasePath, projectToolType)
+				if autoAdded > 0 {
+					if saveErr := w.snapshots.UpdateSnapshot(localSnapshot); saveErr != nil {
+						logger.Error("更新快照失败（取消后自动同步）", zap.Error(saveErr))
+					}
+				}
 				return &typesSync.SyncPullResult{
 					Success:      true,
 					Cancelled:    true,
 					Project:      projectName,
-					FilesUpdated: 0,
+					FilesUpdated: autoAdded,
 					AutoResolved: autoResolved,
 				}, nil
 			}
 			keepLocalFiles = resolvedKeepLocal
 			useRemoteFiles = resolvedUseRemote
 
-			// 应用用户选择：使用远端的文件从工作目录读取，使用本地的文件从快照恢复
+			// 第一步：应用 auto-resolved（remote_added 文件写入快照）
 			projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
-			if len(useRemoteFiles) > 0 {
-				fmt.Println("正在将远端配置同步到本地快照...")
-				if err := w.applyRemoteToSnapshot(ctx, repoPath, remoteHash, localSnapshot, projectPrefix, projectBasePath, projectToolType); err != nil {
-					logger.Warn("同步远端到快照失败", zap.Error(err))
-				}
-			}
-			// 恢复用户选择保留本地的文件到工作目录
-			for _, relativePath := range keepLocalFiles {
-				if localSnapshot == nil {
+			autoAddedCount := w.applyAutoResolvedToSnapshot(autoResolved, repoPath, projectPrefix, localSnapshot, projectBasePath, projectToolType)
+
+			// 第二步：应用用户选择“使用远端”的冲突文件
+			for _, relativePath := range useRemoteFiles {
+				fullPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
+				content, readErr := os.ReadFile(fullPath)
+				if readErr != nil {
+					logger.Warn("读取远端文件失败", zap.String("file", relativePath), zap.Error(readErr))
 					continue
 				}
+				w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, projectToolType)
+			}
+
+			// 第三步：恢复用户选择保留本地的文件到工作目录
+			for _, relativePath := range keepLocalFiles {
 				for _, f := range localSnapshot.Files {
-					if f.Path == relativePath {
+					if pathpkg.ToSlash(f.Path) == relativePath {
 						targetPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
 						dir := pathpkg.Dir(targetPath)
 						if err := os.MkdirAll(dir, 0755); err != nil {
@@ -536,55 +545,36 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 					}
 				}
 			}
+
+			// 第四步：持久化快照
+			totalUpdated := autoAddedCount + len(useRemoteFiles)
+			if totalUpdated > 0 {
+				if err := w.snapshots.UpdateSnapshot(localSnapshot); err != nil {
+					logger.Error("更新快照失败", zap.Error(err))
+				} else {
+					logger.Info("快照已更新",
+						zap.Int("auto_added", autoAddedCount),
+						zap.Int("conflict_use_remote", len(useRemoteFiles)))
+				}
+			}
+
 			fmt.Println("快照已更新。")
 			return &typesSync.SyncPullResult{
 				Success:      true,
 				Project:      projectName,
-				FilesUpdated: len(useRemoteFiles) + len(keepLocalFiles),
+				FilesUpdated: totalUpdated,
 				AutoResolved: autoResolved,
 			}, nil
 		}
 
-		// 无冲突时，把远端新增文件也写入快照（不写则快照与远端脱节）
-		// applyRemoteToSnapshot 会遍历整个 repo 写快照，此处只处理 auto-resolved 的远端新增文件，更高效
-		autoAddedCount := 0
-		if localSnapshot != nil && len(autoResolved) > 0 {
-			projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
-			for _, ar := range autoResolved {
-				if ar.Resolution != "remote_added" {
-					continue
-				}
-				if !strings.HasPrefix(ar.Path, projectPrefix) {
-					logger.Warn("远端文件路径缺少项目前缀", zap.String("path", ar.Path), zap.String("prefix", projectPrefix))
-					continue
-				}
-				relativePath := strings.TrimPrefix(ar.Path, projectPrefix)
-				fullPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
-				content, readErr := os.ReadFile(fullPath)
-				if readErr != nil {
-					logger.Warn("读取远端新增文件失败", zap.String("path", fullPath), zap.Error(readErr))
-					continue
-				}
-				w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, projectToolType)
-				// 检测符号链接，补设 IsSymlink 和 LinkTarget
-				if resolved, linkErr := pathpkg.EvalSymlinks(fullPath); linkErr == nil && resolved != fullPath {
-					normalizedRel := pathpkg.ToSlash(relativePath)
-					for i := range localSnapshot.Files {
-						if pathpkg.ToSlash(localSnapshot.Files[i].Path) == normalizedRel {
-							localSnapshot.Files[i].IsSymlink = true
-							localSnapshot.Files[i].LinkTarget = resolved
-							break
-						}
-					}
-				}
-				autoAddedCount++
-			}
-			if autoAddedCount > 0 {
-				if err := w.snapshots.UpdateSnapshot(localSnapshot); err != nil {
-					logger.Error("更新快照失败", zap.Error(err))
-				} else {
-					logger.Info("快照已更新", zap.Int("新增文件数", autoAddedCount))
-				}
+		// 无冲突时，把远端新增文件写入快照
+		projectBasePath, projectToolType := w.resolveProjectInfo(projectName)
+		autoAddedCount := w.applyAutoResolvedToSnapshot(autoResolved, repoPath, projectPrefix, localSnapshot, projectBasePath, projectToolType)
+		if autoAddedCount > 0 {
+			if err := w.snapshots.UpdateSnapshot(localSnapshot); err != nil {
+				logger.Error("更新快照失败", zap.Error(err))
+			} else {
+				logger.Info("快照已更新", zap.Int("新增文件数", autoAddedCount))
 			}
 		}
 
@@ -894,42 +884,66 @@ func (w *LocalWorkflow) resolveConflicts(
 	fmt.Println("  [2] 使用远端版本（用远端覆盖）")
 	fmt.Println("  [3] 查看差异")
 	fmt.Println("  [4] 取消本次拉取")
+	if len(conflicts) > 1 {
+		fmt.Println("  [5] 全部使用本地版本")
+		fmt.Println("  [6] 全部使用远端版本")
+	}
 	fmt.Println()
 
-	for _, conflict := range conflicts {
+	for idx, conflict := range conflicts {
 		relativePath := conflict.Path
-		// 统一为正斜杠，避免跨平台路径不匹配
 		relativePath = pathpkg.ToSlash(relativePath)
+		batchHint := "[1-4]"
+		if len(conflicts) > 1 {
+			batchHint = "[1-6]"
+		}
 
 		for {
-			// Show line stats in prompt if available
 			if len(conflict.LocalContent) > 0 && len(conflict.RemoteContent) > 0 {
 				addLines, delLines := diffutil.CountLineChanges(conflict.LocalContent, conflict.RemoteContent)
-				fmt.Printf("%s [1-4](默认=2, +%d/-%d 行): ", relativePath, addLines, delLines)
+				fmt.Printf("%s %s(默认=2, +%d/-%d 行): ", relativePath, batchHint, addLines, delLines)
 			} else {
-				fmt.Printf("%s [1-4](默认=2): ", relativePath)
+				fmt.Printf("%s %s(默认=2): ", relativePath, batchHint)
 			}
 			input, _ := reader.ReadString('\n')
 			input = strings.TrimSpace(strings.ToLower(input))
 
 			switch input {
 			case "1", "local":
-				// 保留本地：ResetToRef 后会被远端覆盖，第八步后会恢复到工作目录
 				keepLocalFiles = append(keepLocalFiles, relativePath)
 				fmt.Printf("  -> 保留本地版本\n")
 			case "2", "remote", "":
-				// 使用远端：由第九步统一从工作目录读取并更新 SQLite
 				useRemoteFiles = append(useRemoteFiles, relativePath)
 				fmt.Printf("  -> 使用远端版本\n")
 			case "3", "diff":
-				// 查看差异后重新提示
 				w.showConflictDiff(conflict)
 				fmt.Println()
 				fmt.Println("  [1] 本地  [2] 远端  [3] 差异  [4] 取消")
 				continue
 			case "4", "cancel", "q":
-				// 取消
 				return true, nil, nil, nil
+			case "5":
+				if len(conflicts) <= 1 {
+					fmt.Println("  无效输入，请重新选择")
+					continue
+				}
+				keepLocalFiles = append(keepLocalFiles, relativePath)
+				for _, c := range conflicts[idx+1:] {
+					keepLocalFiles = append(keepLocalFiles, pathpkg.ToSlash(c.Path))
+				}
+				fmt.Printf("  -> 已将 %d 个冲突文件全部保留本地版本\n", len(conflicts)-idx)
+				return false, keepLocalFiles, nil, nil
+			case "6":
+				if len(conflicts) <= 1 {
+					fmt.Println("  无效输入，请重新选择")
+					continue
+				}
+				useRemoteFiles = append(useRemoteFiles, relativePath)
+				for _, c := range conflicts[idx+1:] {
+					useRemoteFiles = append(useRemoteFiles, pathpkg.ToSlash(c.Path))
+				}
+				fmt.Printf("  -> 已将 %d 个冲突文件全部使用远端版本\n", len(conflicts)-idx)
+				return false, nil, useRemoteFiles, nil
 			default:
 				fmt.Println("  无效输入，请重新选择")
 				continue
@@ -938,6 +952,46 @@ func (w *LocalWorkflow) resolveConflicts(
 		}
 	}
 	return false, keepLocalFiles, useRemoteFiles, nil
+}
+
+// applyAutoResolvedToSnapshot 将 autoResolved 中的 remote_added 文件写入快照。
+// 返回实际新增的文件数量。
+func (w *LocalWorkflow) applyAutoResolvedToSnapshot(
+	autoResolved []typesSync.AutoResolvedInfo,
+	repoPath string,
+	projectPrefix string,
+	localSnapshot *models.Snapshot,
+	projectBasePath string,
+	projectToolType string,
+) int {
+	autoAddedCount := 0
+	if localSnapshot == nil || len(autoResolved) == 0 {
+		return 0
+	}
+	for _, ar := range autoResolved {
+		if ar.Resolution != "remote_added" || len(ar.Content) == 0 {
+			continue
+		}
+		relativePath := ar.Path
+		if strings.HasPrefix(ar.Path, projectPrefix) {
+			relativePath = strings.TrimPrefix(ar.Path, projectPrefix)
+		}
+		normalizedRel := pathpkg.ToSlash(relativePath)
+		w.updateSnapshotFile(localSnapshot, normalizedRel, ar.Content, projectBasePath, projectToolType)
+		autoAddedCount++
+		// 检测符号链接（需要磁盘路径）
+		fullPath := pathpkg.Join(repoPath, projectPrefix, normalizedRel)
+		if resolved, linkErr := pathpkg.EvalSymlinks(fullPath); linkErr == nil && resolved != fullPath {
+			for i := range localSnapshot.Files {
+				if pathpkg.ToSlash(localSnapshot.Files[i].Path) == normalizedRel {
+					localSnapshot.Files[i].IsSymlink = true
+					localSnapshot.Files[i].LinkTarget = resolved
+					break
+				}
+			}
+		}
+	}
+	return autoAddedCount
 }
 
 // applyRemoteToSnapshot updates the local SQLite snapshot with remote HEAD content.
@@ -1337,6 +1391,7 @@ func (w *LocalWorkflow) classifySnapshotDifferencesSub(
 				Path:       normalizedRelativePath,
 				Resolution: "remote_added",
 				Summary:    fmt.Sprintf("远端新增文件（%d 字节），本地不存在此文件，已自动同步到本地快照", len(remoteContent)),
+				Content:    remoteContent,
 			})
 		} else if string(localContent) != string(remoteContent) {
 			// 双方都有但内容不同 → 冲突
