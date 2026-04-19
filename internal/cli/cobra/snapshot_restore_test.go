@@ -12,12 +12,12 @@ import (
 // makeRestoreResult builds a RestoreResult with the given counts of applied and skipped files.
 func makeRestoreResult(appliedCount, skippedCount int) *typesSnapshot.RestoreResult {
 	result := &typesSnapshot.RestoreResult{
-		SnapshotID:    "snap-001",
-		SnapshotName:  "test-snapshot",
-		AppliedCount:  appliedCount,
-		SkippedCount:  skippedCount,
-		AppliedFiles:  make([]typesSnapshot.AppliedFile, appliedCount),
-		SkippedFiles:  make([]typesSnapshot.SkippedFile, skippedCount),
+		SnapshotID:   "snap-001",
+		SnapshotName: "test-snapshot",
+		AppliedCount: appliedCount,
+		SkippedCount: skippedCount,
+		AppliedFiles: make([]typesSnapshot.AppliedFile, appliedCount),
+		SkippedFiles: make([]typesSnapshot.SkippedFile, skippedCount),
 	}
 	for i := 0; i < appliedCount; i++ {
 		action := "updated"
@@ -97,12 +97,12 @@ func TestPrintRestorePreview_LimitsAppliedFilesPerCategory(t *testing.T) {
 func TestPrintRestorePreview_AllFilesSkipped(t *testing.T) {
 	var buf bytes.Buffer
 	result := &typesSnapshot.RestoreResult{
-		SnapshotID:    "snap-001",
-		SnapshotName:  "test-snapshot",
-		AppliedCount:  0,
-		SkippedCount:  50,
-		AppliedFiles:  nil,
-		SkippedFiles:  make([]typesSnapshot.SkippedFile, 50),
+		SnapshotID:   "snap-001",
+		SnapshotName: "test-snapshot",
+		AppliedCount: 0,
+		SkippedCount: 50,
+		AppliedFiles: nil,
+		SkippedFiles: make([]typesSnapshot.SkippedFile, 50),
 	}
 	for i := 0; i < 50; i++ {
 		result.SkippedFiles[i] = typesSnapshot.SkippedFile{

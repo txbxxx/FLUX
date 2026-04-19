@@ -110,7 +110,8 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 }
 
 // maxFilesPerCategory controls how many files to show per action category
-// before collapsing into a summary line.
+// before collapsing into a summary line. This prevents screen-flooding when
+// restoring snapshots that contain hundreds of files (e.g. node_modules, .git).
 const maxFilesPerCategory = 5
 
 // printRestorePreview renders the dry-run preview output.
@@ -139,6 +140,9 @@ func printRestorePreview(w io.Writer, result *typesSnapshot.RestoreResult) {
 }
 
 // groupByAction splits applied files into "created" and "updated" slices.
+// Any Action value that is not "created" (e.g. "updated", "replaced") falls
+// into the updated bucket — this matches the RestoreResult contract where
+// only "created" and non-created actions exist.
 func groupByAction(files []typesSnapshot.AppliedFile) (created, updated []typesSnapshot.AppliedFile) {
 	for _, f := range files {
 		if f.Action == "created" {
