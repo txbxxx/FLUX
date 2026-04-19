@@ -971,24 +971,19 @@ func (w *LocalWorkflow) applyAutoResolvedToSnapshot(
 		return 0
 	}
 	for _, ar := range autoResolved {
-		if ar.Resolution != "remote_added" {
+		if ar.Resolution != "remote_added" || len(ar.Content) == 0 {
 			continue
 		}
-		if !strings.HasPrefix(ar.Path, projectPrefix) {
-			logger.Warn("远端文件路径缺少项目前缀", zap.String("path", ar.Path), zap.String("prefix", projectPrefix))
-			continue
+		relativePath := ar.Path
+		if strings.HasPrefix(ar.Path, projectPrefix) {
+			relativePath = strings.TrimPrefix(ar.Path, projectPrefix)
 		}
-		relativePath := strings.TrimPrefix(ar.Path, projectPrefix)
-		fullPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
-		content, readErr := os.ReadFile(fullPath)
-		if readErr != nil {
-			logger.Warn("读取远端新增文件失败", zap.String("path", fullPath), zap.Error(readErr))
-			continue
-		}
-		w.updateSnapshotFile(localSnapshot, relativePath, content, projectBasePath, projectToolType)
-		// 检测符号链接
+		normalizedRel := pathpkg.ToSlash(relativePath)
+		w.updateSnapshotFile(localSnapshot, normalizedRel, ar.Content, projectBasePath, projectToolType)
+		autoAddedCount++
+		// 检测符号链接（需要磁盘路径）
+		fullPath := pathpkg.Join(repoPath, projectPrefix, normalizedRel)
 		if resolved, linkErr := pathpkg.EvalSymlinks(fullPath); linkErr == nil && resolved != fullPath {
-			normalizedRel := pathpkg.ToSlash(relativePath)
 			for i := range localSnapshot.Files {
 				if pathpkg.ToSlash(localSnapshot.Files[i].Path) == normalizedRel {
 					localSnapshot.Files[i].IsSymlink = true
@@ -997,7 +992,6 @@ func (w *LocalWorkflow) applyAutoResolvedToSnapshot(
 				}
 			}
 		}
-		autoAddedCount++
 	}
 	return autoAddedCount
 }
@@ -1399,6 +1393,7 @@ func (w *LocalWorkflow) classifySnapshotDifferencesSub(
 				Path:       normalizedRelativePath,
 				Resolution: "remote_added",
 				Summary:    fmt.Sprintf("远端新增文件（%d 字节），本地不存在此文件，已自动同步到本地快照", len(remoteContent)),
+				Content:    remoteContent,
 			})
 		} else if string(localContent) != string(remoteContent) {
 			// 双方都有但内容不同 → 冲突

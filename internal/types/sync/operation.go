@@ -51,9 +51,10 @@ type ConflictInfo struct {
 
 // AutoResolvedInfo describes a file that was automatically resolved (no conflict).
 type AutoResolvedInfo struct {
-	Path       string `json:"path"`       // File path
+	Path       string `json:"path"`       // File path (relative to project root)
 	Resolution string `json:"resolution"` // "remote_added" | "local_only"
-	Summary    string `json:"summary"`    // Human-readable summary
+	Summary    string `json:"summary"`  // Human-readable summary
+	Content    []byte `json:"-"`        // File content for remote_added files (not serialized)
 }
 
 // SyncStatusInput is the input for checking sync status.
