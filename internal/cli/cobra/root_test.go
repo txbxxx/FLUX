@@ -198,13 +198,6 @@ func (s *stubWorkflow) SyncStatus(_ context.Context, _ typesSync.SyncStatusInput
 	return nil, nil
 }
 
-func (s *stubWorkflow) SnapshotHistory(_ context.Context, _ usecase.SnapshotHistoryInput) (*typesSnapshot.HistoryResult, error) {
-	return nil, nil
-}
-
-func (s *stubWorkflow) RestoreFromHistory(_ context.Context, _ usecase.RestoreFromHistoryInput) (*typesSnapshot.RestoreResult, error) {
-	return nil, nil
-}
 
 type stubTUIRunner struct {
 	called bool
