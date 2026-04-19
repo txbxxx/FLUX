@@ -531,7 +531,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			// 第三步：恢复用户选择保留本地的文件到工作目录
 			for _, relativePath := range keepLocalFiles {
 				for _, f := range localSnapshot.Files {
-					if pathpkg.ToSlash(f.Path) == pathpkg.ToSlash(relativePath) {
+					if pathpkg.ToSlash(f.Path) == relativePath {
 						targetPath := pathpkg.Join(repoPath, projectPrefix, relativePath)
 						dir := pathpkg.Dir(targetPath)
 						if err := os.MkdirAll(dir, 0755); err != nil {
@@ -584,7 +584,7 @@ func (w *LocalWorkflow) SyncPull(ctx context.Context, input typesSync.SyncPullIn
 			FilesUpdated: autoAddedCount,
 			AutoResolved: autoResolved,
 		}, nil
-		}
+	}
 
 	changedFiles, err := gitClient.GetChangedFiles(repoPath, localHash, remoteHash)
 	if err != nil || len(changedFiles) == 0 {
@@ -879,81 +879,79 @@ func (w *LocalWorkflow) resolveConflicts(
 		}
 	}
 
-		fmt.Println("请选择处理方式：")
-		fmt.Println("  [1] 使用本地版本（保留本地修改）")
-		fmt.Println("  [2] 使用远端版本（用远端覆盖）")
-		fmt.Println("  [3] 查看差异")
-		fmt.Println("  [4] 取消本次拉取")
+	fmt.Println("请选择处理方式：")
+	fmt.Println("  [1] 使用本地版本（保留本地修改）")
+	fmt.Println("  [2] 使用远端版本（用远端覆盖）")
+	fmt.Println("  [3] 查看差异")
+	fmt.Println("  [4] 取消本次拉取")
+	if len(conflicts) > 1 {
+		fmt.Println("  [5] 全部使用本地版本")
+		fmt.Println("  [6] 全部使用远端版本")
+	}
+	fmt.Println()
+
+	for idx, conflict := range conflicts {
+		relativePath := conflict.Path
+		relativePath = pathpkg.ToSlash(relativePath)
+		batchHint := "[1-4]"
 		if len(conflicts) > 1 {
-			fmt.Println("  [5] 全部使用本地版本")
-			fmt.Println("  [6] 全部使用远端版本")
+			batchHint = "[1-6]"
 		}
-		fmt.Println()
 
-			for idx, conflict := range conflicts {
-				relativePath := conflict.Path
-				relativePath = pathpkg.ToSlash(relativePath)
-				batchHint := "[1-4]"
-				if len(conflicts) > 1 {
-					batchHint = "[1-6]"
-				}
-
-				for {
-					if len(conflict.LocalContent) > 0 && len(conflict.RemoteContent) > 0 {
-						addLines, delLines := diffutil.CountLineChanges(conflict.LocalContent, conflict.RemoteContent)
-						fmt.Printf("%s %s(默认=2, +%d/-%d 行): ", relativePath, batchHint, addLines, delLines)
-					} else {
-						fmt.Printf("%s %s(默认=2): ", relativePath, batchHint)
-					}
-					input, _ := reader.ReadString('\n')
-					input = strings.TrimSpace(strings.ToLower(input))
-
-					switch input {
-					case "1", "local":
-						keepLocalFiles = append(keepLocalFiles, relativePath)
-						fmt.Printf("  -> 保留本地版本\n")
-					case "2", "remote", "":
-						useRemoteFiles = append(useRemoteFiles, relativePath)
-						fmt.Printf("  -> 使用远端版本\n")
-					case "3", "diff":
-						w.showConflictDiff(conflict)
-						fmt.Println()
-						fmt.Println("  [1] 本地  [2] 远端  [3] 差异  [4] 取消")
-						continue
-					case "4", "cancel", "q":
-						return true, nil, nil, nil
-					case "5":
-						if len(conflicts) <= 1 {
-							fmt.Println("  无效输入，请重新选择")
-							continue
-						}
-						// 当前文件 + 后续未处理的文件全部保留本地
-						keepLocalFiles = append(keepLocalFiles, relativePath)
-						for _, c := range conflicts[idx+1:] {
-							keepLocalFiles = append(keepLocalFiles, pathpkg.ToSlash(c.Path))
-						}
-						fmt.Printf("  -> 已将 %d 个冲突文件全部保留本地版本\n", len(conflicts)-idx)
-						return false, keepLocalFiles, nil, nil
-					case "6":
-						if len(conflicts) <= 1 {
-							fmt.Println("  无效输入，请重新选择")
-							continue
-						}
-						// 当前文件 + 后续未处理的文件全部使用远端
-						useRemoteFiles = append(useRemoteFiles, relativePath)
-						for _, c := range conflicts[idx+1:] {
-							useRemoteFiles = append(useRemoteFiles, pathpkg.ToSlash(c.Path))
-						}
-						fmt.Printf("  -> 已将 %d 个冲突文件全部使用远端版本\n", len(conflicts)-idx)
-						return false, nil, useRemoteFiles, nil
-					default:
-						fmt.Println("  无效输入，请重新选择")
-						continue
-					}
-					break
-				}
+		for {
+			if len(conflict.LocalContent) > 0 && len(conflict.RemoteContent) > 0 {
+				addLines, delLines := diffutil.CountLineChanges(conflict.LocalContent, conflict.RemoteContent)
+				fmt.Printf("%s %s(默认=2, +%d/-%d 行): ", relativePath, batchHint, addLines, delLines)
+			} else {
+				fmt.Printf("%s %s(默认=2): ", relativePath, batchHint)
 			}
-			return false, keepLocalFiles, useRemoteFiles, nil
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(strings.ToLower(input))
+
+			switch input {
+			case "1", "local":
+				keepLocalFiles = append(keepLocalFiles, relativePath)
+				fmt.Printf("  -> 保留本地版本\n")
+			case "2", "remote", "":
+				useRemoteFiles = append(useRemoteFiles, relativePath)
+				fmt.Printf("  -> 使用远端版本\n")
+			case "3", "diff":
+				w.showConflictDiff(conflict)
+				fmt.Println()
+				fmt.Println("  [1] 本地  [2] 远端  [3] 差异  [4] 取消")
+				continue
+			case "4", "cancel", "q":
+				return true, nil, nil, nil
+			case "5":
+				if len(conflicts) <= 1 {
+					fmt.Println("  无效输入，请重新选择")
+					continue
+				}
+				keepLocalFiles = append(keepLocalFiles, relativePath)
+				for _, c := range conflicts[idx+1:] {
+					keepLocalFiles = append(keepLocalFiles, pathpkg.ToSlash(c.Path))
+				}
+				fmt.Printf("  -> 已将 %d 个冲突文件全部保留本地版本\n", len(conflicts)-idx)
+				return false, keepLocalFiles, nil, nil
+			case "6":
+				if len(conflicts) <= 1 {
+					fmt.Println("  无效输入，请重新选择")
+					continue
+				}
+				useRemoteFiles = append(useRemoteFiles, relativePath)
+				for _, c := range conflicts[idx+1:] {
+					useRemoteFiles = append(useRemoteFiles, pathpkg.ToSlash(c.Path))
+				}
+				fmt.Printf("  -> 已将 %d 个冲突文件全部使用远端版本\n", len(conflicts)-idx)
+				return false, nil, useRemoteFiles, nil
+			default:
+				fmt.Println("  无效输入，请重新选择")
+				continue
+			}
+			break
+		}
+	}
+	return false, keepLocalFiles, useRemoteFiles, nil
 }
 
 // applyAutoResolvedToSnapshot 将 autoResolved 中的 remote_added 文件写入快照。
