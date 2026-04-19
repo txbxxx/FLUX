@@ -109,8 +109,16 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 	return command
 }
 
+// maxFilesPerCategory controls how many files to show per action category
+// before collapsing into a summary line. This prevents screen-flooding when
+// restoring snapshots that contain hundreds of files (e.g. node_modules, .git).
+const maxFilesPerCategory = 5
+
 // printRestorePreview renders the dry-run preview output.
-// Shows snapshot info and a list of files that would be affected.
+// AppliedFiles are grouped by action (新增/更新), each category shows at most
+// maxFilesPerCategory entries with a summary for the rest.
+// SkippedFiles are shown as a count only — listing hundreds of identical files
+// is noise, not signal.
 func printRestorePreview(w io.Writer, result *typesSnapshot.RestoreResult) {
 	fmt.Fprintf(w, "快照: %s (%s)\n", result.SnapshotName, result.SnapshotID)
 	if result.AppliedCount == 0 {
@@ -118,16 +126,54 @@ func printRestorePreview(w io.Writer, result *typesSnapshot.RestoreResult) {
 		return
 	}
 
+	// Group applied files by action.
+	created, updated := groupByAction(result.AppliedFiles)
+
 	fmt.Fprintf(w, "即将恢复 %d 个文件:\n", result.AppliedCount)
-	for _, f := range result.AppliedFiles {
-		label := "更新"
+
+	printFileCategory(w, "新增", created)
+	printFileCategory(w, "更新", updated)
+
+	if result.SkippedCount > 0 {
+		fmt.Fprintf(w, "  跳过: %d 个文件\n", result.SkippedCount)
+	}
+}
+
+// groupByAction splits applied files into "created" and "updated" slices.
+// Any Action value that is not "created" (e.g. "updated", "replaced") falls
+// into the updated bucket — this matches the RestoreResult contract where
+// only "created" and non-created actions exist.
+func groupByAction(files []typesSnapshot.AppliedFile) (created, updated []typesSnapshot.AppliedFile) {
+	for _, f := range files {
 		if f.Action == "created" {
-			label = "新增"
+			created = append(created, f)
+		} else {
+			updated = append(updated, f)
 		}
+	}
+	return
+}
+
+// printFileCategory prints files under a labeled category.
+// Shows at most maxFilesPerCategory entries; excess files are summarized.
+func printFileCategory(w io.Writer, label string, files []typesSnapshot.AppliedFile) {
+	if len(files) == 0 {
+		return
+	}
+
+	visible := files
+	remaining := 0
+	if len(files) > maxFilesPerCategory {
+		visible = files[:maxFilesPerCategory]
+		remaining = len(files) - maxFilesPerCategory
+	}
+
+	for _, f := range visible {
 		fmt.Fprintf(w, "  %s: %s\n", label, f.Path)
 	}
-	for _, f := range result.SkippedFiles {
-		fmt.Fprintf(w, "  跳过: %s (%s)\n", f.Path, f.Reason)
+
+	if remaining > 0 {
+		fmt.Fprintf(w, "  ... 等 %d 个%s文件\n", remaining, label)
 	}
 }
 
