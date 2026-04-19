@@ -16,45 +16,25 @@ import (
 
 // newSnapshotRestoreCommand creates the snapshot restore sub-command.
 // Supports full restore, selective restore (--files), preview mode (--dry-run),
-// skip confirmation (--force), and history restore (--version).
+// and skip confirmation (--force).
 func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 	var files string
 	var dryRun bool
 	var force bool
-	var version string // --version: restore from a specific history commit
 
 	command := &spcobra.Command{
 		Use:   "restore <id-or-name>",
 		Short: "恢复快照到本地配置",
 		Long: `将快照中的配置文件恢复到磁盘原始路径。
 
-支持四种模式：
+支持三种模式：
   - 全量恢复：恢复快照中的所有文件
   - 选择性恢复：通过 --files 指定要恢复的文件
   - 预览模式：通过 --dry-run 仅查看变更，不实际写入
-  - 历史版本：通过 --version <hash> 恢复到指定历史版本
 
 恢复前会自动备份当前配置到 ~/.flux/backup/<timestamp>/。`,
 		Args: validateExactOneArg("fl snapshot restore <id-or-name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
-			// 历史版本恢复模式
-			if version != "" {
-				input := usecase.RestoreFromHistoryInput{
-					IDOrName:   args[0],
-					CommitHash: version,
-					Files:      splitCSV(files),
-					DryRun:     dryRun,
-					Force:      force,
-					BackupDir:  deps.DataDir,
-				}
-				result, err := deps.Workflow.RestoreFromHistory(cmd.Context(), input)
-				if err != nil {
-					return err
-				}
-				printRestoreResult(cmd.OutOrStdout(), result)
-				return nil
-			}
-
 			input := usecase.RestoreSnapshotInput{
 				IDOrName:  args[0],
 				Files:     splitCSV(files),
@@ -125,7 +105,6 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 	flags.StringVar(&files, "files", "", "指定要恢复的文件路径，逗号分隔")
 	flags.BoolVar(&dryRun, "dry-run", false, "仅预览变更，不实际写入")
 	flags.BoolVar(&force, "force", false, "跳过确认步骤，但仍自动备份")
-	flags.StringVar(&version, "version", "", "恢复到指定历史版本（commit hash）")
 
 	return command
 }

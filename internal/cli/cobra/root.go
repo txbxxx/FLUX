@@ -53,9 +53,6 @@ type Workflow interface {
 	SyncPush(ctx context.Context, input typesSync.SyncPushInput) (*typesSync.SyncPushResult, error)
 	SyncPull(ctx context.Context, input typesSync.SyncPullInput) (*typesSync.SyncPullResult, error)
 	SyncStatus(ctx context.Context, input typesSync.SyncStatusInput) (*typesSync.SyncStatusResult, error)
-	// 历史版本
-	SnapshotHistory(ctx context.Context, input usecase.SnapshotHistoryInput) (*typesSnapshot.HistoryResult, error)
-	RestoreFromHistory(ctx context.Context, input usecase.RestoreFromHistoryInput) (*typesSnapshot.RestoreResult, error)
 }
 
 // TUIRunner / EditorRunner 抽象终端交互能力，避免 cobra 直接依赖具体实现。
