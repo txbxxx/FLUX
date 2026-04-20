@@ -47,24 +47,14 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 
 			useColor := shouldUseColor(color, cmd)
 
-			// dry-run 模式：展示 diff + 恢复摘要
+			// dry-run 模式：仅展示恢复摘要（不含详细 diff）
 			if dryRun {
 				result, err := deps.Workflow.RestoreSnapshot(cmd.Context(), input)
 				if err != nil {
 					return err
 				}
 
-				// 使用 diff 渲染展示差异详情（隐藏 git header）
-				diffResult, _ := deps.Workflow.DiffSnapshots(cmd.Context(), usecase.DiffSnapshotsInput{
-					SourceID: args[0],
-					Verbose:  true,
-					Context:  5,
-				})
-				if diffResult != nil && diffResult.HasDiff {
-					output.RenderUnifiedDiff(cmd.OutOrStdout(), diffResult, useColor, true)
-				}
-
-				// 追加恢复摘要
+				// 仅显示恢复摘要，不显示详细 diff
 				printRestorePreview(cmd.OutOrStdout(), result, useColor)
 				return nil
 			}
