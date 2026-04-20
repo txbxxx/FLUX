@@ -61,8 +61,10 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 		Short: "列出所有已保存的配置",
 		RunE: func(cmd *spcobra.Command, _ []string) error {
 			var limit, offset int
+			var formatStr string
 			limit, _ = cmd.Flags().GetInt("limit")
 			offset, _ = cmd.Flags().GetInt("offset")
+			formatStr, _ = cmd.Flags().GetString("format")
 
 			result, err := deps.Workflow.ListAISettings(cmd.Context(), usecase.ListAISettingsInput{
 				Limit:  limit,
@@ -72,12 +74,19 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 				return err
 			}
 
-			printSettingList(cmd.OutOrStdout(), result)
-			return nil
+			// 准备表格数据
+			tbl := buildSettingTable(result)
+
+			// 准备 JSON/YAML 数据
+			rawData := toSettingListData(result)
+
+			// 根据格式输出
+			return output.Print(cmd.OutOrStdout(), output.Format(formatStr), tbl, rawData)
 		},
 	}
 	listCommand.Flags().IntP("limit", "l", 0, "每页条数（0 表示全部）")
 	listCommand.Flags().IntP("offset", "o", 0, "偏移量")
+	listCommand.Flags().String("format", "table", "输出格式: table, json, yaml")
 
 	getCommand := &spcobra.Command{
 		Use:   "get <name> [name...]",
@@ -223,9 +232,28 @@ func maskToken(token string) string {
 
 // printSettingList 输出配置列表。
 func printSettingList(w io.Writer, result *usecase.ListAISettingsResult) {
-	if result.Total == 0 {
+	tbl := buildSettingTable(result)
+	if len(tbl.Rows) == 0 {
 		fmt.Fprintln(w, "暂无保存的配置")
 		return
+	}
+	fmt.Fprint(w, tbl.Render())
+}
+
+// toSettingListData 将 usecase 返回结果转换为 types 结构体（用于 JSON/YAML）
+func toSettingListData(result *usecase.ListAISettingsResult) interface{} {
+	// 直接使用 result.Items，因为它已经有 json/yaml tags
+	return map[string]interface{}{
+		"total":   result.Total,
+		"current": result.Current,
+		"items":   result.Items,
+	}
+}
+
+// buildSettingTable 构建设置列表表格
+func buildSettingTable(result *usecase.ListAISettingsResult) *output.Table {
+	if result.Total == 0 {
+		return &output.Table{}
 	}
 
 	tbl := &output.Table{
@@ -247,7 +275,7 @@ func printSettingList(w io.Writer, result *usecase.ListAISettingsResult) {
 			Highlight: item.IsCurrent,
 		})
 	}
-	fmt.Fprint(w, tbl.Render())
+	return tbl
 }
 
 // printSwitchResult 输出切换结果。

@@ -47,15 +47,18 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 
 			useColor := shouldUseColor(color, cmd)
 
-			// dry-run 模式：仅展示恢复摘要（不含详细 diff）
+			// dry-run 模式：展示恢复摘要，提示查看详细 diff
 			if dryRun {
 				result, err := deps.Workflow.RestoreSnapshot(cmd.Context(), input)
 				if err != nil {
 					return err
 				}
 
-				// 仅显示恢复摘要，不显示详细 diff
+				// 显示恢复摘要
 				printRestorePreview(cmd.OutOrStdout(), result, useColor)
+
+				// 提示用户可以使用 snapshot diff 查看详细差异
+				fmt.Fprintf(cmd.OutOrStdout(), "\n💡 提示：使用 'fl snapshot diff %s <current-id>' 查看详细的文件差异\n", args[0])
 				return nil
 			}
 

@@ -20,6 +20,7 @@ func newSnapshotDiffCommand(deps Dependencies) *spcobra.Command {
 	var tool string
 	var pathPattern string
 	var color string
+	var formatStr string
 
 	command := &spcobra.Command{
 		Use:   "diff <source-id> [<target-id>]",
@@ -31,6 +32,8 @@ func newSnapshotDiffCommand(deps Dependencies) *spcobra.Command {
   2个参数 → 快照 vs 快照`,
 		Args: spcobra.RangeArgs(1, 2),
 		RunE: func(cmd *spcobra.Command, args []string) error {
+			formatStr, _ = cmd.Flags().GetString("format")
+
 			targetID := ""
 			if len(args) > 1 {
 				targetID = args[1]
@@ -39,7 +42,7 @@ func newSnapshotDiffCommand(deps Dependencies) *spcobra.Command {
 			result, err := deps.Workflow.DiffSnapshots(cmd.Context(), usecase.DiffSnapshotsInput{
 				SourceID:    args[0],
 				TargetID:    targetID,
-				Verbose:     verbose,
+				Verbose:     verbose, // 尊重用户的选择
 				SideBySide:  sideBySide,
 				Tool:        tool,
 				PathPattern: pathPattern,
@@ -49,6 +52,13 @@ func newSnapshotDiffCommand(deps Dependencies) *spcobra.Command {
 				return err
 			}
 
+			// 结构化输出模式
+			if formatStr == "json" || formatStr == "yaml" {
+				// JSON/YAML 模式：输出完整 DiffResult，退出码始终为 0
+				return output.Print(cmd.OutOrStdout(), output.Format(formatStr), nil, result)
+			}
+
+			// 默认表格/文本模式
 			useColor := shouldUseColor(color, cmd)
 			out := cmd.OutOrStdout()
 
@@ -75,6 +85,7 @@ func newSnapshotDiffCommand(deps Dependencies) *spcobra.Command {
 	flags.StringVar(&tool, "tool", "", "按工具类型过滤（如 claude、codex）")
 	flags.StringVar(&pathPattern, "path", "", "按路径模式过滤（如 \"mcp/*\"）")
 	flags.StringVar(&color, "color", "auto", "颜色控制：always/auto/never")
+	flags.StringVar(&formatStr, "format", "table", "输出格式: table, json, yaml")
 
 	return command
 }
