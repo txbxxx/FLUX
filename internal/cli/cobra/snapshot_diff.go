@@ -58,7 +58,7 @@ func newSnapshotDiffCommand(deps Dependencies) *spcobra.Command {
 			} else if sideBySide {
 				output.RenderSideBySideDiff(out, result, useColor)
 			} else {
-				output.RenderUnifiedDiff(out, result, useColor)
+				output.RenderUnifiedDiff(out, result, useColor, false)
 			}
 
 			// 退出码：有差异返回 1

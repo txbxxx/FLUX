@@ -12,6 +12,7 @@ import (
 	"flux/internal/app/usecase"
 	"flux/internal/cli/output"
 	typesSnapshot "flux/internal/types/snapshot"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // newSnapshotRestoreCommand creates the snapshot restore sub-command.
@@ -21,6 +22,7 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 	var files string
 	var dryRun bool
 	var force bool
+	var color string
 
 	command := &spcobra.Command{
 		Use:   "restore <id-or-name>",
@@ -43,6 +45,8 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 				BackupDir: deps.DataDir,
 			}
 
+			useColor := shouldUseColor(color, cmd)
+
 			// dry-run 模式：展示 diff + 恢复摘要
 			if dryRun {
 				result, err := deps.Workflow.RestoreSnapshot(cmd.Context(), input)
@@ -50,18 +54,18 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 					return err
 				}
 
-				// 使用 diff 渲染展示差异详情
+				// 使用 diff 渲染展示差异详情（隐藏 git header）
 				diffResult, _ := deps.Workflow.DiffSnapshots(cmd.Context(), usecase.DiffSnapshotsInput{
 					SourceID: args[0],
 					Verbose:  true,
 					Context:  5,
 				})
 				if diffResult != nil && diffResult.HasDiff {
-					output.RenderUnifiedDiff(cmd.OutOrStdout(), diffResult, true)
+					output.RenderUnifiedDiff(cmd.OutOrStdout(), diffResult, useColor, true)
 				}
 
 				// 追加恢复摘要
-				printRestorePreview(cmd.OutOrStdout(), result)
+				printRestorePreview(cmd.OutOrStdout(), result, useColor)
 				return nil
 			}
 
@@ -79,7 +83,7 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 					return nil
 				}
 
-				printRestorePreview(cmd.OutOrStdout(), preview)
+				printRestorePreview(cmd.OutOrStdout(), preview, useColor)
 
 				fmt.Fprint(cmd.OutOrStdout(), "\n确认恢复？[y/N]: ")
 				reader := bufio.NewReader(os.Stdin)
@@ -105,6 +109,7 @@ func newSnapshotRestoreCommand(deps Dependencies) *spcobra.Command {
 	flags.StringVar(&files, "files", "", "指定要恢复的文件路径，逗号分隔")
 	flags.BoolVar(&dryRun, "dry-run", false, "仅预览变更，不实际写入")
 	flags.BoolVar(&force, "force", false, "跳过确认步骤，但仍自动备份")
+	flags.StringVar(&color, "color", "auto", "颜色控制：always/auto/never")
 
 	return command
 }
@@ -119,7 +124,7 @@ const maxFilesPerCategory = 5
 // maxFilesPerCategory entries with a summary for the rest.
 // SkippedFiles are shown as a count only — listing hundreds of identical files
 // is noise, not signal.
-func printRestorePreview(w io.Writer, result *typesSnapshot.RestoreResult) {
+func printRestorePreview(w io.Writer, result *typesSnapshot.RestoreResult, useColor bool) {
 	fmt.Fprintf(w, "快照: %s (%s)\n", result.SnapshotName, result.SnapshotID)
 	if result.AppliedCount == 0 {
 		fmt.Fprintln(w, "所有文件内容相同，无需恢复。")
@@ -131,8 +136,8 @@ func printRestorePreview(w io.Writer, result *typesSnapshot.RestoreResult) {
 
 	fmt.Fprintf(w, "即将恢复 %d 个文件:\n", result.AppliedCount)
 
-	printFileCategory(w, "新增", created)
-	printFileCategory(w, "更新", updated)
+	printFileCategory(w, "新增", created, useColor, output.DiffAddedStyle)
+	printFileCategory(w, "更新", updated, useColor, output.DiffModifiedStyle)
 
 	if result.SkippedCount > 0 {
 		fmt.Fprintf(w, "  跳过: %d 个文件\n", result.SkippedCount)
@@ -154,9 +159,9 @@ func groupByAction(files []typesSnapshot.AppliedFile) (created, updated []typesS
 	return
 }
 
-// printFileCategory prints files under a labeled category.
+// printFileCategory prints files under a labeled category with optional color.
 // Shows at most maxFilesPerCategory entries; excess files are summarized.
-func printFileCategory(w io.Writer, label string, files []typesSnapshot.AppliedFile) {
+func printFileCategory(w io.Writer, label string, files []typesSnapshot.AppliedFile, useColor bool, style lipgloss.Style) {
 	if len(files) == 0 {
 		return
 	}
@@ -169,11 +174,20 @@ func printFileCategory(w io.Writer, label string, files []typesSnapshot.AppliedF
 	}
 
 	for _, f := range visible {
-		fmt.Fprintf(w, "  %s: %s\n", label, f.Path)
+		if useColor {
+			fmt.Fprintf(w, "  %s\n", style.Render(fmt.Sprintf("%s: %s", label, f.Path)))
+		} else {
+			fmt.Fprintf(w, "  %s: %s\n", label, f.Path)
+		}
 	}
 
 	if remaining > 0 {
-		fmt.Fprintf(w, "  ... 等 %d 个%s文件\n", remaining, label)
+		summary := fmt.Sprintf("... 等 %d 个%s文件", remaining, label)
+		if useColor {
+			fmt.Fprintf(w, "  %s\n", style.Render(summary))
+		} else {
+			fmt.Fprintf(w, "  %s\n", summary)
+		}
 	}
 }
 

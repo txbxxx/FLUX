@@ -41,7 +41,7 @@ func makeRestoreResult(appliedCount, skippedCount int) *typesSnapshot.RestoreRes
 func TestPrintRestorePreview_HidesSkippedFiles(t *testing.T) {
 	var buf bytes.Buffer
 	result := makeRestoreResult(2, 100)
-	printRestorePreview(&buf, result)
+	printRestorePreview(&buf, result, false)
 	output := buf.String()
 
 	// 不应逐行列出跳过文件
@@ -57,7 +57,7 @@ func TestPrintRestorePreview_HidesSkippedFiles(t *testing.T) {
 func TestPrintRestorePreview_ShowsAppliedFilesCategorized(t *testing.T) {
 	var buf bytes.Buffer
 	result := makeRestoreResult(3, 5)
-	printRestorePreview(&buf, result)
+	printRestorePreview(&buf, result, false)
 	output := buf.String()
 
 	// 应显示分类标签：新增和更新
@@ -81,7 +81,7 @@ func TestPrintRestorePreview_LimitsAppliedFilesPerCategory(t *testing.T) {
 			Action: "created",
 		}
 	}
-	printRestorePreview(&buf, result)
+	printRestorePreview(&buf, result, false)
 	output := buf.String()
 
 	// 应显示前几个文件
@@ -110,7 +110,7 @@ func TestPrintRestorePreview_AllFilesSkipped(t *testing.T) {
 			Reason: "内容相同",
 		}
 	}
-	printRestorePreview(&buf, result)
+	printRestorePreview(&buf, result, false)
 	output := buf.String()
 
 	if !strings.Contains(output, "所有文件内容相同") {
@@ -135,7 +135,7 @@ func TestPrintRestorePreview_SmallResultSetShowsAll(t *testing.T) {
 			{Path: "e.txt", Reason: "内容相同"},
 		},
 	}
-	printRestorePreview(&buf, result)
+	printRestorePreview(&buf, result, false)
 	output := buf.String()
 
 	// 所有 AppliedFiles 都应显示
