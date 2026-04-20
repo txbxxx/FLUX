@@ -12,10 +12,10 @@ import (
 
 // Diff color styles
 var (
-	DiffAddedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))  // green
-	DiffDeletedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))  // red
-	DiffModifiedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))  // yellow
-	diffHeaderStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))  // cyan
+	DiffAddedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // green
+	DiffDeletedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1")) // red
+	DiffModifiedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3")) // yellow
+	diffHeaderStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")) // cyan
 	diffFilePathStyle = lipgloss.NewStyle().Bold(true)
 	diffStatStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241")) // dim gray
 )

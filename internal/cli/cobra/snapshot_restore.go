@@ -9,10 +9,10 @@ import (
 
 	spcobra "github.com/spf13/cobra"
 
-	"github.com/charmbracelet/lipgloss"
 	"flux/internal/app/usecase"
 	"flux/internal/cli/output"
 	typesSnapshot "flux/internal/types/snapshot"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // newSnapshotRestoreCommand creates the snapshot restore sub-command.
