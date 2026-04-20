@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"flux/internal/app/usecase"
+	"flux/internal/cli/output"
 
 	spcobra "github.com/spf13/cobra"
 )
@@ -82,15 +83,25 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 		Use:   "list [app-or-project...]",
 		Short: "查看当前扫描结果",
 		RunE: func(cmd *spcobra.Command, args []string) error {
+			formatStr, _ := cmd.Flags().GetString("format")
+
 			result, err := deps.Workflow.Scan(cmd.Context(), usecase.ScanInput{Apps: args})
 			if err != nil {
 				return err
 			}
-			printScanResult(cmd.OutOrStdout(), result, verbose)
-			return nil
+
+			// 准备表格数据
+			tbl := buildScanTable(result, verbose)
+
+			// 准备 JSON/YAML 数据
+			rawData := toScanListData(result)
+
+			// 根据格式输出
+			return output.Print(cmd.OutOrStdout(), output.Format(formatStr), tbl, rawData)
 		},
 	}
 	listCommand.Flags().BoolVarP(&verbose, "verbose", "v", false, "显示详细配置项")
+	listCommand.Flags().String("format", "table", "输出格式: table, json, yaml")
 
 	rulesCommand := &spcobra.Command{
 		Use:   "rules [app-or-project]",
@@ -116,4 +127,51 @@ func newScanCommand(deps Dependencies) *spcobra.Command {
 
 	command.AddCommand(addCommand, removeCommand, listCommand, rulesCommand)
 	return command
+}
+
+// toScanListData 将 usecase 返回结果转换为 types 结构体（用于 JSON/YAML）
+func toScanListData(result *usecase.ScanResult) interface{} {
+	items := make([]map[string]interface{}, len(result.Tools))
+	for i, tool := range result.Tools {
+		items[i] = map[string]interface{}{
+			"project":      tool.ProjectName,
+			"tool_type":    tool.Tool,
+			"path":         tool.Path,
+			"status":       tool.ResultText,
+			"config_count": tool.ConfigCount,
+			"items":        tool.Items, // 详细配置项
+		}
+	}
+	return map[string]interface{}{
+		"items": items,
+	}
+}
+
+// buildScanTable 构建扫描结果表格
+func buildScanTable(result *usecase.ScanResult, verbose bool) *output.Table {
+	if len(result.Tools) == 0 {
+		return &output.Table{}
+	}
+
+	tbl := &output.Table{
+		Columns: []output.Column{
+			{Title: "项目"},
+			{Title: "类型"},
+			{Title: "配置目录"},
+			{Title: "状态"},
+			{Title: "可同步项"},
+		},
+	}
+	for _, item := range result.Tools {
+		projectName := displayScanSummaryTitle(item)
+		toolType := displayToolName(item.Tool)
+		configCount := ""
+		if item.ConfigCount > 0 {
+			configCount = fmt.Sprintf("%d 项", item.ConfigCount)
+		}
+		tbl.Rows = append(tbl.Rows, output.Row{
+			Cells: []string{projectName, toolType, item.Path, item.ResultText, configCount},
+		})
+	}
+	return tbl
 }
