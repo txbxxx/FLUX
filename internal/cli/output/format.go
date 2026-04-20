@@ -43,5 +43,7 @@ func printJSON(w io.Writer, data interface{}) error {
 
 // printYAML 输出 YAML 格式
 func printYAML(w io.Writer, data interface{}) error {
-	return yaml.NewEncoder(w).Encode(data)
+	encoder := yaml.NewEncoder(w)
+	encoder.SetIndent(2) // 与 JSON 保持一致的缩进
+	return encoder.Encode(data)
 }

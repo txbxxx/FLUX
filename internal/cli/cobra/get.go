@@ -83,7 +83,6 @@ func newGetCommand(deps Dependencies) *spcobra.Command {
 				// 表格模式：先输出绝对路径，再输出表格
 				if formatStr == "table" {
 					fmt.Fprintf(cmd.OutOrStdout(), "%s\n\n", result.AbsolutePath)
-					return output.Print(cmd.OutOrStdout(), output.Format(formatStr), tbl, rawData)
 				}
 
 				return output.Print(cmd.OutOrStdout(), output.Format(formatStr), tbl, rawData)

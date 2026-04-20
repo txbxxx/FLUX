@@ -42,7 +42,7 @@ func newSnapshotDiffCommand(deps Dependencies) *spcobra.Command {
 			result, err := deps.Workflow.DiffSnapshots(cmd.Context(), usecase.DiffSnapshotsInput{
 				SourceID:    args[0],
 				TargetID:    targetID,
-				Verbose:     true, // JSON/YAML 模式始终包含完整数据
+				Verbose:     verbose, // 尊重用户的选择
 				SideBySide:  sideBySide,
 				Tool:        tool,
 				PathPattern: pathPattern,
