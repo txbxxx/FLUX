@@ -12,8 +12,9 @@ import (
 
 // Diff color styles
 var (
-	diffAddedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))  // green
-	diffDeletedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))  // red
+	DiffAddedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))  // green
+	DiffDeletedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))  // red
+	DiffModifiedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))  // yellow
 	diffHeaderStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))  // cyan
 	diffFilePathStyle = lipgloss.NewStyle().Bold(true)
 	diffStatStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241")) // dim gray
@@ -41,11 +42,11 @@ func RenderDiffSummary(w io.Writer, result *typesSnapshot.DiffResult, useColor b
 		if useColor {
 			switch file.Status {
 			case typesSnapshot.FileAdded:
-				path = diffAddedStyle.Render(file.Path)
-				status = diffAddedStyle.Render("added")
+				path = DiffAddedStyle.Render(file.Path)
+				status = DiffAddedStyle.Render("added")
 			case typesSnapshot.FileDeleted:
-				path = diffDeletedStyle.Render(file.Path)
-				status = diffDeletedStyle.Render("deleted")
+				path = DiffDeletedStyle.Render(file.Path)
+				status = DiffDeletedStyle.Render("deleted")
 			case typesSnapshot.FileModified:
 				path = diffFilePathStyle.Render(file.Path)
 				status = "modified"
@@ -83,7 +84,7 @@ func RenderDiffSummary(w io.Writer, result *typesSnapshot.DiffResult, useColor b
 	if result.Partial {
 		warning := fmt.Sprintf("注意: %s", result.PartialReason)
 		if useColor {
-			fmt.Fprintln(w, diffDeletedStyle.Render(warning))
+			fmt.Fprintln(w, DiffDeletedStyle.Render(warning))
 		} else {
 			fmt.Fprintln(w, warning)
 		}
@@ -91,7 +92,8 @@ func RenderDiffSummary(w io.Writer, result *typesSnapshot.DiffResult, useColor b
 }
 
 // RenderUnifiedDiff renders a unified diff output with colored lines.
-func RenderUnifiedDiff(w io.Writer, result *typesSnapshot.DiffResult, useColor bool) {
+// When hideGitHeader is true, the "diff --git a/... b/..." header line is omitted.
+func RenderUnifiedDiff(w io.Writer, result *typesSnapshot.DiffResult, useColor bool, hideGitHeader bool) {
 	if !result.HasDiff {
 		fmt.Fprintln(w, "无差异")
 		return
@@ -108,10 +110,12 @@ func RenderUnifiedDiff(w io.Writer, result *typesSnapshot.DiffResult, useColor b
 	for _, file := range result.Files {
 		// File header
 		fmt.Fprintf(w, "\n")
-		if useColor {
-			fmt.Fprintf(w, "%s\n", diffFilePathStyle.Render(fmt.Sprintf("diff --git a/%s b/%s", file.Path, file.Path)))
-		} else {
-			fmt.Fprintf(w, "diff --git a/%s b/%s\n", file.Path, file.Path)
+		if !hideGitHeader {
+			if useColor {
+				fmt.Fprintf(w, "%s\n", diffFilePathStyle.Render(fmt.Sprintf("diff --git a/%s b/%s", file.Path, file.Path)))
+			} else {
+				fmt.Fprintf(w, "diff --git a/%s b/%s\n", file.Path, file.Path)
+			}
 		}
 
 		if file.IsBinary {
@@ -145,13 +149,13 @@ func RenderUnifiedDiff(w io.Writer, result *typesSnapshot.DiffResult, useColor b
 				switch line.Type {
 				case typesSnapshot.LineAdded:
 					if useColor {
-						fmt.Fprintf(w, "%s\n", diffAddedStyle.Render("+"+line.Content))
+						fmt.Fprintf(w, "%s\n", DiffAddedStyle.Render("+"+line.Content))
 					} else {
 						fmt.Fprintf(w, "+%s\n", line.Content)
 					}
 				case typesSnapshot.LineDeleted:
 					if useColor {
-						fmt.Fprintf(w, "%s\n", diffDeletedStyle.Render("-"+line.Content))
+						fmt.Fprintf(w, "%s\n", DiffDeletedStyle.Render("-"+line.Content))
 					} else {
 						fmt.Fprintf(w, "-%s\n", line.Content)
 					}
@@ -200,7 +204,7 @@ func RenderSideBySideDiff(w io.Writer, result *typesSnapshot.DiffResult, useColo
 					left := padOrTruncate("", halfWidth)
 					right := "+" + line.Content
 					if useColor {
-						right = diffAddedStyle.Render(padOrTruncate(right, halfWidth))
+						right = DiffAddedStyle.Render(padOrTruncate(right, halfWidth))
 					} else {
 						right = padOrTruncate(right, halfWidth)
 					}
@@ -208,7 +212,7 @@ func RenderSideBySideDiff(w io.Writer, result *typesSnapshot.DiffResult, useColo
 				case typesSnapshot.LineDeleted:
 					left := "-" + line.Content
 					if useColor {
-						left = diffDeletedStyle.Render(padOrTruncate(left, halfWidth))
+						left = DiffDeletedStyle.Render(padOrTruncate(left, halfWidth))
 					} else {
 						left = padOrTruncate(left, halfWidth)
 					}
