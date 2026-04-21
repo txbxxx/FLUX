@@ -140,7 +140,7 @@ func (dao *ExampleDAO) GetByID(id string) (*Example, error) { /* ... */ }
 
 对外返回的结构体统一定义在 `internal/types/` 包中，按功能模块组织：
 
-- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/config/`、`types/common/`
+- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/setting/`、`types/sync/`、`types/remote/`、`types/common/`
 - **与 Models 区分**：Models 是数据库表映射，Types 是面向调用方的响应结构体
 - **Service/UseCase 负责转换**：从 DAO 获取 Models 结构体后，转换为 Types 结构体返回
 
@@ -328,7 +328,11 @@ flux/
 │   │   ├── runtime/runtime.go      # 运行时：日志、数据库、服务初始化
 │   │   └── usecase/
 │   │       ├── local_workflow.go   # 本地工作流：快照、扫描、浏览编排
-│   │       └── config_browser.go   # 配置浏览器：目录浏览、文件读写
+│   │       ├── config_browser.go   # 配置浏览器：目录浏览、文件读写
+│   │       ├── ai_setting.go       # AI 配置管理编排
+│   │       ├── remote_method.go    # 远端仓库操作编排
+│   │       ├── sync_method.go      # 同步操作编排
+│   │       └── update_method.go    # 更新操作编排
 │   │
 │   ├── cli/cobra/                  # Cobra 命令定义
 │   │   ├── root.go                 # 根命令 + Workflow 接口
@@ -338,9 +342,13 @@ flux/
 │   │   ├── snapshot_create.go      # snapshot create
 │   │   ├── snapshot_list.go        # snapshot list
 │   │   ├── snapshot_delete.go      # snapshot delete
+│   │   ├── snapshot_update.go      # snapshot update
 │   │   ├── snapshot_restore.go     # snapshot restore
 │   │   ├── snapshot_diff.go       # snapshot diff
 │   │   ├── setting.go              # setting 命令组
+│   │   ├── setting_edit.go         # setting edit
+│   │   ├── setting_editor.go       # setting editor (TUI)
+│   │   ├── remote.go               # remote 命令组
 │   │   ├── sync.go                 # sync 命令组（push/pull/status）
 │   │   └── tui.go                  # tui 命令
 │   │
@@ -348,6 +356,7 @@ flux/
 │   │   ├── table.go                # 通用表格渲染器（Unicode 边框）
 │   │   ├── style.go                # 全局样式常量（颜色、间距）
 │   │   ├── diff.go                 # Diff 结果渲染（摘要/Unified/并排）
+│   │   ├── format.go               # 格式化输出（--format 支持）
 │   │   └── table_test.go           # 表格渲染测试
 │   │
 │   ├── tui/                        # Bubbletea TUI
@@ -359,7 +368,9 @@ flux/
 │   │   ├── page_snapshots.go       # 快照列表页
 │   │   ├── form_create.go          # 创建快照表单
 │   │   ├── editor.go               # 配置编辑器启动器
-│   │   └── editor_model.go         # 编辑器状态模型
+│   │   ├── editor_model.go         # 编辑器状态模型
+│   │   ├── setting_editor.go       # Setting 编辑器 TUI
+│   │   └── setting_editor_model.go # Setting 编辑器模型
 │   │
 │   ├── service/
 │   │   ├── tool/                   # 工具检测
@@ -377,27 +388,33 @@ flux/
 │   │   │   ├── applier.go          # 快照应用（预留）
 │   │   │   ├── comparator.go       # 快照对比（预留）
 │   │   │   └── types.go            # 类型定义
-│   │   ├── git/                    # Git 操作（预留）
-│   │   ├── sync/                   # 同步服务（预留）
-│   │   └── crypto/                 # AES-256-GCM 加密
+│   │   ├── sync/                   # 同步服务
+│   │   └── setting/                # Setting 管理
 │   │
 │   └── models/                     # 数据模型 + DAO（同文件，仅表结构+CRUD）
 │       ├── snapshot.go             # Snapshot + SnapshotDAO
 │       ├── registered_project.go   # RegisteredProject + DAO
 │       ├── custom_sync_rule.go     # CustomSyncRule + DAO
+│       ├── ai_setting.go           # AISetting + DAO
 │       ├── sync_task.go            # SyncTask（预留）
 │       ├── remote_config.go        # RemoteConfig（预留）
 │       ├── app_config.go           # 应用配置/统计模型
 │       └── utils.go                # 工具函数
 │
+│   ├── util/                       # 内部工具
+│   │   └── diffutil/               # Diff 工具
+│   │
 │   └── types/                      # 对外返回结构体（按功能分子目录）
 │       ├── snapshot/               # 快照相关返回结构体
 │       ├── scan/                   # 扫描相关返回结构体
-│       ├── config/                 # 配置浏览相关返回结构体
+│       ├── setting/                # Setting 相关返回结构体
+│       ├── sync/                   # 同步相关返回结构体
+│       ├── remote/                 # 远端相关返回结构体
 │       └── common/                 # 通用/共享返回结构体
 │
 ├── pkg/
 │   ├── config/                     # YAML 配置（嵌入默认值 → 用户覆盖）
+│   ├── crypto/                     # 加密工具
 │   ├── database/db.go              # SQLite 连接、迁移、事务
 │   ├── errors/                     # 错误码与包装
 │   ├── git/                        # Git 操作（clone/pull/push/fetch/commit）
@@ -425,11 +442,13 @@ flux/
 | setting get | `fl setting get <name>` | — |
 | setting delete | `fl setting delete <name>` | — |
 | setting switch | `fl setting switch <name>` | — |
+| setting edit | `fl setting edit <name>` | `-e` 编辑器模式 `-n` 名称 `-t` Token `-a` API地址 `-o` Opus模型 `-s` Sonnet模型 |
 | snapshot create | `fl snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
-| snapshot list | `fl snapshot list` | `-l` 条数 `-o` 偏移 |
+| snapshot list | `fl snapshot list` | `-l` 条数 `-o` 偏移 `--format` 格式 |
 | snapshot delete | `fl snapshot delete <id-or-name>` | — |
+| snapshot update | `fl snapshot update <id-or-name>` | `-m` 说明 |
 | snapshot restore | `fl snapshot restore <id-or-name>` | `--files` 选择性恢复 `--dry-run` 预览 `--force` 跳过确认 |
-| snapshot diff | `fl snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 |
+| snapshot diff | `fl snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 `--format` 格式 |
 | remote add | `fl remote add <url>` | `--name` 名称 `--branch` 分支 `--auth` 认证类型 `--token` 令牌 `--ssh-key` SSH密钥 |
 | remote list | `fl remote list` | — |
 | remote remove | `fl remote remove <name>` | — |
