@@ -927,7 +927,7 @@ Flags:
 -p, --path string      按路径前缀过滤
 -v, --verbose         显示文件内容差异（unified diff 格式）
     --side-by-side     并排显示差异
-    --color string     颜色控制：always/auto/never（默认 auto）
+    --color string     颜色控制：always（始终启用）/auto（默认，终端自动检测）/never（禁用）
 ```
 
 ### 13.4 输出示例
