@@ -10,9 +10,9 @@
 
 本地优先的 AI 工具配置管理器，聚焦于本地配置的扫描、快照、浏览和编辑。
 
-**当前能力**：扫描本机 AI 工具配置 · 创建/列出本地快照 · 浏览配置目录与文件 · 终端内直接编辑配置文件 · 自定义扫描规则
+**当前能力**：扫描本机 AI 工具配置 · 创建/列出/删除/恢复/对比本地快照 · 浏览配置目录与文件 · 终端内直接编辑配置文件 · 自定义扫描规则 · 远端仓库配置（remote add/list/remove）· 同步推送/拉取（sync push/pull）
 
-**暂未覆盖**：远端仓库同步（push/pull/diff/apply/rollback）· 图形化凭证管理 · 快照应用（回滚）· 快照对比 · 大量文件收集可能较慢
+**暂未覆盖**：图形化凭证管理 · 敏感字段加密存储 · 同步冲突自动合并 · 大量文件收集可能较慢
 
 ---
 
@@ -44,7 +44,10 @@ flux/
 │   │   ├── runtime/runtime.go      # 运行时：日志、数据库、服务初始化
 │   │   └── usecase/
 │   │       ├── local_workflow.go   # 本地工作流：快照、扫描、浏览编排
-│   │       └── config_browser.go   # 配置浏览器：目录浏览、文件读写
+│   │       ├── config_browser.go   # 配置浏览器：目录浏览、文件读写
+│   │       ├── remote_method.go    # 远端仓库操作编排
+│   │       ├── sync_method.go      # 同步操作编排
+│   │       └── update_method.go    # 更新操作编排
 │   │
 │   ├── cli/cobra/                  # Cobra 命令定义
 │   │   ├── root.go                 # 根命令 + Workflow 接口
@@ -53,7 +56,23 @@ flux/
 │   │   ├── snapshot.go             # snapshot 命令组
 │   │   ├── snapshot_create.go      # snapshot create
 │   │   ├── snapshot_list.go        # snapshot list
+│   │   ├── snapshot_delete.go      # snapshot delete
+│   │   ├── snapshot_update.go      # snapshot update
+│   │   ├── snapshot_restore.go     # snapshot restore
+│   │   ├── snapshot_diff.go       # snapshot diff
+│   │   ├── setting.go              # setting 命令组
+│   │   ├── setting_edit.go         # setting edit
+│   │   ├── setting_editor.go       # setting editor (TUI)
+│   │   ├── remote.go               # remote 命令组
+│   │   ├── sync.go                 # sync 命令组（push/pull/status）
 │   │   └── tui.go                  # tui 命令
+│   │
+│   ├── cli/output/                 # 统一 CLI 输出渲染
+│   │   ├── table.go                # 通用表格渲染器（Unicode 边框）
+│   │   ├── style.go                # 全局样式常量（颜色、间距）
+│   │   ├── diff.go                 # Diff 结果渲染（摘要/Unified/并排）
+│   │   ├── format.go               # 格式化输出（--format 支持）
+│   │   └── table_test.go           # 表格渲染测试
 │   │
 │   ├── tui/                        # Bubbletea TUI
 │   │   ├── app.go                  # Program 启动
@@ -64,7 +83,9 @@ flux/
 │   │   ├── page_snapshots.go       # 快照列表页
 │   │   ├── form_create.go          # 创建快照表单
 │   │   ├── editor.go               # 配置编辑器启动器
-│   │   └── editor_model.go         # 编辑器状态模型
+│   │   ├── editor_model.go         # 编辑器状态模型
+│   │   ├── setting_editor.go       # Setting 编辑器 TUI
+│   │   └── setting_editor_model.go # Setting 编辑器模型
 │   │
 │   ├── service/
 │   │   ├── tool/                   # 工具检测
@@ -82,33 +103,40 @@ flux/
 │   │   │   ├── applier.go          # 快照应用（预留）
 │   │   │   ├── comparator.go       # 快照对比（预留）
 │   │   │   └── types.go            # 类型定义
-│   │   ├── git/                    # Git 操作（预留）
-│   │   ├── sync/                   # 同步服务（预留）
-│   │   └── crypto/                 # AES-256-GCM 加密
+│   │   ├── sync/                   # 同步服务
+│   │   ├── setting/                # Setting 管理
+│   │   └── tool/                   # 工具检测
 │   │
 │   └── models/                     # 数据模型 + DAO（同文件，仅表结构+CRUD）
 │       ├── snapshot.go             # Snapshot + SnapshotDAO
 │       ├── registered_project.go   # RegisteredProject + DAO
 │       ├── custom_sync_rule.go     # CustomSyncRule + DAO
+│       ├── ai_setting.go           # AISetting + DAO
 │       ├── sync_task.go            # SyncTask（预留）
 │       ├── remote_config.go        # RemoteConfig（预留）
 │       ├── app_config.go           # 应用配置/统计模型
 │       └── utils.go                # 工具函数
 │
+│   ├── util/                       # 内部工具
+│   │   └── diffutil/               # Diff 工具
+│   │
 │   └── types/                      # 对外返回结构体（按功能分子目录）
 │       ├── snapshot/               # 快照相关返回结构体
 │       ├── scan/                   # 扫描相关返回结构体
-│       ├── config/                 # 配置浏览相关返回结构体
+│       ├── setting/                # Setting 相关返回结构体
+│       ├── sync/                   # 同步相关返回结构体
+│       ├── remote/                 # 远端相关返回结构体
 │       └── common/                 # 通用/共享返回结构体
 │
 ├── pkg/
 │   ├── config/                     # YAML 配置（嵌入默认值 → 用户覆盖）
+│   ├── crypto/                     # 加密工具
 │   ├── database/db.go              # SQLite 连接、迁移、事务
 │   ├── errors/                     # 错误码与包装
+│   ├── git/                        # Git 操作（clone/pull/push/fetch/commit）
 │   ├── logger/                     # Zap 日志
 │   └── utils/                      # 字符串/文件/转换工具
 │
-├── configs/default.yaml            # 配置模板（与 pkg/config/default.yaml 同步）
 ├── docs/                           # 文档（使用指南/架构设计/_old 存档）
 ├── go.mod · go.sum · Makefile · .golangci.yml · README.md
 ```
@@ -159,7 +187,7 @@ func (dao *ExampleDAO) GetByID(id string) (*Example, error) { /* ... */ }
 
 所有对调用方（CLI/TUI/UseCase）返回的结构体统一定义在 `internal/types/` 包中，按功能模块分子目录组织。
 
-- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/config/`、`types/common/`
+- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/setting/`、`types/sync/`、`types/remote/`、`types/common/`
 - **与 Models 区分**：Models 是数据库表映射，Types 是面向调用方的响应结构体
 - **Service/UseCase 负责 convert**：从 DAO 拿到 Models 结构体后，转换为 Types 结构体返回
 - **命名规范**：目录名即包名，结构体命名语义清晰，如 `types/snapshot.SnapshotDetail`

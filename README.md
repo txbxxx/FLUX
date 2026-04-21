@@ -113,11 +113,40 @@ fl setting list
 # 获取配置详情
 fl setting get claude-api
 
+# 编辑配置
+fl setting edit claude-api -t "sk-new-token"
+
 # 删除配置
 fl setting delete claude-api
 
 # 切换生效配置
 fl setting switch claude-api
+```
+
+管理远端仓库（remote 命令）：
+
+```powershell
+# 添加远端仓库
+fl remote add https://github.com/user/config.git --name origin
+
+# 列出远端仓库
+fl remote list
+
+# 删除远端仓库
+fl remote remove origin
+```
+
+同步配置（sync 命令）：
+
+```powershell
+# 推送到远端
+fl sync push --project claude-global
+
+# 从远端拉取
+fl sync pull --project claude-global
+
+# 查看同步状态
+fl sync status --project claude-global
 ```
 
 启动轻量 TUI：

@@ -140,7 +140,7 @@ func (dao *ExampleDAO) GetByID(id string) (*Example, error) { /* ... */ }
 
 对外返回的结构体统一定义在 `internal/types/` 包中，按功能模块组织：
 
-- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/config/`、`types/common/`
+- **按功能分目录**：`types/snapshot/`、`types/scan/`、`types/setting/`、`types/sync/`、`types/remote/`、`types/common/`
 - **与 Models 区分**：Models 是数据库表映射，Types 是面向调用方的响应结构体
 - **Service/UseCase 负责转换**：从 DAO 获取 Models 结构体后，转换为 Types 结构体返回
 
@@ -329,6 +329,7 @@ flux/
 │   │   └── usecase/
 │   │       ├── local_workflow.go   # 本地工作流：快照、扫描、浏览编排
 │   │       ├── config_browser.go   # 配置浏览器：目录浏览、文件读写
+│   │       ├── ai_setting.go       # AI 配置管理编排
 │   │       ├── remote_method.go    # 远端仓库操作编排
 │   │       ├── sync_method.go      # 同步操作编排
 │   │       └── update_method.go    # 更新操作编排
@@ -388,8 +389,7 @@ flux/
 │   │   │   ├── comparator.go       # 快照对比（预留）
 │   │   │   └── types.go            # 类型定义
 │   │   ├── sync/                   # 同步服务
-│   │   ├── setting/                # Setting 管理
-│   │   └── tool/                   # 工具检测
+│   │   └── setting/                # Setting 管理
 │   │
 │   └── models/                     # 数据模型 + DAO（同文件，仅表结构+CRUD）
 │       ├── snapshot.go             # Snapshot + SnapshotDAO
@@ -444,11 +444,11 @@ flux/
 | setting switch | `fl setting switch <name>` | — |
 | setting edit | `fl setting edit <name>` | `-e` 编辑器模式 `-n` 名称 `-t` Token `-a` API地址 `-o` Opus模型 `-s` Sonnet模型 |
 | snapshot create | `fl snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
-| snapshot list | `fl snapshot list` | `-l` 条数 `-o` 偏移 |
+| snapshot list | `fl snapshot list` | `-l` 条数 `-o` 偏移 `--format` 格式 |
 | snapshot delete | `fl snapshot delete <id-or-name>` | — |
-| snapshot update | `fl snapshot update <id-or-name>` | `-n` 名称 `-m` 说明 |
+| snapshot update | `fl snapshot update <id-or-name>` | `-m` 说明 |
 | snapshot restore | `fl snapshot restore <id-or-name>` | `--files` 选择性恢复 `--dry-run` 预览 `--force` 跳过确认 |
-| snapshot diff | `fl snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 |
+| snapshot diff | `fl snapshot diff <source-id> [<target-id>]` | `-v` 内容差异 `--side-by-side` 并排 `--tool` 工具过滤 `--path` 路径过滤 `--color` 颜色控制 `--format` 格式 |
 | remote add | `fl remote add <url>` | `--name` 名称 `--branch` 分支 `--auth` 认证类型 `--token` 令牌 `--ssh-key` SSH密钥 |
 | remote list | `fl remote list` | — |
 | remote remove | `fl remote remove <name>` | — |
