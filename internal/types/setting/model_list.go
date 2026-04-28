@@ -47,7 +47,8 @@ func NewModelListFromInput(inputs []string) (ModelList, error) {
 		return nil, fmt.Errorf("最多支持 %d 个模型，当前 %d 个", MaxModels, len(all))
 	}
 
-	// 去重（保留顺序）
+	// 去重（保留顺序：按首次出现的顺序保留每个模型）
+	// 使用 map[string]bool 检测重复，确保首个出现的模型被保留
 	seen := make(map[string]bool)
 	result := make(ModelList, 0, len(all))
 	for _, m := range all {

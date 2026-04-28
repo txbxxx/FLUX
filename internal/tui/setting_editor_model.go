@@ -225,12 +225,17 @@ func (m *SettingEditorModel) saveChanges() (tea.Model, tea.Cmd) {
 		tokenValue = m.original.Token
 	}
 
-	// 解析模型列表
+	// 解析模型列表（复用 NewModelListFromInput 支持多种输入格式）
 	var models []string
 	if modelsStr := (*m.inputs[3]).Value(); modelsStr != "" {
-		models = strings.Split(modelsStr, ",")
-		for i := range models {
-			models[i] = strings.TrimSpace(models[i])
+		// 支持逗号、空格分隔
+		parts := strings.FieldsFunc(modelsStr, func(r rune) bool {
+			return r == ',' || r == ' '
+		})
+		for _, part := range parts {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				models = append(models, trimmed)
+			}
 		}
 	}
 
