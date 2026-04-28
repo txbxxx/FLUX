@@ -419,11 +419,11 @@ Codex > skills\aiskills\README.md
 ### 8.1 命令概览
 
 ```powershell
-.\fl.exe setting create --name <name> --token <token> --api <api> [--opus-model <model>] [--sonnet-model <model>]
+.\fl.exe setting create --name <name> --token <token> --api <api> [--model <models>]
 .\fl.exe setting list [--limit <n>] [--offset <n>]
 .\fl.exe setting get <name> [name...]
 .\fl.exe setting delete <name> [name...]
-.\fl.exe setting switch <name>
+.\fl.exe setting switch <name> [--model <models>]
 .\fl.exe setting edit <name> [flags]
 ```
 
@@ -432,7 +432,7 @@ Codex > skills\aiskills\README.md
 创建新的 AI 配置并保存到本地数据库：
 
 ```powershell
-.\fl.exe setting create --name glm3 --token sk-ant-xxx --api https://api.anthropic.com --opus-model claude-3-opus-20240229 --sonnet-model claude-3-sonnet-20240229
+.\fl.exe setting create --name glm3 --token sk-ant-xxx --api https://api.anthropic.com --model "claude-3-opus-20240229,claude-3-sonnet-20240229"
 ```
 
 **必填参数**：
@@ -441,8 +441,7 @@ Codex > skills\aiskills\README.md
 - `--api`：API base URL（必填）
 
 **可选参数**：
-- `--opus-model`：Opus 模型（可选）
-- `--sonnet-model`：Sonnet 模型（可选）
+- `--model`：模型列表（1-6个，支持逗号/空格分隔或重复指定）
 - 至少需要指定一个模型
 
 ### 8.3 setting list：列出配置

@@ -449,12 +449,12 @@ flux/
 | scan list | `fl scan list [app-or-project]` | `--verbose/-v` 显示详细配置项 |
 | scan rules | `fl scan rules [app-or-project]` | — |
 | get | `fl get <project> [path]` | `--edit/-e` 编辑模式 `--snapshot/-s` 浏览快照 |
-| setting create | `fl setting create` | `--name` 名称 `--token` 令牌 `--api` API地址 `--opus-model` Opus模型 `--sonnet-model` Sonnet模型 |
+| setting create | `fl setting create` | `--name` 名称 `--token` 令牌 `--api` API地址 `--model` 模型列表（可重复/逗号/空格分隔，1-6个） |
 | setting list | `fl setting list` | `-l` 条数 `-o` 偏移 |
 | setting get | `fl setting get <name>` | — |
 | setting delete | `fl setting delete <name>` | — |
-| setting switch | `fl setting switch <name>` | — |
-| setting edit | `fl setting edit <name>` | `-e` 编辑器模式 `-n` 名称 `-t` Token `-a` API地址 `-o` Opus模型 `-s` Sonnet模型 |
+| setting switch | `fl setting switch <name>` | `--model` 模型列表（可选，覆盖激活的模型，最多3个） |
+| setting edit | `fl setting edit <name>` | `--name` 名称 `-t` Token `-a` API地址 `--model` 模型列表 |
 | snapshot create | `fl snapshot create` | `-t` 工具 `-m` 说明 `-n` 名称 `-p` 项目 |
 | snapshot list | `fl snapshot list` | `-l` 条数 `-o` 偏移 `--format` 格式 |
 | snapshot delete | `fl snapshot delete <id-or-name>` | — |
