@@ -61,6 +61,33 @@ func NewModelListFromInput(inputs []string) (ModelList, error) {
 	return result, nil
 }
 
+// FindDuplicates 检测输入中的重复模型，返回重复的模型名列表。
+func FindDuplicates(inputs []string) []string {
+	var all []string
+	for _, input := range inputs {
+		for _, part := range strings.Split(input, ",") {
+			for _, sub := range strings.Fields(strings.TrimSpace(part)) {
+				trimmed := strings.TrimSpace(sub)
+				if trimmed != "" {
+					all = append(all, trimmed)
+				}
+			}
+		}
+	}
+
+	seen := make(map[string]int)
+	var duplicates []string
+	for _, m := range all {
+		seen[m]++
+	}
+	for m, count := range seen {
+		if count > 1 {
+			duplicates = append(duplicates, m)
+		}
+	}
+	return duplicates
+}
+
 // NewSwitchModelListFromInput 解析 switch --model 输入，最多 3 个。
 func NewSwitchModelListFromInput(inputs []string) (ModelList, error) {
 	list, err := NewModelListFromInput(inputs)

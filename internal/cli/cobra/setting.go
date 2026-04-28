@@ -10,6 +10,7 @@ import (
 
 	"flux/internal/app/usecase"
 	"flux/internal/cli/output"
+	typesSetting "flux/internal/types/setting"
 )
 
 func newSettingCommand(deps Dependencies) *spcobra.Command {
@@ -170,6 +171,12 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 		Args:  validateExactOneArg("fl setting switch <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			models, _ := cmd.Flags().GetStringSlice("model")
+
+			// 检测重复模型名并显示警告
+			if dupes := typesSetting.FindDuplicates(models); len(dupes) > 0 {
+				fmt.Fprintf(cmd.OutOrStderr(), "警告：检测到重复模型名，已自动去重：%s\n", strings.Join(dupes, ", "))
+			}
+
 			result, err := deps.Workflow.SwitchAISetting(cmd.Context(), usecase.SwitchAISettingInput{
 				Name:   args[0],
 				Models: models,
