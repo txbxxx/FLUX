@@ -286,13 +286,8 @@ logger.Info("操作开始", zap.String("snapshot_id", id), zap.Int("file_count",
 <type>: <中文简要描述> - <需求名称>
 ```
 
-**需求来源**：
-- 飞书需求文档（优先）
-- docs/plans/ 下的 PRD 文档名称
-- Issue 标题（如有）
-
 **示例**：
-- `feat: AI 配置支持多模型列表 - AI配置多模型支持与上下文设置PRD v2`
+- `feat: AI 配置支持多模型列表 - AI配置多模型支持与上下文设置`
 - `fix: snapshot restore dry-run 输出优化 - 快照恢复dry-run模式输出优化`
 
 ### 示例
