@@ -12,8 +12,8 @@ import (
 
 // newSettingEditCommand 创建 edit 子命令。
 func newSettingEditCommand(deps Dependencies) *spcobra.Command {
-	var newName, token, api, opusModel, sonnetModel string
-	var useEditor bool
+	var newName, token, api string
+	var models []string
 
 	command := &spcobra.Command{
 		Use:   "edit <name>",
@@ -22,19 +22,13 @@ func newSettingEditCommand(deps Dependencies) *spcobra.Command {
 		RunE: func(cmd *spcobra.Command, args []string) error {
 			name := args[0]
 
-			// 编辑器模式
-			if useEditor {
-				return runSettingEditorMode(cmd, deps, name)
-			}
-
 			// 命令行参数模式
 			result, err := deps.Workflow.EditAISetting(cmd.Context(), usecase.EditAISettingInput{
-				Name:        name,
-				NewName:     newName,
-				Token:       token,
-				BaseURL:     api,
-				OpusModel:   opusModel,
-				SonnetModel: sonnetModel,
+				Name:    name,
+				NewName: newName,
+				Token:   token,
+				BaseURL: api,
+				Models:  models,
 			})
 			if err != nil {
 				return err
@@ -48,9 +42,7 @@ func newSettingEditCommand(deps Dependencies) *spcobra.Command {
 	command.Flags().StringVar(&newName, "name", "", "新名称")
 	command.Flags().StringVarP(&token, "token", "t", "", "新 Token")
 	command.Flags().StringVarP(&api, "api", "a", "", "新 API base URL")
-	command.Flags().StringVarP(&opusModel, "opus-model", "o", "", "新 Opus 模型")
-	command.Flags().StringVarP(&sonnetModel, "sonnet-model", "s", "", "新 Sonnet 模型")
-	command.Flags().BoolVarP(&useEditor, "editor", "e", false, "使用 TUI 编辑器模式")
+	command.Flags().StringSliceVar(&models, "model", nil, "新模型列表")
 
 	return command
 }
@@ -81,4 +73,3 @@ func printEditResult(w io.Writer, result *usecase.EditAISettingResult) {
 
 	fmt.Fprintf(w, "\n更新时间: %s\n", result.UpdatedAt.Format(time.RFC3339))
 }
-

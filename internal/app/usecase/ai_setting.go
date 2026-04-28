@@ -26,11 +26,10 @@ type AISettingManager interface {
 
 // CreateAISettingInput 创建 AI 配置的输入。
 type CreateAISettingInput struct {
-	Name        string // 配置名称，必填
-	Token       string // Auth token，必填
-	BaseURL     string // API base URL，必填
-	OpusModel   string // Opus 模型，可选
-	SonnetModel string // Sonnet 模型，可选
+	Name    string   // 配置名称，必填
+	Token   string   // Auth token，必填
+	BaseURL string   // API base URL，必填
+	Models  []string // 模型列表，至少1个，最多6个
 }
 
 // CreateAISettingResult 创建配置的返回值。
@@ -63,7 +62,8 @@ type DeleteAISettingInput struct {
 
 // SwitchAISettingInput 切换配置的输入。
 type SwitchAISettingInput struct {
-	Name string // 要切换到的配置名称，必填
+	Name   string   // 要切换到的配置名称，必填
+	Models []string // 可选：覆盖要激活的模型（最多3个），默认使用配置中存储的模型
 }
 
 // SwitchAISettingResult 切换配置的返回值。
@@ -112,14 +112,13 @@ func (w *LocalWorkflow) CreateAISetting(_ context.Context, input CreateAISetting
 		}
 	}
 
-	// 校验模型：至少填一个
-	opusModel := strings.TrimSpace(input.OpusModel)
-	sonnetModel := strings.TrimSpace(input.SonnetModel)
-	if opusModel == "" && sonnetModel == "" {
+	// 校验模型：至少填一个，最多6个
+	models, err := typesSetting.NewModelListFromInput(input.Models)
+	if err != nil {
 		return nil, &UserError{
-			Message:    "创建配置失败：至少需要指定一个模型",
-			Suggestion: "请通过 --opus-model 或 --sonnet-model 参数指定至少一个模型",
-			Err:        errors.New("no model specified"),
+			Message:    "创建配置失败：" + err.Error(),
+			Suggestion: "请通过 --model 参数指定至少一个模型（最多6个）",
+			Err:        err,
 		}
 	}
 
@@ -137,14 +136,13 @@ func (w *LocalWorkflow) CreateAISetting(_ context.Context, input CreateAISetting
 
 	// 创建配置
 	setting := &typesSetting.AISettingRecord{
-		ID:          0, // GORM 自动生成自增 ID
-		Name:        name,
-		Token:       token,
-		BaseURL:     baseURL,
-		OpusModel:   opusModel,
-		SonnetModel: sonnetModel,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		ID:        0, // GORM 自动生成自增 ID
+		Name:      name,
+		Token:     token,
+		BaseURL:   baseURL,
+		Models:    models,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	if w.aiSettingManager == nil {
@@ -208,8 +206,7 @@ func (w *LocalWorkflow) ListAISettings(_ context.Context, input ListAISettingsIn
 			ID:          setting.ID,
 			Name:        setting.Name,
 			BaseURL:     setting.BaseURL,
-			OpusModel:   setting.OpusModel,
-			SonnetModel: setting.SonnetModel,
+			Models:    setting.Models,
 			IsCurrent:   isCurrent,
 		})
 	}
@@ -265,8 +262,7 @@ func (w *LocalWorkflow) GetAISetting(_ context.Context, input GetAISettingInput)
 			Name:        setting.Name,
 			Token:       setting.Token,
 			BaseURL:     setting.BaseURL,
-			OpusModel:   setting.OpusModel,
-			SonnetModel: setting.SonnetModel,
+			Models: setting.Models,
 			CreatedAt:   setting.CreatedAt,
 			UpdatedAt:   setting.UpdatedAt,
 		},
@@ -363,14 +359,30 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 		}
 	}
 
+	// 确定要激活的模型列表
+	targetModels := target.Models
+	if len(input.Models) > 0 {
+		var err error
+		targetModels, err = typesSetting.NewSwitchModelListFromInput(input.Models)
+		if err != nil {
+			return nil, &UserError{
+				Message:    "切换配置失败：" + err.Error(),
+				Suggestion: "请指定有效的模型列表",
+				Err:        err,
+			}
+		}
+	}
+
 	// 第四步：构建新的 settings.json 内容
 	newSettings := map[string]any{
 		"env": map[string]string{
-			"ANTHROPIC_AUTH_TOKEN":           target.Token,
-			"ANTHROPIC_BASE_URL":             target.BaseURL,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   target.OpusModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": target.SonnetModel,
+			"ANTHROPIC_AUTH_TOKEN": target.Token,
+			"ANTHROPIC_BASE_URL":   target.BaseURL,
 		},
+	}
+	// 添加模型环境变量
+	for key, value := range targetModels.ToEnvVars() {
+		newSettings["env"].(map[string]string)[key] = value
 	}
 
 	// 第五步：读取现有配置并保留其他字段
@@ -427,7 +439,6 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 		BackupPath:   backupPath,
 	}, nil
 }
-
 // WithAISettingManager 以链式方式补充 AI 配置管理依赖。
 func (w *LocalWorkflow) WithAISettingManager(manager AISettingManager) *LocalWorkflow {
 	w.aiSettingManager = manager
@@ -681,11 +692,10 @@ func extractErrorMessage(err error) string {
 // EditAISettingInput 编辑配置的输入。
 type EditAISettingInput struct {
 	Name        string // 配置名称，必填
-	NewName     string // 新名称，可选
-	Token       string // 新 Token，可选
-	BaseURL     string // 新 API 地址，可选
-	OpusModel   string // 新 Opus 模型，可选
-	SonnetModel string // 新 Sonnet 模型，可选
+	NewName string   // 新名称，可选
+	Token   string   // 新 Token，可选
+	BaseURL string   // 新 API 地址，可选
+	Models  []string // 新模型列表，可选
 }
 
 // EditAISettingResult 编辑配置的返回值。
@@ -733,14 +743,13 @@ func (w *LocalWorkflow) EditAISetting(_ context.Context, input EditAISettingInpu
 
 	// 构建更新数据
 	updated := &typesSetting.AISettingRecord{
-		ID:          existing.ID,
-		Name:        existing.Name,
-		Token:       existing.Token,
-		BaseURL:     existing.BaseURL,
-		OpusModel:   existing.OpusModel,
-		SonnetModel: existing.SonnetModel,
-		CreatedAt:   existing.CreatedAt,
-		UpdatedAt:   time.Now(),
+		ID:        existing.ID,
+		Name:      existing.Name,
+		Token:     existing.Token,
+		BaseURL:   existing.BaseURL,
+		Models:    existing.Models,
+		CreatedAt: existing.CreatedAt,
+		UpdatedAt: time.Now(),
 	}
 
 	changes := make([]typesSetting.FieldChange, 0)
@@ -808,36 +817,28 @@ func (w *LocalWorkflow) EditAISetting(_ context.Context, input EditAISettingInpu
 		updated.BaseURL = existing.BaseURL
 	}
 
-	// 处理 OpusModel
-	if input.OpusModel != "" && input.OpusModel != "<unchanged>" {
-		// 新值：比较是否真的有变化
-		if input.OpusModel != existing.OpusModel {
+	// 处理 Models
+	if len(input.Models) > 0 {
+		newModels, err := typesSetting.NewModelListFromInput(input.Models)
+		if err != nil {
+			return nil, &UserError{
+				Message:    "编辑配置失败：" + err.Error(),
+				Suggestion: "请指定有效的模型列表（1-6个）",
+				Err:        err,
+			}
+		}
+		// 比较是否真的有变化
+		if !modelsEqual(newModels, existing.Models) {
 			changes = append(changes, typesSetting.FieldChange{
-				Field:    "opus_model",
-				OldValue: existing.OpusModel,
-				NewValue: input.OpusModel,
+				Field:    "models",
+				OldValue: strings.Join(existing.Models, ", "),
+				NewValue: strings.Join(newModels, ", "),
 			})
-			updated.OpusModel = input.OpusModel
+			updated.Models = newModels
 		}
 	} else {
-		// <unchanged> 或空字符串：保持原值
-		updated.OpusModel = existing.OpusModel
-	}
-
-	// 处理 SonnetModel
-	if input.SonnetModel != "" && input.SonnetModel != "<unchanged>" {
-		// 新值：比较是否真的有变化
-		if input.SonnetModel != existing.SonnetModel {
-			changes = append(changes, typesSetting.FieldChange{
-				Field:    "sonnet_model",
-				OldValue: existing.SonnetModel,
-				NewValue: input.SonnetModel,
-			})
-			updated.SonnetModel = input.SonnetModel
-		}
-	} else {
-		// <unchanged> 或空字符串：保持原值
-		updated.SonnetModel = existing.SonnetModel
+		// 空列表：保持原值
+		updated.Models = existing.Models
 	}
 
 	// 如果没有任何变更
@@ -878,4 +879,17 @@ func maskTokenForDisplay(token string) string {
 		return "****"
 	}
 	return ""
+}
+
+// modelsEqual 比较两个模型列表是否相等。
+func modelsEqual(a, b typesSetting.ModelList) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
