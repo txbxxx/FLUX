@@ -256,7 +256,7 @@ func buildSettingTable(result *usecase.ListAISettingsResult) *output.Table {
 		Columns: []output.Column{
 			{Title: "名称"},
 			{Title: "Base URL"},
-			{Title: "模型数"},
+			{Title: "模型"},
 			{Title: "当前"},
 		},
 		Footer: fmt.Sprintf("当前生效配置: %s", result.Current),
@@ -266,8 +266,9 @@ func buildSettingTable(result *usecase.ListAISettingsResult) *output.Table {
 		if item.IsCurrent {
 			name = "* " + name
 		}
+		modelsStr := strings.Join(item.Models, ", ")
 		tbl.Rows = append(tbl.Rows, output.Row{
-			Cells:     []string{name, item.BaseURL, fmt.Sprintf("%d", item.ModelCount)},
+			Cells:     []string{name, item.BaseURL, modelsStr},
 			Highlight: item.IsCurrent,
 		})
 	}

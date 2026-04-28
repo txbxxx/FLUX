@@ -2,11 +2,11 @@ package setting
 
 // AISettingListItem 表示配置列表中的单个条目。
 type AISettingListItem struct {
-	ID         uint   `json:"id" yaml:"id"`
-	Name       string `json:"name" yaml:"name"`
-	BaseURL    string `json:"base_url" yaml:"base_url"`
-	ModelCount int    `json:"model_count" yaml:"model_count"` // 模型数量
-	IsCurrent  bool   `json:"is_current" yaml:"is_current"`   // 是否为当前生效配置
+	ID        uint     `json:"id" yaml:"id"`
+	Name      string   `json:"name" yaml:"name"`
+	BaseURL   string   `json:"base_url" yaml:"base_url"`
+	Models    ModelList `json:"models" yaml:"models"`     // 模型列表
+	IsCurrent bool     `json:"is_current" yaml:"is_current"` // 是否为当前生效配置
 }
 
 // AISettingListResult 表示配置列表的查询结果。

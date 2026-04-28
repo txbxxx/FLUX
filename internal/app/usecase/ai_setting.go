@@ -206,7 +206,7 @@ func (w *LocalWorkflow) ListAISettings(_ context.Context, input ListAISettingsIn
 			ID:          setting.ID,
 			Name:        setting.Name,
 			BaseURL:     setting.BaseURL,
-			ModelCount: len(setting.Models),
+			Models:    setting.Models,
 			IsCurrent:   isCurrent,
 		})
 	}
