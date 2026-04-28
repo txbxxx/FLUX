@@ -169,8 +169,10 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 		Short: "切换到指定的配置",
 		Args:  validateExactOneArg("fl setting switch <name>"),
 		RunE: func(cmd *spcobra.Command, args []string) error {
+			models, _ := cmd.Flags().GetStringSlice("model")
 			result, err := deps.Workflow.SwitchAISetting(cmd.Context(), usecase.SwitchAISettingInput{
-				Name: args[0],
+				Name:   args[0],
+				Models: models,
 			})
 			if err != nil {
 				return err
@@ -180,6 +182,8 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 			return nil
 		},
 	}
+
+	switchCommand.Flags().StringSlice("model", nil, "可选：覆盖激活的模型（最多3个）")
 
 	editCommand := newSettingEditCommand(deps)
 
