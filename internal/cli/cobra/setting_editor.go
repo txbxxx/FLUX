@@ -133,8 +133,7 @@ func generateEditorTemplate(setting *usecase.GetAISettingResult, format string) 
 		Name:        setting.Name,
 		Token:       "<unchanged>", // 占位符表示保持原值
 		BaseURL:     setting.BaseURL,
-		OpusModel:   setting.OpusModel,
-		SonnetModel: setting.SonnetModel,
+		Models:  setting.Models,
 	}
 
 	var content string
@@ -193,8 +192,7 @@ func parseEditedContent(originalName, content, format string) (*usecase.EditAISe
 		NewName:     template.Name,
 		Token:       template.Token,
 		BaseURL:     template.BaseURL,
-		OpusModel:   template.OpusModel,
-		SonnetModel: template.SonnetModel,
+		Models:  template.Models,
 	}
 
 	return input, nil

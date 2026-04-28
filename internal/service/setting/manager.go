@@ -19,15 +19,14 @@ func NewAISettingManager(dao *models.AISettingDAO) *AISettingManager {
 // Create 创建 AI 配置。
 func (m *AISettingManager) Create(setting *typesSetting.AISettingRecord) error {
 	model := &models.AISetting{
-		ID:          setting.ID,
-		Name:        setting.Name,
-		Token:       setting.Token,
-		BaseURL:     setting.BaseURL,
-		OpusModel:   setting.OpusModel,
-		SonnetModel: setting.SonnetModel,
-		CreatedAt:   setting.CreatedAt,
-		UpdatedAt:   setting.UpdatedAt,
+		ID:        setting.ID,
+		Name:      setting.Name,
+		Token:     setting.Token,
+		BaseURL:   setting.BaseURL,
+		CreatedAt: setting.CreatedAt,
+		UpdatedAt: setting.UpdatedAt,
 	}
+	model.SetModels(setting.Models)
 	return m.dao.Create(model)
 }
 
@@ -38,14 +37,13 @@ func (m *AISettingManager) GetByName(name string) (*typesSetting.AISettingRecord
 		return nil, err
 	}
 	return &typesSetting.AISettingRecord{
-		ID:          model.ID,
-		Name:        model.Name,
-		Token:       model.Token,
-		BaseURL:     model.BaseURL,
-		OpusModel:   model.OpusModel,
-		SonnetModel: model.SonnetModel,
-		CreatedAt:   model.CreatedAt,
-		UpdatedAt:   model.UpdatedAt,
+		ID:        model.ID,
+		Name:      model.Name,
+		Token:     model.Token,
+		BaseURL:   model.BaseURL,
+		Models:    model.GetModels(),
+		CreatedAt: model.CreatedAt,
+		UpdatedAt: model.UpdatedAt,
 	}, nil
 }
 
@@ -58,14 +56,13 @@ func (m *AISettingManager) List() ([]*typesSetting.AISettingRecord, error) {
 	records := make([]*typesSetting.AISettingRecord, 0, len(models))
 	for _, model := range models {
 		records = append(records, &typesSetting.AISettingRecord{
-			ID:          model.ID,
-			Name:        model.Name,
-			Token:       model.Token,
-			BaseURL:     model.BaseURL,
-			OpusModel:   model.OpusModel,
-			SonnetModel: model.SonnetModel,
-			CreatedAt:   model.CreatedAt,
-			UpdatedAt:   model.UpdatedAt,
+			ID:        model.ID,
+			Name:      model.Name,
+			Token:     model.Token,
+			BaseURL:   model.BaseURL,
+			Models:    model.GetModels(),
+			CreatedAt: model.CreatedAt,
+			UpdatedAt: model.UpdatedAt,
 		})
 	}
 	return records, nil
@@ -80,14 +77,13 @@ func (m *AISettingManager) ListPaginated(limit, offset int) ([]*typesSetting.AIS
 	records := make([]*typesSetting.AISettingRecord, 0, len(models))
 	for _, model := range models {
 		records = append(records, &typesSetting.AISettingRecord{
-			ID:          model.ID,
-			Name:        model.Name,
-			Token:       model.Token,
-			BaseURL:     model.BaseURL,
-			OpusModel:   model.OpusModel,
-			SonnetModel: model.SonnetModel,
-			CreatedAt:   model.CreatedAt,
-			UpdatedAt:   model.UpdatedAt,
+			ID:        model.ID,
+			Name:      model.Name,
+			Token:     model.Token,
+			BaseURL:   model.BaseURL,
+			Models:    model.GetModels(),
+			CreatedAt: model.CreatedAt,
+			UpdatedAt: model.UpdatedAt,
 		})
 	}
 	return records, total, nil
@@ -101,14 +97,13 @@ func (m *AISettingManager) Delete(name string) error {
 // UpdateByName 按名称更新 AI 配置。
 func (m *AISettingManager) UpdateByName(oldName string, record *typesSetting.AISettingRecord) error {
 	model := &models.AISetting{
-		ID:          record.ID,
-		Name:        record.Name,
-		Token:       record.Token,
-		BaseURL:     record.BaseURL,
-		OpusModel:   record.OpusModel,
-		SonnetModel: record.SonnetModel,
-		CreatedAt:   record.CreatedAt,
-		UpdatedAt:   record.UpdatedAt,
+		ID:        record.ID,
+		Name:      record.Name,
+		Token:     record.Token,
+		BaseURL:   record.BaseURL,
+		CreatedAt: record.CreatedAt,
+		UpdatedAt: record.UpdatedAt,
 	}
+	model.SetModels(record.Models)
 	return m.dao.UpdateByName(oldName, model)
 }

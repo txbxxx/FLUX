@@ -1,9 +1,11 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"flux/pkg/database"
+	typesSetting "flux/internal/types/setting"
 )
 
 // AISetting 表示保存的 AI 配置。
@@ -12,8 +14,9 @@ type AISetting struct {
 	Name        string    `json:"name" db:"name" gorm:"column:name;not null;uniqueIndex"`
 	Token       string    `json:"token" db:"token" gorm:"column:token;not null"`
 	BaseURL     string    `json:"base_url" db:"base_url" gorm:"column:base_url"`
-	OpusModel   string    `json:"opus_model" db:"opus_model" gorm:"column:opus_model"`
-	SonnetModel string    `json:"sonnet_model" db:"sonnet_model" gorm:"column:sonnet_model"`
+	OpusModel   string    `json:"opus_model" db:"opus_model" gorm:"column:opus_model"`       // 保留用于迁移读取
+	SonnetModel string    `json:"sonnet_model" db:"sonnet_model" gorm:"column:sonnet_model"`  // 保留用于迁移读取
+	ModelsJSON  string    `json:"models_json" db:"models_json" gorm:"column:models_json"`      // 新字段：JSON 数组
 	CreatedAt   time.Time `json:"created_at" db:"created_at" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
 }
@@ -42,6 +45,7 @@ func (dao *AISettingDAO) GetByName(name string) (*AISetting, error) {
 	if err != nil {
 		return nil, err
 	}
+	dao.migrateModelsIfNeeded(&setting)
 	return &setting, nil
 }
 
@@ -53,6 +57,9 @@ func (dao *AISettingDAO) List() ([]*AISetting, error) {
 		Find(&settings).Error
 	if err != nil {
 		return nil, err
+	}
+	for _, s := range settings {
+		dao.migrateModelsIfNeeded(s)
 	}
 	return settings, nil
 }
@@ -75,6 +82,10 @@ func (dao *AISettingDAO) ListPaginated(limit, offset int) ([]*AISetting, int, er
 	}
 	if err := query.Find(&settings).Error; err != nil {
 		return nil, 0, err
+	}
+
+	for _, s := range settings {
+		dao.migrateModelsIfNeeded(s)
 	}
 
 	return settings, int(total), nil
@@ -129,6 +140,42 @@ func (dao *AISettingDAO) UpdateByName(oldName string, setting *AISetting) error 
 	}
 
 	return tx.Commit().Error
+}
+
+// GetModels 获取模型列表。
+// 优先从 ModelsJSON 读取，否则回退到旧的 OpusModel+SonnetModel 字段。
+func (s *AISetting) GetModels() typesSetting.ModelList {
+	if s.ModelsJSON != "" {
+		var list typesSetting.ModelList
+		if err := json.Unmarshal([]byte(s.ModelsJSON), &list); err == nil {
+			return list
+		}
+	}
+	// 回退到旧字段
+	return typesSetting.ModelListFromOldFields(s.OpusModel, s.SonnetModel)
+}
+
+// SetModels 设置模型列表，序列化到 ModelsJSON。
+func (s *AISetting) SetModels(models typesSetting.ModelList) {
+	data, err := json.Marshal([]string(models))
+	if err != nil {
+		s.ModelsJSON = "[]"
+		return
+	}
+	s.ModelsJSON = string(data)
+}
+
+// migrateModelsIfNeeded 惰性迁移：当 ModelsJSON 为空且旧字段有值时，自动迁移。
+func (dao *AISettingDAO) migrateModelsIfNeeded(setting *AISetting) {
+	if setting.ModelsJSON == "" && (setting.OpusModel != "" || setting.SonnetModel != "") {
+		models := typesSetting.ModelListFromOldFields(setting.OpusModel, setting.SonnetModel)
+		setting.SetModels(models)
+		// 只更新 models_json 列
+		dao.db.GetConn().
+			Model(&AISetting{}).
+			Where("id = ?", setting.ID).
+			Update("models_json", setting.ModelsJSON)
+	}
 }
 
 // ErrRecordNotFound 表示记录未找到的错误。

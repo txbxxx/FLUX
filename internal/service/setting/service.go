@@ -28,12 +28,11 @@ func NewService(dao DAO) *Service {
 
 // EditInput 编辑输入。
 type EditInput struct {
-	Name        string
-	NewName     string
-	Token       string
-	BaseURL     string
-	OpusModel   string
-	SonnetModel string
+	Name    string
+	NewName string
+	Token   string
+	BaseURL string
+	Models  []string
 }
 
 // EditOutput 编辑输出。
@@ -54,12 +53,11 @@ func (s *Service) Edit(ctx context.Context, input EditInput) (*EditOutput, error
 
 	changes := make([]setting.FieldChange, 0)
 	updated := &models.AISetting{
-		ID:          existing.ID,
-		Name:        existing.Name,
-		Token:       existing.Token,
-		BaseURL:     existing.BaseURL,
-		OpusModel:   existing.OpusModel,
-		SonnetModel: existing.SonnetModel,
+		ID:        existing.ID,
+		Name:      existing.Name,
+		Token:     existing.Token,
+		BaseURL:   existing.BaseURL,
+		CreatedAt: existing.CreatedAt,
 	}
 
 	// 处理名称变更
@@ -84,6 +82,8 @@ func (s *Service) Edit(ctx context.Context, input EditInput) (*EditOutput, error
 			NewValue: maskToken(input.Token),
 		})
 		updated.Token = input.Token
+	} else {
+		updated.Token = existing.Token
 	}
 
 	// 处理 BaseURL 变更
@@ -94,27 +94,27 @@ func (s *Service) Edit(ctx context.Context, input EditInput) (*EditOutput, error
 			NewValue: input.BaseURL,
 		})
 		updated.BaseURL = input.BaseURL
+	} else {
+		updated.BaseURL = existing.BaseURL
 	}
 
-	// 处理 OpusModel 变更
-	if input.OpusModel != "" {
-		changes = append(changes, setting.FieldChange{
-			Field:    "opus_model",
-			OldValue: existing.OpusModel,
-			NewValue: input.OpusModel,
-		})
-		updated.OpusModel = input.OpusModel
+	// 处理 Models 变更
+	if input.Models != nil {
+		oldModels := existing.GetModels()
+		newModelsStr := fmt.Sprintf("%v", input.Models)
+		oldModelsStr := fmt.Sprintf("%v", []string(oldModels))
+		if newModelsStr != oldModelsStr {
+			changes = append(changes, setting.FieldChange{
+				Field:    "models",
+				OldValue: oldModelsStr,
+				NewValue: newModelsStr,
+			})
+		}
+		updated.SetModels(existing.GetModels()) // 暂时保持不变，由 usecase 处理转换
+	} else {
+		updated.SetModels(existing.GetModels())
 	}
-
-	// 处理 SonnetModel 变更
-	if input.SonnetModel != "" {
-		changes = append(changes, setting.FieldChange{
-			Field:    "sonnet_model",
-			OldValue: existing.SonnetModel,
-			NewValue: input.SonnetModel,
-		})
-		updated.SonnetModel = input.SonnetModel
-	}
+	updated.UpdatedAt = time.Now()
 
 	// 如果没有任何变更，直接返回
 	if len(changes) == 0 {

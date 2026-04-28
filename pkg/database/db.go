@@ -680,7 +680,7 @@ func (db *DB) migrateLegacySchema() error {
 	if err := insertSimple("registered_projects", "tool_type, project_name, project_path, created_at, updated_at", registeredProjects); err != nil {
 		return err
 	}
-	if err := insertSimple("ai_settings", "name, token, base_url, opus_model, sonnet_model, created_at, updated_at", aiSettings); err != nil {
+	if err := insertSimple("ai_settings", "name, token, base_url, opus_model, sonnet_model, models_json, created_at, updated_at", aiSettings); err != nil {
 		return err
 	}
 	if err := insertSimple("app_settings", "version, remote_config_id, sync_auto_sync, sync_interval, sync_conflict_policy, sync_excludes, sync_includes, encryption_enabled, encryption_algorithm, encryption_key_path, ui_theme, ui_language, ui_auto_start, ui_minimize_to_tray, notifications_enabled, notifications_sync_success, notifications_sync_failure, notifications_conflict, notifications_new_snapshot, notifications_sound, created_at, updated_at", appSettings); err != nil {
@@ -723,6 +723,7 @@ func (db *DB) alterTables(tx *gorm.DB) error {
 	alterSQL := []string{
 		"ALTER TABLE snapshot_files ADD COLUMN is_symlink INTEGER DEFAULT 0",
 		"ALTER TABLE snapshot_files ADD COLUMN link_target TEXT DEFAULT ''",
+		"ALTER TABLE ai_settings ADD COLUMN models_json TEXT DEFAULT ''",
 	}
 	for _, sql := range alterSQL {
 		// SQLite 不支持 IF NOT EXISTS for ALTER TABLE ADD COLUMN，
@@ -901,6 +902,7 @@ func (db *DB) createTables(tx *gorm.DB) error {
 				base_url TEXT,
 				opus_model TEXT,
 				sonnet_model TEXT,
+				models_json TEXT DEFAULT '',
 				created_at DATETIME NOT NULL,
 				updated_at DATETIME NOT NULL
 			)`,
@@ -1186,6 +1188,7 @@ type aiSettingRecord struct {
 	BaseURL     string    `gorm:"column:base_url"`
 	OpusModel   string    `gorm:"column:opus_model"`
 	SonnetModel string    `gorm:"column:sonnet_model"`
+		ModelsJSON  string    `gorm:"column:models_json"`
 	CreatedAt   time.Time `gorm:"column:created_at;not null"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;not null;autoUpdateTime"`
 }

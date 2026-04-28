@@ -12,10 +12,8 @@ type EditAISettingInput struct {
 	Token string
 	// BaseURL 是新 API 地址（可选，留空表示不修改）
 	BaseURL string
-	// OpusModel 是新 Opus 模型（可选，留空表示不修改）
-	OpusModel string
-	// SonnetModel 是新 Sonnet 模型（可选，留空表示不修改）
-	SonnetModel string
+	// Models 是新模型列表（可选，留空表示不修改）
+	Models []string
 	// UseEditor 是否使用编辑器模式
 	UseEditor bool
 	// Format 编辑器模式文件格式：yaml 或 json（默认 yaml）
@@ -40,9 +38,8 @@ type FieldChange struct {
 
 // EditorTemplate 编辑器模式模板内容。
 type EditorTemplate struct {
-	Name        string `json:"name" yaml:"name"`
-	Token       string `json:"token" yaml:"token"`
-	BaseURL     string `json:"base_url" yaml:"base_url"`
-	OpusModel   string `json:"opus_model" yaml:"opus_model"`
-	SonnetModel string `json:"sonnet_model" yaml:"sonnet_model"`
+	Name    string   `json:"name" yaml:"name"`
+	Token   string   `json:"token" yaml:"token"`
+	BaseURL string   `json:"base_url" yaml:"base_url"`
+	Models  []string `json:"models" yaml:"models"`
 }

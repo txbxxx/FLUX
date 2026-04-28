@@ -47,18 +47,17 @@ type SettingEditorModel struct {
 // newSettingEditorModel 创建 setting 编辑器模型。
 func newSettingEditorModel(original *usecase.GetAISettingResult, save func(*usecase.EditAISettingInput) error) *SettingEditorModel {
 	var inputs []*textinput.Model
-	labels := []string{"配置名称", "Token", "API 地址", "Opus 模型", "Sonnet 模型"}
-	placeholders := []string{"配置名称", "Token（<unchanged> 保持原值）", "API 地址", "Opus 模型", "Sonnet 模型"}
+	labels := []string{"配置名称", "Token", "API 地址", "模型列表"}
+	placeholders := []string{"配置名称", "Token（<unchanged> 保持原值）", "API 地址", "模型列表"}
 
 	values := []string{
 		original.Name,
 		maskTokenForEditor(original.Token),
 		original.BaseURL,
-		original.OpusModel,
-		original.SonnetModel,
+		strings.Join(original.Models, ", "),
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 4; i++ {
 		ti := textinput.New()
 		ti.Placeholder = placeholders[i]
 		ti.SetValue(values[i])
@@ -226,13 +225,21 @@ func (m *SettingEditorModel) saveChanges() (tea.Model, tea.Cmd) {
 		tokenValue = m.original.Token
 	}
 
+	// 解析模型列表
+	var models []string
+	if modelsStr := (*m.inputs[3]).Value(); modelsStr != "" {
+		models = strings.Split(modelsStr, ",")
+		for i := range models {
+			models[i] = strings.TrimSpace(models[i])
+		}
+	}
+
 	input := &usecase.EditAISettingInput{
-		Name:        m.original.Name,
-		NewName:     (*m.inputs[0]).Value(),
-		Token:       tokenValue,
-		BaseURL:     (*m.inputs[2]).Value(),
-		OpusModel:   (*m.inputs[3]).Value(),
-		SonnetModel: (*m.inputs[4]).Value(),
+		Name:    m.original.Name,
+		NewName: (*m.inputs[0]).Value(),
+		Token:   tokenValue,
+		BaseURL: (*m.inputs[2]).Value(),
+		Models:  models,
 	}
 
 	if m.save != nil {

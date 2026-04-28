@@ -3,6 +3,7 @@ package cobra
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	spcobra "github.com/spf13/cobra"
@@ -25,19 +26,18 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 		Use:   "create",
 		Short: "创建新的 AI 配置",
 		RunE: func(cmd *spcobra.Command, _ []string) error {
-			var name, token, api, opusModel, sonnetModel string
+			var name, token, api string
+			var models []string
 			name, _ = cmd.Flags().GetString("name")
 			token, _ = cmd.Flags().GetString("token")
 			api, _ = cmd.Flags().GetString("api")
-			opusModel, _ = cmd.Flags().GetString("opus-model")
-			sonnetModel, _ = cmd.Flags().GetString("sonnet-model")
+			models, _ = cmd.Flags().GetStringSlice("model")
 
 			result, err := deps.Workflow.CreateAISetting(cmd.Context(), usecase.CreateAISettingInput{
-				Name:        name,
-				Token:       token,
-				BaseURL:     api,
-				OpusModel:   opusModel,
-				SonnetModel: sonnetModel,
+				Name:    name,
+				Token:   token,
+				BaseURL: api,
+				Models:  models,
 			})
 			if err != nil {
 				return err
@@ -50,8 +50,7 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 	createCommand.Flags().String("name", "", "配置名称（必填）")
 	createCommand.Flags().String("token", "", "Auth token（必填）")
 	createCommand.Flags().String("api", "", "API base URL（必填）")
-	createCommand.Flags().String("opus-model", "", "Opus 模型（可选）")
-	createCommand.Flags().String("sonnet-model", "", "Sonnet 模型（可选）")
+	createCommand.Flags().StringSlice("model", nil, "模型列表（可重复指定，最多6个）")
 	createCommand.MarkFlagRequired("name")
 	createCommand.MarkFlagRequired("token")
 	createCommand.MarkFlagRequired("api")
@@ -203,11 +202,8 @@ func printSettingDetail(w io.Writer, result *usecase.GetAISettingResult) {
 	fmt.Fprintf(w, "Token: %s\n", maskedToken)
 
 	fmt.Fprintf(w, "Base URL: %s\n", result.BaseURL)
-	if result.OpusModel != "" {
-		fmt.Fprintf(w, "Opus 模型: %s\n", result.OpusModel)
-	}
-	if result.SonnetModel != "" {
-		fmt.Fprintf(w, "Sonnet 模型: %s\n", result.SonnetModel)
+	if len(result.Models) > 0 {
+		fmt.Fprintf(w, "模型列表: %s\n", strings.Join(result.Models, ", "))
 	}
 	if result.IsCurrent {
 		fmt.Fprintln(w, "当前生效: 是")
@@ -260,8 +256,8 @@ func buildSettingTable(result *usecase.ListAISettingsResult) *output.Table {
 		Columns: []output.Column{
 			{Title: "名称"},
 			{Title: "Base URL"},
-			{Title: "Opus 模型"},
-			{Title: "Sonnet 模型"},
+			{Title: "模型数"},
+			{Title: "当前"},
 		},
 		Footer: fmt.Sprintf("当前生效配置: %s", result.Current),
 	}
@@ -271,7 +267,7 @@ func buildSettingTable(result *usecase.ListAISettingsResult) *output.Table {
 			name = "* " + name
 		}
 		tbl.Rows = append(tbl.Rows, output.Row{
-			Cells:     []string{name, item.BaseURL, item.OpusModel, item.SonnetModel},
+			Cells:     []string{name, item.BaseURL, fmt.Sprintf("%d", item.ModelCount)},
 			Highlight: item.IsCurrent,
 		})
 	}
