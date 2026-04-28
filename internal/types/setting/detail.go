@@ -15,5 +15,7 @@ type AISettingDetail struct {
 
 // AISettingCreateResult 表示创建配置的结果。
 type AISettingCreateResult struct {
-	ID uint `json:"id" yaml:"id"`
+	ID         uint   `json:"id" yaml:"id"`
+	Name       string `json:"name" yaml:"name"`
+	ModelCount int    `json:"model_count" yaml:"model_count"`
 }

@@ -55,7 +55,10 @@ func printEditResult(w io.Writer, result *usecase.EditAISettingResult) {
 		fmt.Fprintln(w)
 	}
 
-	fmt.Fprintf(w, "配置已更新: %s\n\n", result.Name)
+	if len(result.Changes) == 0 {
+		fmt.Fprintln(w, "无变更")
+		return
+	}
 
 	if len(result.Changes) == 0 {
 		fmt.Fprintln(w, "无变更")
