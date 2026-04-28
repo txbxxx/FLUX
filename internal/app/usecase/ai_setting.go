@@ -161,7 +161,7 @@ func (w *LocalWorkflow) CreateAISetting(_ context.Context, input CreateAISetting
 		}
 	}
 
-	return &CreateAISettingResult{ID: setting.ID}, nil
+	return &CreateAISettingResult{ID: setting.ID, Name: name, ModelCount: len(models)}, nil
 }
 
 // ListAISettings 列出所有已保存的 AI 配置。
@@ -203,11 +203,11 @@ func (w *LocalWorkflow) ListAISettings(_ context.Context, input ListAISettingsIn
 		}
 
 		items = append(items, typesSetting.AISettingListItem{
-			ID:          setting.ID,
-			Name:        setting.Name,
-			BaseURL:     setting.BaseURL,
+			ID:        setting.ID,
+			Name:      setting.Name,
+			BaseURL:   setting.BaseURL,
 			Models:    setting.Models,
-			IsCurrent:   isCurrent,
+			IsCurrent: isCurrent,
 		})
 	}
 
@@ -258,13 +258,13 @@ func (w *LocalWorkflow) GetAISetting(_ context.Context, input GetAISettingInput)
 
 	return &GetAISettingResult{
 		AISettingDetail: typesSetting.AISettingDetail{
-			ID:          setting.ID,
-			Name:        setting.Name,
-			Token:       setting.Token,
-			BaseURL:     setting.BaseURL,
-			Models: setting.Models,
-			CreatedAt:   setting.CreatedAt,
-			UpdatedAt:   setting.UpdatedAt,
+			ID:        setting.ID,
+			Name:      setting.Name,
+			Token:     setting.Token,
+			BaseURL:   setting.BaseURL,
+			Models:    setting.Models,
+			CreatedAt: setting.CreatedAt,
+			UpdatedAt: setting.UpdatedAt,
 		},
 		IsCurrent: isCurrent,
 	}, nil
@@ -374,39 +374,55 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 	}
 
 	// 第四步：构建新的 settings.json 内容
-	newSettings := map[string]any{
-		"env": map[string]string{
-			"ANTHROPIC_AUTH_TOKEN": target.Token,
-			"ANTHROPIC_BASE_URL":   target.BaseURL,
-		},
+	envVars := map[string]string{
+		"ANTHROPIC_AUTH_TOKEN": target.Token,
+		"ANTHROPIC_BASE_URL":   target.BaseURL,
 	}
 	// 添加模型环境变量
 	for key, value := range targetModels.ToEnvVars() {
-		newSettings["env"].(map[string]string)[key] = value
+		envVars[key] = value
+	}
+	// 清空未使用的模型槽位，防止合并时保留旧值
+	for _, key := range []string{
+		"ANTHROPIC_DEFAULT_OPUS_MODEL",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL",
+	} {
+		if _, exists := envVars[key]; !exists {
+			envVars[key] = ""
+		}
+	}
+
+	newSettings := map[string]any{
+		"env": envVars,
+	}
+
+	// switch 管理的 env 键，合并时不应从现有配置中保留
+	managedEnvKeys := map[string]bool{
+		"ANTHROPIC_AUTH_TOKEN":           true,
+		"ANTHROPIC_BASE_URL":             true,
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":   true,
+		"ANTHROPIC_DEFAULT_SONNET_MODEL": true,
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  true,
 	}
 
 	// 第五步：读取现有配置并保留其他字段
 	if rawContent, err := os.ReadFile(settingsPath); err == nil {
-		// 清理可能存在的空字节和控制字符，防止 JSON 解析失败导致合并逻辑被跳过
-		// 为什么：get -e 编辑器可能在文件中引入空字节，导致 json.Unmarshal 失败，
-		// 而 if err == nil 会静默跳过合并，造成其他配置字段丢失。
 		content := []byte(sanitizeContent(string(rawContent)))
 		var existing map[string]any
 		if err := json.Unmarshal(content, &existing); err == nil {
-			// 合并 env 字段
 			newEnv, ok := newSettings["env"].(map[string]string)
 			if !ok {
 				newEnv = make(map[string]string)
 			}
 			if env, ok := existing["env"].(map[string]any); ok {
 				for k, v := range env {
-					if _, exists := newEnv[k]; !exists {
+					if _, exists := newEnv[k]; !exists && !managedEnvKeys[k] {
 						newEnv[k] = fmt.Sprint(v)
 					}
 				}
 			}
 			newSettings["env"] = newEnv
-			// 保留其他字段（如 enabledPlugins, language 等）
 			for k, v := range existing {
 				if k != "env" {
 					newSettings[k] = v
@@ -437,8 +453,10 @@ func (w *LocalWorkflow) SwitchAISetting(_ context.Context, input SwitchAISetting
 		PreviousName: previousName,
 		NewName:      target.Name,
 		BackupPath:   backupPath,
+		EnvVars:      envVars,
 	}, nil
 }
+
 // WithAISettingManager 以链式方式补充 AI 配置管理依赖。
 func (w *LocalWorkflow) WithAISettingManager(manager AISettingManager) *LocalWorkflow {
 	w.aiSettingManager = manager
@@ -691,7 +709,7 @@ func extractErrorMessage(err error) string {
 
 // EditAISettingInput 编辑配置的输入。
 type EditAISettingInput struct {
-	Name        string // 配置名称，必填
+	Name    string   // 配置名称，必填
 	NewName string   // 新名称，可选
 	Token   string   // 新 Token，可选
 	BaseURL string   // 新 API 地址，可选
