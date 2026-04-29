@@ -194,3 +194,18 @@ func expandPath(path string) string {
 - `IsAbsolute` 默认值 `false`，现有规则零影响
 - 文件/目录不存在时走 `os.IsNotExist` 跳过，行为不变
 - 已有快照不会自动包含新增文件，需新建快照
+
+## 实施状态
+
+**状态：已完成** | 提交 `1d94a70` | 分支 `fix/scan-missing-claude-files`
+
+所有 7 步改动已按计划完成，无偏差：
+1. `SyncRuleDefinition.IsAbsolute` — 已添加
+2. `RuleDef.IsAbsolute` — 已添加
+3. `default.yaml` 新增 2 条规则 — 已添加
+4. 硬编码回退新增 2 条规则 — 已添加
+5. `convertRules` 传递 `IsAbsolute` — 已完成
+6. `resolveRuleDefinitions` 绝对路径分支 + `expandPath` — 已完成
+7. 单元测试 5 个新用例 — 全部通过
+
+集成验证：`snapshot create -p claude-global` 收集 978 文件，数据库确认 `~/.claude.json` 已包含在内。
