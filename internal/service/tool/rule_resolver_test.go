@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -183,5 +184,114 @@ func TestDetectToolUsesClaudePluginWhitelist(t *testing.T) {
 		if filepath.Base(item.Path) == "extra.json" {
 			t.Fatalf("unexpected non-whitelist plugin file in config files: %+v", item)
 		}
+	}
+}
+
+func TestExpandPath(t *testing.T) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot determine home directory")
+	}
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"~/foo/bar", filepath.Join(homeDir, "foo/bar")},
+		{"~/", homeDir},
+		{"/absolute/path", "/absolute/path"},
+		{"relative/path", "relative/path"},
+	}
+
+	for _, tt := range tests {
+		got := expandPath(tt.input)
+		if got != tt.want {
+			t.Errorf("expandPath(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestResolveRuleDefinitions_AbsolutePath(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	claudeJSON := filepath.Join(homeDir, ".claude.json")
+	CreateMockFile(t, claudeJSON, `{"mcpServers":[]}`)
+
+	rules := []SyncRuleDefinition{
+		{ToolType: ToolTypeClaude, Scope: ScopeGlobal, Path: "~/.claude.json", Category: CategoryConfigFile, IsDir: false, IsAbsolute: true},
+	}
+	matches, err := resolveRuleDefinitions("/irrelevant/base", rules)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matches))
+	}
+	if matches[0].AbsolutePath != claudeJSON {
+		t.Errorf("absolute path = %q, want %q", matches[0].AbsolutePath, claudeJSON)
+	}
+	if matches[0].RelativePath != "~/.claude.json" {
+		t.Errorf("relative path = %q, want ~/.claude.json", matches[0].RelativePath)
+	}
+}
+
+func TestResolveRuleDefinitions_AbsolutePathSkipsMissing(t *testing.T) {
+	rules := []SyncRuleDefinition{
+		{ToolType: ToolTypeClaude, Scope: ScopeGlobal, Path: "~/nonexistent.json", Category: CategoryConfigFile, IsDir: false, IsAbsolute: true},
+	}
+	matches, err := resolveRuleDefinitions("/any", rules)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected 0 matches for nonexistent file, got %d", len(matches))
+	}
+}
+
+func TestResolveRuleDefinitions_RulesDirectory(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	claudeDir := filepath.Join(homeDir, ".claude")
+	rulesDir := filepath.Join(claudeDir, "rules")
+	CreateMockFile(t, filepath.Join(rulesDir, "test.md"), "# test rule")
+
+	rules := []SyncRuleDefinition{
+		{ToolType: ToolTypeClaude, Scope: ScopeGlobal, Path: "rules", Category: CategoryRules, IsDir: true},
+	}
+	matches, err := resolveRuleDefinitions(claudeDir, rules)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matches))
+	}
+	if matches[0].AbsolutePath != rulesDir {
+		t.Errorf("absolute path = %q, want %q", matches[0].AbsolutePath, rulesDir)
+	}
+}
+
+func TestResolveRuleDefinitions_MixedRelativeAndAbsolute(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	claudeDir := filepath.Join(homeDir, ".claude")
+	CreateMockFile(t, filepath.Join(claudeDir, "settings.json"), "{}")
+	CreateMockFile(t, filepath.Join(homeDir, ".claude.json"), `{"mcpServers":[]}`)
+
+	rules := []SyncRuleDefinition{
+		{ToolType: ToolTypeClaude, Scope: ScopeGlobal, Path: "settings.json", Category: CategoryConfigFile, IsDir: false},
+		{ToolType: ToolTypeClaude, Scope: ScopeGlobal, Path: "~/.claude.json", Category: CategoryConfigFile, IsDir: false, IsAbsolute: true},
+	}
+	matches, err := resolveRuleDefinitions(claudeDir, rules)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("expected 2 matches, got %d", len(matches))
 	}
 }

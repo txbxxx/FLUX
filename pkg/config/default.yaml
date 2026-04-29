@@ -77,6 +77,13 @@ tools:
       - path: "plugins"
         category: "plugins"
         is_dir: true
+      - path: "rules"
+        category: "rules"
+        is_dir: true
+      - path: "~/.claude.json"
+        category: "config"
+        is_dir: false
+        is_absolute: true
     project_rules:
       - path: ".claude"
         category: "config"

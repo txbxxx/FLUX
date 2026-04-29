@@ -3,20 +3,21 @@ package tool
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 // ResolvedRuleMatch 表示一条规则在文件系统上的实际命中结果。
 // 将规则定义与磁盘真实文件/目录关联起来，包含文件大小、修改时间等运行时信息。
 type ResolvedRuleMatch struct {
-	ToolType     ToolType        // 命中文件所属的工具类型（codex / claude）
-	Scope        ConfigScope     // 规则作用域：global 或 project
-	RelativePath string          // 相对于配置根目录的路径（如 "skills/xxx.md"）
-	AbsolutePath string          // 文件/目录在磁盘上的绝对路径
-	Category     ConfigCategory  // 配置类别（skills / commands / plugins 等）
-	IsDir        bool            // 是否为目录
-	Size         int64           // 文件大小（字节），目录时为 0
-	ModifiedAt   time.Time       // 最后修改时间
+	ToolType     ToolType       // 命中文件所属的工具类型（codex / claude）
+	Scope        ConfigScope    // 规则作用域：global 或 project
+	RelativePath string         // 相对于配置根目录的路径（如 "skills/xxx.md"）
+	AbsolutePath string         // 文件/目录在磁盘上的绝对路径
+	Category     ConfigCategory // 配置类别（skills / commands / plugins 等）
+	IsDir        bool           // 是否为目录
+	Size         int64          // 文件大小（字节），目录时为 0
+	ModifiedAt   time.Time      // 最后修改时间
 }
 
 // ResolvedProjectMatch 记录某个已注册项目命中的全部规则结果。
@@ -29,13 +30,13 @@ type ResolvedProjectMatch struct {
 // ToolRuleReport 是某个工具在当前机器上的完整规则解析报告。
 // 包含全局扫描结果、自定义规则命中、已注册项目扫描结果，以及缺失的关键路径。
 type ToolRuleReport struct {
-	ToolType             ToolType              // 工具类型（codex / claude）
-	GlobalPath           string                // 全局配置根目录的绝对路径（如 ~/.codex）
-	Status               InstallationStatus    // 综合安装状态（installed / partial / not_installed）
-	MissingRequiredPaths []string              // 缺失的关键文件列表（如 config.toml 不存在时记录于此）
-	DefaultMatches       []ResolvedRuleMatch   // 内置默认规则命中的文件列表
-	CustomMatches        []ResolvedRuleMatch   // 用户自定义规则命中的文件列表
-	MissingCustomRules   []ResolvedRuleMatch   // 用户自定义规则中路径在磁盘上不存在的条目
+	ToolType             ToolType               // 工具类型（codex / claude）
+	GlobalPath           string                 // 全局配置根目录的绝对路径（如 ~/.codex）
+	Status               InstallationStatus     // 综合安装状态（installed / partial / not_installed）
+	MissingRequiredPaths []string               // 缺失的关键文件列表（如 config.toml 不存在时记录于此）
+	DefaultMatches       []ResolvedRuleMatch    // 内置默认规则命中的文件列表
+	CustomMatches        []ResolvedRuleMatch    // 用户自定义规则命中的文件列表
+	MissingCustomRules   []ResolvedRuleMatch    // 用户自定义规则中路径在磁盘上不存在的条目
 	ProjectMatches       []ResolvedProjectMatch // 所有已注册项目的扫描结果
 }
 
@@ -139,7 +140,13 @@ func (r *RuleResolver) ResolveTool(toolType ToolType) (*ToolRuleReport, error) {
 func resolveRuleDefinitions(basePath string, rules []SyncRuleDefinition) ([]ResolvedRuleMatch, error) {
 	matches := make([]ResolvedRuleMatch, 0, len(rules))
 	for _, rule := range rules {
-		absolutePath := filepath.Join(basePath, rule.Path)
+		var absolutePath string
+		if rule.IsAbsolute {
+			absolutePath = expandPath(rule.Path)
+		} else {
+			absolutePath = filepath.Join(basePath, rule.Path)
+		}
+
 		info, err := os.Stat(absolutePath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -164,6 +171,18 @@ func resolveRuleDefinitions(basePath string, rules []SyncRuleDefinition) ([]Reso
 		})
 	}
 	return matches, nil
+}
+
+// expandPath 将 ~ 开头的路径展开为真实用户目录路径。
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
 
 // resolveAbsoluteFileRule 用于解析用户登记的绝对路径文件规则。
