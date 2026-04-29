@@ -173,9 +173,6 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 			models, _ := cmd.Flags().GetStringSlice("model")
 
 			// 检测重复模型名并显示警告
-			if dupes := typesSetting.FindDuplicates(models); len(dupes) > 0 {
-				fmt.Fprintf(cmd.OutOrStderr(), "警告：检测到重复模型名，已自动去重：%s\n", strings.Join(dupes, ", "))
-			}
 
 			result, err := deps.Workflow.SwitchAISetting(cmd.Context(), usecase.SwitchAISettingInput{
 				Name:   args[0],
@@ -200,7 +197,9 @@ func newSettingCommand(deps Dependencies) *spcobra.Command {
 
 // printCreatedSetting 输出创建成功的配置信息。
 func printCreatedSetting(w io.Writer, result *usecase.CreateAISettingResult) {
-	fmt.Fprintf(w, "配置已创建: %d\n", result.ID)
+	fmt.Fprintf(w, "配置已创建: %s\n", result.Name)
+	fmt.Fprintf(w, "配置 ID: %d\n", result.ID)
+	fmt.Fprintf(w, "模型数量: %d\n", result.ModelCount)
 }
 
 // printSettingDetail 输出配置详情。
@@ -214,7 +213,19 @@ func printSettingDetail(w io.Writer, result *usecase.GetAISettingResult) {
 
 	fmt.Fprintf(w, "Base URL: %s\n", result.BaseURL)
 	if len(result.Models) > 0 {
-		fmt.Fprintf(w, "模型列表: %s\n", strings.Join(result.Models, ", "))
+		fmt.Fprintln(w, "模型列表:")
+		for i, m := range result.Models {
+			name, ctx := typesSetting.ParseModelContext(m)
+			display := name
+			if ctx != "" {
+				display = fmt.Sprintf("%s[%s]", name, ctx)
+			}
+			fmt.Fprintf(w, "  [%d] %s", i+1, display)
+			if ctx != "" {
+				fmt.Fprintf(w, " (上下文: %s)", typesSetting.FormatModelContext(ctx))
+			}
+			fmt.Fprintln(w)
+		}
 	}
 	if result.IsCurrent {
 		fmt.Fprintln(w, "当前生效: 是")
@@ -292,6 +303,22 @@ func printSwitchResult(w io.Writer, result *usecase.SwitchAISettingResult) {
 		fmt.Fprintf(w, "已从 %q 切换到 %q\n", result.PreviousName, result.NewName)
 	} else {
 		fmt.Fprintf(w, "已切换到 %q\n", result.NewName)
+	}
+	// 输出写入的环境变量
+	for _, key := range []string{
+		"ANTHROPIC_AUTH_TOKEN",
+		"ANTHROPIC_BASE_URL",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL",
+	} {
+		if val, ok := result.EnvVars[key]; ok && val != "" {
+			display := val
+			if key == "ANTHROPIC_AUTH_TOKEN" {
+				display = maskToken(val)
+			}
+			fmt.Fprintf(w, "- %s: %s\n", key, display)
+		}
 	}
 	fmt.Fprintf(w, "备份路径: %s\n", result.BackupPath)
 }
