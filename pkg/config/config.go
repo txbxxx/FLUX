@@ -87,9 +87,10 @@ type ToolConfig struct {
 
 // RuleDef 单条规则定义
 type RuleDef struct {
-	Path     string `yaml:"path"`
-	Category string `yaml:"category"`
-	IsDir    bool   `yaml:"is_dir"`
+	Path       string `yaml:"path"`
+	Category   string `yaml:"category"`
+	IsDir      bool   `yaml:"is_dir"`
+	IsAbsolute bool   `yaml:"is_absolute"`
 }
 
 // DefaultConfig 从嵌入的 YAML 返回默认配置，保证单一数据源。
